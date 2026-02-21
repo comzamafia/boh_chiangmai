@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String   // bcrypt hash
+  role        String   @default("staff") // "admin" | "manager" | "chef" | "analyst" | "staff"
+  permissions String[] // custom slug overrides; empty = use role defaults
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Supplier {
+  id          String    @id @default(cuid())
+  name        String
+  contact     String
+  email       String
+  phone       String
+  address     String
+  status      String    // "Active" | "Inactive"
+  isSpecial   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  ingredients     Ingredient[]
+  purchaseHistory PurchaseHistory[]
+
+  @@map("suppliers")
+}
+
+model Ingredient {
+  id             String    @id @default(cuid())
+  name           String
+  supplierId     String
+  supplier       Supplier  @relation(fields: [supplierId], references: [id])
+  purchaseUnit   String
+  purchasePrice  Decimal   @db.Decimal(10, 2)
+  recipeUnit     String
+  yieldPercent   Decimal   @db.Decimal(5, 2)
+  conversionRate Decimal   @db.Decimal(10, 4)
+  groupId        String    // "Weight" | "Volume" | "Count"
+  imageUrl       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  recipeItems RecipeIngredient[]
+
+  @@map("ingredients")
+}
+
+model Equipment {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  status    String   // "Available" | "Maintenance" | "Retired"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("equipment")
+}
+
+model RecipeCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("recipe_categories")
+}
+
+model Recipe {
+  id                 String    @id @default(cuid())
+  name               String
+  category           String
+  yieldAmount        Decimal   @db.Decimal(10, 2)
+  yieldUnit          String
+  prepTime           Int
+  cookTime           Int
+  laborCostPerHour   Decimal   @db.Decimal(10, 2)
+  energyCostPerBatch Decimal   @db.Decimal(10, 2)
+  imageUrl           String?
+  isMainSauce        Boolean   @default(false)
+  instructions       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  ingredients RecipeIngredient[]
+
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id           String     @id @default(cuid())
+  recipeId     String
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  quantity     Decimal    @db.Decimal(10, 4)
+
+  @@unique([recipeId, ingredientId])
+  @@map("recipe_ingredients")
+}
+
+model PurchaseHistory {
+  id         String   @id @default(cuid())
+  date       DateTime
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  ingredient String
+  qty        Decimal  @db.Decimal(10, 2)
+  unit       String
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  total      Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("purchase_history")
+}
+
+model ProductionSchedule {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD
+  items     String[] // task descriptions
+  status    String   @default("pending") // "pending" | "completed"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("production_schedules")
+}
+
+model BatchPlan {
+  id        String          @id @default(cuid())
+  date      String          // YYYY-MM-DD
+  status    String          @default("Pending") // "Pending" | "In Progress" | "Completed"
+  progress  Int             @default(0) // 0–100
+  items     BatchPlanItem[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@map("batch_plans")
+}
+
+model BatchPlanItem {
+  id          String    @id @default(cuid())
+  batchPlanId String
+  batchPlan   BatchPlan @relation(fields: [batchPlanId], references: [id], onDelete: Cascade)
+  recipeId    String?
+  recipeName  String
+  qty         String
+  unit        String
+
+  @@map("batch_plan_items")
+}

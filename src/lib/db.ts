@@ -5,8 +5,10 @@ import { Pool } from "pg";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrisma() {
+    const connStr = process.env.DATABASE_URL ?? "postgresql://padthai:padthai_secret@localhost:5432/padthai_chaiyo_boh";
     const pool = new Pool({
-        connectionString: process.env.DATABASE_URL ?? "postgresql://padthai:padthai_secret@localhost:5432/padthai_chaiyo_boh",
+        connectionString: connStr,
+        ssl: connStr.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
     });
     return new PrismaClient({
         adapter: new PrismaPg(pool),

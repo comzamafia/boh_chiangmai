@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL ?? "postgresql://padthai:padthai_secret@localhost:5432/padthai_chaiyo_boh",
+    ssl: process.env.DATABASE_URL?.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
 });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 

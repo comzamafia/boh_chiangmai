@@ -41,6 +41,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     suppliers: "Suppliers",
     inventory: "Inventory",
     purchases: "Purchase History",
+    "purchase-orders": "Purchase Orders",
     analysis: "Cost Analysis",
     "batch-calculation": "Batch Calculation",
     "batch-scaling": "Batch Scaling",

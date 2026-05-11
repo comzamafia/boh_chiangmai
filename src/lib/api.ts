@@ -1,5 +1,5 @@
 /**
- * Type-safe API client for the Padthai Chaiyo BOH backend.
+ * Type-safe API client for the Chiang Mai BOH backend.
  * Use these functions in client components instead of importing mock-data.
  */
 
@@ -79,6 +79,16 @@ export const analysisApi = {
     recipeCosts: () => apiFetch<RecipeCostSummary[]>("/analysis/recipe-costs"),
 };
 
+// ─── Sales ───────────────────────────────────────────────────────────────────
+export const salesApi = {
+    list: (date?: string) => apiFetch<SalesEntry[]>(`/sales${date ? `?date=${date}` : ""}`),
+    create: (data: Omit<SalesEntry, "id" | "revenue" | "createdAt" | "updatedAt">) =>
+        apiFetch<SalesEntry>("/sales", { method: "POST", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/sales/${id}`, { method: "DELETE" }),
+    summary: (date?: string) => apiFetch<SalesSummary>(`/sales/summary${date ? `?date=${date}` : ""}`),
+    trend: (days = 7) => apiFetch<SalesTrend[]>(`/sales/trend?days=${days}`),
+};
+
 // ─── Shared Types (match Prisma output) ─────────────────────────────────────
 export interface Supplier {
     id: string;
@@ -128,6 +138,7 @@ export interface Recipe {
     cookTime: number;
     laborCostPerHour: number;
     energyCostPerBatch: number;
+    sellingPrice?: number | null;
     imageUrl?: string;
     isMainSauce: boolean;
     instructions?: string;
@@ -159,6 +170,38 @@ export interface PurchaseRecord {
     total: number;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface SalesEntry {
+    id: string;
+    date: string;
+    recipeId?: string | null;
+    recipeName: string;
+    qty: number;
+    unitPrice: number;
+    revenue: number;
+    unitCost?: number | null;
+    notes?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface SalesSummary {
+    date: string;
+    totalRevenue: number;
+    totalCost: number;
+    grossProfit: number;
+    foodCostPct: number;
+    grossProfitPct: number;
+    itemsSold: number;
+    topMenus: { recipeName: string; qty: number; revenue: number }[];
+}
+
+export interface SalesTrend {
+    date: string;
+    revenue: number;
+    cost: number;
+    profit: number;
 }
 
 export interface RecipeCostSummary {

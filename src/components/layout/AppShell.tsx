@@ -42,7 +42,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     >
                         <Menu className="h-5 w-5" />
                     </button>
-                    <h1 className="font-playfair text-lg font-bold text-primary">Padthai Chaiyo</h1>
+                    <img src="/logo.svg" alt="Chiang Mai" width={24} height={28} className="mr-2" />
+                    <h1 className="font-playfair text-lg font-bold text-primary">Chiang Mai BOH</h1>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 md:p-8">
                     {children}

@@ -19,7 +19,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center space-y-16 py-12">
       <section className="text-center space-y-6 max-w-3xl">
         <h1 className="text-5xl font-playfair font-bold tracking-tight text-primary">
-          Welcome to Padthai Chaiyo
+          Welcome to Chiang Mai BOH
         </h1>
         <p className="text-xl text-muted-foreground">
           The ultimate back-of-house operating system designed to streamline your kitchen, control costs, and maximize profits.

@@ -32,6 +32,7 @@ import { ALL_SLUGS, ROLE_DEFAULTS, ROLE_LABELS, type Role, type NavSlug } from "
 const SLUG_LABELS: Record<NavSlug, string> = {
     home: "Home",
     dashboard: "Dashboard",
+    "daily-sales": "Daily Sales",
     recipes: "Recipes (View)",
     "recipes-new": "Recipes (Create/Edit)",
     "import-recipes": "Import Recipes (CSV)",
@@ -277,7 +278,7 @@ export default function AdminUsersPage() {
                             </div>
                             <div className="space-y-1.5">
                                 <Label>Email *</Label>
-                                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="user@padthaichaiyo.com" />
+                                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="user@chiangmai.ca" />
                             </div>
                         </div>
 

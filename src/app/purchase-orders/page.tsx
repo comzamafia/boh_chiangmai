@@ -534,7 +534,7 @@ export default function PurchaseOrdersPage() {
                     <div className="flex justify-between items-start mb-8">
                         <div>
                             <h1 className="text-3xl font-bold font-playfair text-primary">PURCHASE ORDER</h1>
-                            <p className="text-muted-foreground mt-1">Padthai Chaiyo — Back of House</p>
+                            <p className="text-muted-foreground mt-1">Chiang Mai — Back of House</p>
                         </div>
                         <div className="text-right space-y-1">
                             <p className="text-2xl font-mono font-bold">{po.poNumber}</p>

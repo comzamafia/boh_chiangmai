@@ -56,6 +56,7 @@ function RecipeBuilderInner() {
     const [prepMinutes, setPrepMinutes] = useState("15");
     const [cookMinutes, setCookMinutes] = useState("5");
     const [energyCost, setEnergyCost] = useState("5");
+    const [sellingPrice, setSellingPrice] = useState("");
 
     useEffect(() => {
         const loadAll = async () => {
@@ -77,6 +78,7 @@ function RecipeBuilderInner() {
                     setPrepMinutes(String(recipe.prepTime));
                     setCookMinutes(String(recipe.cookTime));
                     setEnergyCost(String(recipe.energyCostPerBatch));
+                    setSellingPrice(recipe.sellingPrice != null ? String(recipe.sellingPrice) : "");
                     if (recipe.ingredients.length > 0) {
                         setIngredientRows(recipe.ingredients.map((r, idx) => ({
                             id: idx + 1,
@@ -148,6 +150,7 @@ function RecipeBuilderInner() {
                 cookTime: parseFloat(cookMinutes) || 0,
                 laborCostPerHour: parseFloat(laborCostPerHour) || 0,
                 energyCostPerBatch: parseFloat(energyCost) || 0,
+                sellingPrice: parseFloat(sellingPrice) > 0 ? parseFloat(sellingPrice) : null,
                 isMainSauce: category === "Sauce Base",
                 instructions,
                 imageUrl: imageUrl.trim() || undefined,
@@ -369,7 +372,7 @@ function RecipeBuilderInner() {
   <div class="footer">
     <span>Document: ${docCode}</span>
     <span>Yield: ${yieldAmount} ${yieldUnit} &nbsp;|&nbsp; Total Cost: ${format(totalCost)}</span>
-    <span>Padthai Chaiyo BOH &copy; ${new Date().getFullYear()}</span>
+    <span>Chiang Mai BOH &copy; ${new Date().getFullYear()}</span>
   </div>
 
   <script>window.onload = function(){ window.print(); };<\/script>
@@ -695,17 +698,51 @@ function RecipeBuilderInner() {
                                 )}
                             </div>
 
+                            {/* Actual selling price + Food Cost % */}
+                            <div className="rounded-lg border p-3 space-y-2">
+                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Selling Price / Food Cost</p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground shrink-0">{symbol}</span>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        placeholder="Selling price"
+                                        value={sellingPrice}
+                                        onChange={e => setSellingPrice(e.target.value)}
+                                        className="h-8 text-sm"
+                                    />
+                                </div>
+                                {(() => {
+                                    const sp = parseFloat(sellingPrice);
+                                    if (!sp || sp <= 0 || costPerYield <= 0) return (
+                                        <p className="text-xs text-muted-foreground">Enter selling price to see Food Cost %</p>
+                                    );
+                                    const pct = (costPerYield / sp) * 100;
+                                    const color = pct <= 30 ? "text-green-600" : pct <= 40 ? "text-yellow-600" : "text-red-600";
+                                    const label = pct <= 30 ? "Excellent" : pct <= 40 ? "Acceptable" : "Too High";
+                                    return (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-muted-foreground">Food Cost %</span>
+                                            <span className={`text-lg font-bold tabular-nums ${color}`}>
+                                                {pct.toFixed(1)}% <span className="text-xs font-normal">({label})</span>
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
                             {/* Suggested price */}
                             {costPerYield > 0 && (
                                 <div className="rounded-lg border border-dashed p-3 space-y-1">
                                     <p className="text-xs text-muted-foreground font-medium">Suggested selling price</p>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">30% margin</span>
-                                        <span className="font-semibold">{format(costPerYield / 0.7, 0)}</span>
+                                        <span className="text-muted-foreground">30% food cost</span>
+                                        <span className="font-semibold">{format(costPerYield / 0.3, 0)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">40% margin</span>
-                                        <span className="font-semibold">{format(costPerYield / 0.6, 0)}</span>
+                                        <span className="text-muted-foreground">35% food cost</span>
+                                        <span className="font-semibold">{format(costPerYield / 0.35, 0)}</span>
                                     </div>
                                 </div>
                             )}

@@ -30,6 +30,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 cookTime: body.cookTime,
                 laborCostPerHour: body.laborCostPerHour,
                 energyCostPerBatch: body.energyCostPerBatch,
+                sellingPrice: body.sellingPrice ?? null,
                 imageUrl: body.imageUrl,
                 isMainSauce: body.isMainSauce,
                 instructions: body.instructions,

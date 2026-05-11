@@ -1,5 +1,5 @@
 /**
- * Currency configuration for Padthai Chaiyo BOH
+ * Currency configuration for Chiang Mai BOH
  * Base currency stored in DB: THB (฿)
  * Exchange rates: 1 THB = X other currency
  */

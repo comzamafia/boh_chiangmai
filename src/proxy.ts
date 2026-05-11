@@ -22,7 +22,8 @@ export async function proxy(request: NextRequest) {
     if (
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon") ||
-        pathname === "/robots.txt"
+        pathname === "/robots.txt" ||
+        /\.(svg|png|jpg|jpeg|gif|webp|ico)$/i.test(pathname)
     ) {
         return NextResponse.next();
     }

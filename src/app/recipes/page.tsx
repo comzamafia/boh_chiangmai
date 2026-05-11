@@ -198,6 +198,9 @@ export default function RecipesPage() {
                 {filtered.map((recipe) => {
                     const totalCost = calcTotalCost(recipe);
                     const costPerYield = totalCost / Number(recipe.yieldAmount);
+                    const sp = recipe.sellingPrice != null ? Number(recipe.sellingPrice) : null;
+                    const foodCostPct = sp && sp > 0 && costPerYield > 0 ? (costPerYield / sp) * 100 : null;
+                    const fcColor = foodCostPct == null ? "" : foodCostPct <= 30 ? "text-green-600 bg-green-50 border-green-200" : foodCostPct <= 40 ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
                     return (
                         <Card key={recipe.id} className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer" onClick={() => router.push(`/recipes/new?id=${recipe.id}`)}>
                             <div className="h-32 bg-accent relative flex items-center justify-center border-b overflow-hidden">
@@ -214,6 +217,11 @@ export default function RecipesPage() {
                                 {recipe.isMainSauce && (
                                     <Badge className="absolute top-2 right-2 bg-yellow-500 hover:bg-yellow-600 text-xs">
                                         Main Sauce
+                                    </Badge>
+                                )}
+                                {foodCostPct != null && (
+                                    <Badge variant="outline" className={`absolute top-2 left-2 text-xs font-bold border ${fcColor}`}>
+                                        FC {foodCostPct.toFixed(1)}%
                                     </Badge>
                                 )}
                                 <Badge variant="outline" className="absolute bottom-2 left-2 text-xs bg-background/80 backdrop-blur-sm">
@@ -236,6 +244,11 @@ export default function RecipesPage() {
                                             {format(costPerYield)}/{recipe.yieldUnit}
                                         </span>
                                     </div>
+                                    {sp != null && (
+                                        <div className="flex items-center gap-1 ml-auto">
+                                            <span className="text-xs text-muted-foreground">Sells at {format(sp)}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                             <CardFooter className="p-4 pt-0 flex justify-between items-center">

@@ -51,7 +51,7 @@ export interface RecipeIngredient {
 export const mockSuppliers: Supplier[] = [
     { id: "S001", name: "Fresh Produce Co.", contact: "Somchai Jaidee", email: "somchai@freshproduce.th", phone: "02-111-2233", address: "12/34 Talat Thai, Pathum Thani", status: "Active" },
     { id: "S002", name: "Meat Select Providers", contact: "Wanchai Butthong", email: "wanchai@meatselect.th", phone: "02-555-9988", address: "7 Srinakarin Road, Bangkok", status: "Active" },
-    { id: "S003", name: "Owner Sauce", contact: "Internal", email: "internal@padthaichaiyo.com", phone: "-", address: "Central Kitchen, Silom", status: "Active", isSpecial: true },
+    { id: "S003", name: "Owner Sauce", contact: "Internal", email: "internal@chiangmai.ca", phone: "-", address: "Central Kitchen, Silom", status: "Active", isSpecial: true },
     { id: "S004", name: "Seafood Direct Co.", contact: "Nittaya Prayong", email: "nittaya@seafooddirect.th", phone: "038-412-876", address: "Mahachai Pier, Samut Sakhon", status: "Active" },
     { id: "S005", name: "Golden Dry Goods", contact: "Preecha Lamduan", email: "preecha@goldendry.th", phone: "02-899-0011", address: "Bang Na Industrial Estate", status: "Active" },
     { id: "S006", name: "Heritage Spice House", contact: "Malee Thongdam", email: "malee@heritagespice.th", phone: "053-221-445", address: "Night Bazaar, Chiang Mai", status: "Inactive" },

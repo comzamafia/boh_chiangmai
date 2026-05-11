@@ -1,20 +1,26 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Montserrat, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+/* Montserrat — matches chiangmai.ca's Google Font */
+const montserrat = Montserrat({
+  variable: "--font-sans-base",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
+/* Playfair Display — elegant serif for headings / brand feel */
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Padthai Chaiyo BOH",
-  description: "Back-of-House Management System for Padthai Chaiyo",
+  title: "Chiang Mai BOH",
+  description: "Back-of-House Management System for Chiang Mai",
+  icons: { icon: "/logo.svg" },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
@@ -30,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${playfair.variable} font-sans antialiased`}
+        className={`${montserrat.variable} ${playfair.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider

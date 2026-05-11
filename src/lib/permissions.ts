@@ -9,6 +9,7 @@ export type Role = "admin" | "manager" | "chef" | "analyst" | "staff";
 export const ALL_SLUGS = [
     "home",
     "dashboard",
+    "daily-sales",
     "recipes",
     "recipes-new",
     "import-recipes",
@@ -32,20 +33,20 @@ export type NavSlug = (typeof ALL_SLUGS)[number];
 export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
     admin: [...ALL_SLUGS],
     manager: [
-        "home", "dashboard", "recipes", "recipes-new", "import-recipes", "ingredients", "import-ingredients",
+        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "ingredients", "import-ingredients",
         "suppliers", "inventory", "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production",
     ],
     chef: [
-        "home", "dashboard", "recipes", "recipes-new", "import-recipes",
+        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes",
         "ingredients", "import-ingredients", "equipment", "inventory", "production",
     ],
     analyst: [
-        "home", "dashboard", "analysis", "batch-calculation",
+        "home", "dashboard", "daily-sales", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation",
     ],
     staff: [
-        "home", "dashboard", "recipes", "production",
+        "home", "dashboard", "daily-sales", "recipes", "production",
     ],
 };
 
@@ -66,6 +67,7 @@ export function getPermittedSlugs(role: string, customPermissions: string[]): Na
 export const SLUG_TO_PATH: Record<NavSlug, string> = {
     home: "/",
     dashboard: "/dashboard",
+    "daily-sales": "/daily-sales",
     "recipes": "/recipes",
     "recipes-new": "/recipes/new",
     "import-recipes": "/import-recipes",

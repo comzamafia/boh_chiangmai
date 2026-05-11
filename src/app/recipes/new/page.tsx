@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Save, FileText, ArrowLeft, Plus, Trash2, Loader2, ImageIcon, UtensilsCrossed, Bike, ChevronDown } from "lucide-react";
+import { Save, FileText, ArrowLeft, Plus, Trash2, Loader2, ImageIcon, UtensilsCrossed, Bike, ChevronDown, Upload, X, Link } from "lucide-react";
 import { useCurrency } from "@/components/currency-context";
 import { useCategories, DEFAULT_CATEGORY } from "@/lib/use-categories";
 
@@ -99,6 +99,12 @@ function RecipeBuilderInner() {
     const [energyCost, setEnergyCost] = useState("5");
     const [diningPrice, setDiningPrice] = useState("");
     const [deliveryPrice, setDeliveryPrice] = useState("");
+
+    // Image upload state
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState("");
+    const [dragOver, setDragOver] = useState(false);
+    const [imageInputMode, setImageInputMode] = useState<"upload" | "url">("upload");
 
     useEffect(() => {
         const loadAll = async () => {
@@ -192,6 +198,47 @@ function RecipeBuilderInner() {
         next.has(id) ? next.delete(id) : next.add(id);
         return next;
     });
+
+    // ─── Image upload ─────────────────────────────────────────────────────────
+    const handleUploadFile = async (file: File) => {
+        if (!file.type.startsWith("image/")) {
+            setUploadError("Please select an image file (JPG, PNG, WebP, etc.)");
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            setUploadError("Image must be under 10 MB");
+            return;
+        }
+        setUploadError("");
+        setUploading(true);
+        try {
+            const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+                method: "POST",
+                body: file,
+                headers: { "Content-Type": file.type },
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Upload failed");
+            setImageUrl(data.url);
+        } catch (err) {
+            setUploadError(err instanceof Error ? err.message : "Upload failed");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) handleUploadFile(file);
+        e.target.value = "";
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) handleUploadFile(file);
+    };
 
     // ─── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
@@ -770,16 +817,110 @@ body{
                                             <Input value={yieldUnit} onChange={e => setYieldUnit(e.target.value)} placeholder="e.g. serving, L" />
                                         </div>
                                     </div>
+                                    {/* ── Image uploader ── */}
                                     <div className="space-y-2">
-                                        <Label className="flex items-center gap-1.5">
-                                            <ImageIcon className="h-3.5 w-3.5" /> Recipe Image URL (optional)
-                                        </Label>
-                                        <Input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://example.com/photo.jpg" />
-                                        {imageUrl && (
-                                            <div className="mt-2 h-28 w-full rounded-lg border overflow-hidden bg-muted">
-                                                <img src={imageUrl} alt="Recipe preview" className="w-full h-full object-cover"
-                                                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                        <div className="flex items-center justify-between">
+                                            <Label className="flex items-center gap-1.5">
+                                                <ImageIcon className="h-3.5 w-3.5" /> Recipe Image
+                                            </Label>
+                                            <div className="flex gap-1">
+                                                <Button
+                                                    type="button" variant={imageInputMode === "upload" ? "default" : "ghost"}
+                                                    size="sm" className="h-6 px-2 text-xs"
+                                                    onClick={() => setImageInputMode("upload")}
+                                                >
+                                                    <Upload className="h-3 w-3 mr-1" /> Upload
+                                                </Button>
+                                                <Button
+                                                    type="button" variant={imageInputMode === "url" ? "default" : "ghost"}
+                                                    size="sm" className="h-6 px-2 text-xs"
+                                                    onClick={() => setImageInputMode("url")}
+                                                >
+                                                    <Link className="h-3 w-3 mr-1" /> URL
+                                                </Button>
                                             </div>
+                                        </div>
+
+                                        {imageInputMode === "upload" ? (
+                                            <div>
+                                                {/* Drag-and-drop zone */}
+                                                <label
+                                                    className={`flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed cursor-pointer transition-colors
+                                                        ${dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/40"}
+                                                        ${uploading ? "pointer-events-none opacity-60" : ""}`}
+                                                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                                                    onDragLeave={() => setDragOver(false)}
+                                                    onDrop={handleDrop}
+                                                >
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={handleFilePick}
+                                                        disabled={uploading}
+                                                    />
+                                                    {imageUrl ? (
+                                                        <div className="relative w-full">
+                                                            <img
+                                                                src={imageUrl}
+                                                                alt="Recipe"
+                                                                className="w-full h-44 object-contain rounded-lg bg-muted"
+                                                                onError={e => { (e.target as HTMLImageElement).src = ""; }}
+                                                            />
+                                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
+                                                                <span className="text-white text-xs font-medium">Click or drop to replace</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                                                            {uploading ? (
+                                                                <>
+                                                                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                                                                    <p className="text-sm text-muted-foreground">Uploading…</p>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                                                                    <p className="text-sm font-medium">Drop image here or click to browse</p>
+                                                                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP · max 10 MB</p>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </label>
+
+                                                {imageUrl && (
+                                                    <Button
+                                                        type="button" variant="ghost" size="sm"
+                                                        className="mt-1 h-6 px-2 text-xs text-destructive hover:text-destructive"
+                                                        onClick={() => setImageUrl("")}
+                                                    >
+                                                        <X className="h-3 w-3 mr-1" /> Remove image
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <Input
+                                                    value={imageUrl}
+                                                    onChange={e => setImageUrl(e.target.value)}
+                                                    placeholder="https://example.com/photo.jpg"
+                                                />
+                                                {imageUrl && (
+                                                    <div className="h-44 w-full rounded-lg border overflow-hidden bg-muted flex items-center justify-center">
+                                                        <img
+                                                            src={imageUrl}
+                                                            alt="Recipe preview"
+                                                            className="max-w-full max-h-full object-contain"
+                                                            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {uploadError && (
+                                            <p className="text-xs text-destructive">{uploadError}</p>
                                         )}
                                     </div>
                                 </CardContent>

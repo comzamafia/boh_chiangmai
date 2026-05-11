@@ -35,6 +35,7 @@ export async function POST(request: Request) {
                 laborCostPerHour: body.laborCostPerHour ?? 50,
                 energyCostPerBatch: body.energyCostPerBatch ?? 2,
                 sellingPrice: body.sellingPrice ?? null,
+                deliveryPrice: body.deliveryPrice ?? null,
                 imageUrl: body.imageUrl,
                 isMainSauce: body.isMainSauce ?? false,
                 instructions: body.instructions,

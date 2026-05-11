@@ -90,6 +90,7 @@ model Recipe {
   laborCostPerHour   Decimal   @db.Decimal(10, 2)
   energyCostPerBatch Decimal   @db.Decimal(10, 2)
   sellingPrice       Decimal?  @db.Decimal(10, 2)
+  deliveryPrice      Decimal?  @db.Decimal(10, 2)
   imageUrl           String?
   isMainSauce        Boolean   @default(false)
   instructions       String?

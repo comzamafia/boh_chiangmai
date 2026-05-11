@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -8,24 +8,36 @@ import { useCategories, RecipeCategory } from "@/lib/use-categories";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
     Dialog, DialogContent, DialogDescription,
     DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, ChefHat, Clock, Banknote, Edit, Trash2, Loader2, Tag, X, Pencil, Settings2 } from "lucide-react";
+import { Plus, Search, ChefHat, Clock, Edit, Trash2, Loader2, Tag, X, Pencil, Settings2, UtensilsCrossed, Bike } from "lucide-react";
 import { useCurrency } from "@/components/currency-context";
 
-function calcTotalCost(recipe: RecipeWithIngredients): number {
-    const ingredientCost = recipe.ingredients.reduce((sum, row) => {
+// Food Cost % = ingredient cost only / selling price (industry standard)
+function calcIngredientCost(recipe: RecipeWithIngredients): number {
+    return recipe.ingredients.reduce((sum, row) => {
         const ing = row.ingredient;
-        const costPerUnit = Number(ing.purchasePrice) / Number(ing.conversionRate) / (Number(ing.yieldPercent) / 100);
-        return sum + costPerUnit * Number(row.quantity);
+        const costPerRecipeUnit =
+            Number(ing.purchasePrice) / Number(ing.conversionRate) / (Number(ing.yieldPercent) / 100);
+        return sum + costPerRecipeUnit * Number(row.quantity);
     }, 0);
+}
+
+function calcTotalCost(recipe: RecipeWithIngredients): number {
+    const ingredientCost = calcIngredientCost(recipe);
     const laborCost = Number(recipe.laborCostPerHour) * ((recipe.prepTime + recipe.cookTime) / 60);
     const energyCost = Number(recipe.energyCostPerBatch);
     return ingredientCost + laborCost + energyCost;
+}
+
+function fcColor(pct: number) {
+    if (pct <= 30) return "text-green-700 bg-green-50 border-green-200";
+    if (pct <= 40) return "text-yellow-700 bg-yellow-50 border-yellow-200";
+    return "text-red-700 bg-red-50 border-red-200";
 }
 
 export default function RecipesPage() {
@@ -36,17 +48,12 @@ export default function RecipesPage() {
     const [catFilter, setCatFilter] = useState("all");
     const [deleteTarget, setDeleteTarget] = useState<RecipeWithIngredients | null>(null);
 
-    // Manage-categories dialog state
     const [manageOpen, setManageOpen] = useState(false);
     const [newCatName, setNewCatName] = useState("");
     const [newCatError, setNewCatError] = useState("");
     const [addingCat, setAddingCat] = useState(false);
-
-    // Rename state
     const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
     const [renameError, setRenameError] = useState("");
-
-    // Delete-category error
     const [catDeleteError, setCatDeleteError] = useState<string | null>(null);
 
     const { format } = useCurrency();
@@ -100,20 +107,13 @@ export default function RecipesPage() {
     const handleRemoveCategory = async (cat: RecipeCategory) => {
         setCatDeleteError(null);
         const res = await removeCategory(cat.id);
-        if (!res.ok) {
-            setCatDeleteError(res.error ?? "Failed to delete category.");
-            return;
-        }
+        if (!res.ok) { setCatDeleteError(res.error ?? "Failed to delete category."); return; }
         if (catFilter === cat.name) setCatFilter("all");
     };
 
     const handleQuickRemove = async (cat: RecipeCategory) => {
         const res = await removeCategory(cat.id);
-        if (!res.ok) {
-            setManageOpen(true);
-            setCatDeleteError(res.error ?? "Failed to delete category.");
-            return;
-        }
+        if (!res.ok) { setManageOpen(true); setCatDeleteError(res.error ?? "Failed to delete category."); return; }
         if (catFilter === cat.name) setCatFilter("all");
     };
 
@@ -125,6 +125,7 @@ export default function RecipesPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header */}
             <div className="flex flex-wrap justify-between items-start gap-3">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Recipes</h2>
@@ -138,14 +139,12 @@ export default function RecipesPage() {
                         <Settings2 className="mr-2 h-4 w-4" /> Manage Categories
                     </Button>
                     <Link href="/recipes/new">
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Create Recipe
-                        </Button>
+                        <Button><Plus className="mr-2 h-4 w-4" /> Create Recipe</Button>
                     </Link>
                 </div>
             </div>
 
-            {/* Search + Category Filters */}
+            {/* Search + Filters */}
             <div className="flex items-center gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[200px] max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -157,11 +156,7 @@ export default function RecipesPage() {
                     />
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                    <Button
-                        variant={catFilter === "all" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCatFilter("all")}
-                    >
+                    <Button variant={catFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setCatFilter("all")}>
                         All
                     </Button>
                     {catsLoading ? (
@@ -194,65 +189,132 @@ export default function RecipesPage() {
             </div>
 
             {/* Recipe Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {filtered.map((recipe) => {
+                    const ingCost = calcIngredientCost(recipe);
                     const totalCost = calcTotalCost(recipe);
-                    const costPerYield = totalCost / Number(recipe.yieldAmount);
-                    const sp = recipe.sellingPrice != null ? Number(recipe.sellingPrice) : null;
-                    const foodCostPct = sp && sp > 0 && costPerYield > 0 ? (costPerYield / sp) * 100 : null;
-                    const fcColor = foodCostPct == null ? "" : foodCostPct <= 30 ? "text-green-600 bg-green-50 border-green-200" : foodCostPct <= 40 ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
+                    const yield_ = Number(recipe.yieldAmount);
+                    const ingCostPerYield = ingCost / yield_;
+                    const totalCostPerYield = totalCost / yield_;
+
+                    const diningPrice = recipe.sellingPrice != null ? Number(recipe.sellingPrice) : null;
+                    const deliveryPrice = recipe.deliveryPrice != null ? Number(recipe.deliveryPrice) : null;
+
+                    // Food Cost % = ingredient cost only / selling price
+                    const diningFC = diningPrice && diningPrice > 0 ? (ingCostPerYield / diningPrice) * 100 : null;
+                    const deliveryFC = deliveryPrice && deliveryPrice > 0 ? (ingCostPerYield / deliveryPrice) * 100 : null;
+
+                    // Primary badge: dining first, else delivery
+                    const primaryFC = diningFC ?? deliveryFC;
+
                     return (
-                        <Card key={recipe.id} className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer" onClick={() => router.push(`/recipes/new?id=${recipe.id}`)}>
-                            <div className="h-32 bg-accent relative flex items-center justify-center border-b overflow-hidden">
+                        <Card
+                            key={recipe.id}
+                            className="overflow-hidden hover:shadow-md hover:border-primary/40 transition-all duration-200 group cursor-pointer flex flex-col"
+                            onClick={() => router.push(`/recipes/new?id=${recipe.id}`)}
+                        >
+                            {/* Image / placeholder */}
+                            <div className="h-36 bg-accent relative flex items-center justify-center border-b overflow-hidden shrink-0">
                                 {recipe.imageUrl ? (
                                     <img
                                         src={recipe.imageUrl}
                                         alt={recipe.name}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                                     />
                                 ) : (
-                                    <ChefHat className="h-12 w-12 text-primary/20" />
+                                    <ChefHat className="h-14 w-14 text-primary/15" />
                                 )}
+                                {/* Overlay gradient for text legibility */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
+
+                                {/* Top-left: primary FC badge */}
+                                {primaryFC != null && (
+                                    <Badge variant="outline" className={`absolute top-2 left-2 text-xs font-bold border shadow-sm backdrop-blur-sm bg-white/80 ${fcColor(primaryFC)}`}>
+                                        FC {primaryFC.toFixed(1)}%
+                                    </Badge>
+                                )}
+
+                                {/* Top-right: Main Sauce */}
                                 {recipe.isMainSauce && (
-                                    <Badge className="absolute top-2 right-2 bg-yellow-500 hover:bg-yellow-600 text-xs">
+                                    <Badge className="absolute top-2 right-2 bg-amber-500 hover:bg-amber-600 text-xs shadow">
                                         Main Sauce
                                     </Badge>
                                 )}
-                                {foodCostPct != null && (
-                                    <Badge variant="outline" className={`absolute top-2 left-2 text-xs font-bold border ${fcColor}`}>
-                                        FC {foodCostPct.toFixed(1)}%
+
+                                {/* Bottom: category + time */}
+                                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                                    <Badge variant="secondary" className="text-xs bg-black/50 text-white border-0 backdrop-blur-sm">
+                                        {recipe.category}
                                     </Badge>
-                                )}
-                                <Badge variant="outline" className="absolute bottom-2 left-2 text-xs bg-background/80 backdrop-blur-sm">
-                                    {recipe.category}
-                                </Badge>
-                            </div>
-                            <CardHeader className="p-4 pb-2">
-                                <CardTitle className="text-lg line-clamp-1">{recipe.name}</CardTitle>
-                                <CardDescription className="text-xs">Yield: {recipe.yieldAmount} {recipe.yieldUnit}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0">
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                    <div className="flex items-center gap-1">
-                                        <Clock className="h-3.5 w-3.5" />
-                                        <span>{recipe.prepTime + recipe.cookTime}m</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Banknote className="h-3.5 w-3.5" />
-                                        <span className="font-semibold text-primary tabular-nums">
-                                            {format(costPerYield)}/{recipe.yieldUnit}
-                                        </span>
-                                    </div>
-                                    {sp != null && (
-                                        <div className="flex items-center gap-1 ml-auto">
-                                            <span className="text-xs text-muted-foreground">Sells at {format(sp)}</span>
-                                        </div>
-                                    )}
+                                    <span className="flex items-center gap-1 text-xs text-white/90">
+                                        <Clock className="h-3 w-3" />
+                                        {recipe.prepTime + recipe.cookTime}m
+                                    </span>
                                 </div>
+                            </div>
+
+                            {/* Name */}
+                            <CardHeader className="p-4 pb-2 flex-1">
+                                <CardTitle className="text-base leading-tight line-clamp-2">{recipe.name}</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Yield: {recipe.yieldAmount} {recipe.yieldUnit}
+                                    {recipe.ingredients.length > 0 && (
+                                        <span className="ml-2 text-muted-foreground/70">· {recipe.ingredients.length} ingredients</span>
+                                    )}
+                                </p>
+                            </CardHeader>
+
+                            {/* Cost rows */}
+                            <CardContent className="p-4 pt-0 space-y-2">
+                                {/* Ingredient cost per yield */}
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Ingredient cost</span>
+                                    <span className="font-semibold text-primary tabular-nums">{format(ingCostPerYield)}/{recipe.yieldUnit}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>Total cost (incl. labor)</span>
+                                    <span className="tabular-nums">{format(totalCostPerYield)}/{recipe.yieldUnit}</span>
+                                </div>
+
+                                {/* Pricing: Dining & Delivery */}
+                                {(diningPrice != null || deliveryPrice != null) && (
+                                    <div className="pt-1 border-t space-y-1">
+                                        {diningPrice != null && (
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-1 text-muted-foreground">
+                                                    <UtensilsCrossed className="h-3 w-3" /> Dining
+                                                </span>
+                                                <span className="flex items-center gap-2">
+                                                    <span className="tabular-nums font-medium">{format(diningPrice)}</span>
+                                                    {diningFC != null && (
+                                                        <span className={`font-semibold tabular-nums ${fcColor(diningFC).split(" ")[0]}`}>
+                                                            {diningFC.toFixed(1)}%
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {deliveryPrice != null && (
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-1 text-muted-foreground">
+                                                    <Bike className="h-3 w-3" /> Delivery
+                                                </span>
+                                                <span className="flex items-center gap-2">
+                                                    <span className="tabular-nums font-medium">{format(deliveryPrice)}</span>
+                                                    {deliveryFC != null && (
+                                                        <span className={`font-semibold tabular-nums ${fcColor(deliveryFC).split(" ")[0]}`}>
+                                                            {deliveryFC.toFixed(1)}%
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </CardContent>
-                            <CardFooter className="p-4 pt-0 flex justify-between items-center">
-                                <span className="text-xs text-muted-foreground tabular-nums">Total: {format(totalCost)}</span>
+
+                            <CardFooter className="p-3 pt-0 flex justify-end items-center border-t bg-muted/30">
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                     <Link href={`/recipes/new?id=${recipe.id}`} onClick={(e) => e.stopPropagation()}>
                                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -266,6 +328,7 @@ export default function RecipesPage() {
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
+                                <span className="text-xs text-muted-foreground mr-auto">Total: {format(totalCost)}</span>
                             </CardFooter>
                         </Card>
                     );
@@ -273,10 +336,10 @@ export default function RecipesPage() {
             </div>
 
             {filtered.length === 0 && (
-                <div className="text-center py-12 border rounded-lg border-dashed">
-                    <ChefHat className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                <div className="text-center py-16 border rounded-xl border-dashed">
+                    <ChefHat className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-muted-foreground">No recipes found</h3>
-                    <p className="text-sm text-muted-foreground/80 mt-1">Try adjusting your search or create a new recipe.</p>
+                    <p className="text-sm text-muted-foreground/70 mt-1">Try adjusting your search or create a new recipe.</p>
                 </div>
             )}
 
@@ -327,7 +390,6 @@ export default function RecipesPage() {
                                                     size="icon" variant="ghost"
                                                     className="h-8 w-8 opacity-0 group-hover/row:opacity-100 transition-opacity"
                                                     onClick={() => handleStartRename(cat)}
-                                                    title="Rename"
                                                 >
                                                     <Pencil className="h-3.5 w-3.5" />
                                                 </Button>
@@ -335,7 +397,6 @@ export default function RecipesPage() {
                                                     size="icon" variant="ghost"
                                                     className="h-8 w-8 text-destructive opacity-0 group-hover/row:opacity-100 transition-opacity"
                                                     onClick={() => handleRemoveCategory(cat)}
-                                                    title="Delete"
                                                 >
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                 </Button>

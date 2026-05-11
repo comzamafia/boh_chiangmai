@@ -139,6 +139,7 @@ export interface Recipe {
     laborCostPerHour: number;
     energyCostPerBatch: number;
     sellingPrice?: number | null;
+    deliveryPrice?: number | null;
     imageUrl?: string;
     isMainSauce: boolean;
     instructions?: string;

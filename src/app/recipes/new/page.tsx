@@ -231,38 +231,292 @@ function RecipeBuilderInner() {
 
     // ─── Export SOP ───────────────────────────────────────────────────────────
     const handleExportSOP = () => {
-        const prep = parseFloat(prepMinutes) || 0;
-        const cook = parseFloat(cookMinutes) || 0;
-        const ingListHtml = ingredientRows
+        const prep  = parseFloat(prepMinutes) || 0;
+        const cook  = parseFloat(cookMinutes) || 0;
+        const ready = prep + cook;
+        const docCode = `SOP-${editId ? editId.slice(0, 8).toUpperCase() : "NEW"}-${new Date().toISOString().slice(0, 10)}`;
+
+        // Build ingredient rows
+        const ingRows = ingredientRows
             .filter(r => r.ingredientId && parseFloat(r.quantity) > 0)
             .map(r => {
                 const ing = ingredients.find(i => i.id === r.ingredientId);
                 if (!ing) return "";
-                return `<li>${parseFloat(r.quantity)} ${ing.recipeUnit} ${ing.name}</li>`;
-            }).join("\n");
-        const directionItems = (instructions || "")
-            .split("\n").map(l => l.trim()).filter(Boolean)
-            .map((l, i) => `<p><strong>${i + 1}.</strong> ${l}</p>`).join("\n");
-        const docCode = `SOP-${editId ? editId.slice(0, 8).toUpperCase() : "NEW"}-${new Date().toISOString().slice(0, 10)}`;
-        const imageBlock = imageUrl
-            ? `<img src="${imageUrl}" alt="${recipeName}" class="recipe-image" onerror="this.style.display='none'" />`
-            : `<div class="recipe-image-placeholder"></div>`;
-        const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>S.O.P — ${recipeName || "Recipe"}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Georgia,serif;color:#222;background:#fff;padding:40px 48px;max-width:800px;margin:0 auto}
-.header{text-align:center;margin-bottom:24px}.header h1{font-size:2.4rem;font-weight:700;margin-bottom:4px}.header .subtitle{font-family:Arial,sans-serif;font-size:1rem;color:#555}
-.recipe-image{display:block;width:100%;max-height:260px;object-fit:cover;border-radius:6px;margin-bottom:0}.recipe-image-placeholder{width:100%;height:180px;background:#f0ece4;border-radius:6px}
-.time-bar{display:flex;border:1px solid #ccc;border-radius:0 0 6px 6px;overflow:hidden;font-family:Arial,sans-serif}.time-cell{flex:1;text-align:center;padding:10px 0;background:#f5f5f5;border-right:1px solid #ccc}.time-cell:last-child{border-right:none}.time-cell .tc-label{font-weight:700;font-size:.88rem;text-transform:uppercase}.time-cell .tc-value{font-size:.82rem;color:#555;margin-top:2px}
-.body-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:32px;margin-top:28px}h2{font-size:1.1rem;font-weight:700;border-bottom:2px solid #222;padding-bottom:4px;margin-bottom:12px;font-family:Arial,sans-serif}
-.ingredients-col ul{list-style:disc;padding-left:18px;font-size:.88rem;line-height:1.8}.directions-col p{font-size:.88rem;line-height:1.7;margin-bottom:8px;text-align:justify}
-.footer{margin-top:36px;padding-top:10px;border-top:1px solid #ccc;font-family:Arial,sans-serif;font-size:.75rem;color:#888;display:flex;justify-content:space-between}
-@media print{body{padding:20px 24px}@page{margin:1cm;size:A4}}</style></head>
-<body><div class="header"><h1>${recipeName || "Untitled Recipe"}</h1><p class="subtitle">${category}</p></div>
-${imageBlock}
-<div class="time-bar"><div class="time-cell"><div class="tc-label">Prep</div><div class="tc-value">${prep} mins</div></div><div class="time-cell"><div class="tc-label">Cook</div><div class="tc-value">${cook} mins</div></div><div class="time-cell"><div class="tc-label">Ready In</div><div class="tc-value">${prep + cook} mins</div></div></div>
-<div class="body-grid"><div class="ingredients-col"><h2>Ingredients</h2><ul>${ingListHtml || "<li><em>No ingredients added.</em></li>"}</ul></div>
-<div class="directions-col"><h2>Directions</h2>${directionItems || "<p><em>No instructions provided.</em></p>"}</div></div>
-<div class="footer"><span>Document: ${docCode}</span><span>Yield: ${yieldAmount} ${yieldUnit} | Total Cost: ${format(totalCost)}</span><span>Chiang Mai BOH &copy; ${new Date().getFullYear()}</span></div>
-<script>window.onload=function(){window.print();};<\/script></body></html>`;
+                const qty = parseFloat(r.quantity);
+                return `<tr>
+                  <td class="ing-qty">${qty} ${ing.recipeUnit}</td>
+                  <td class="ing-name">${ing.name}</td>
+                  <td class="ing-cost">${format((Number(ing.purchasePrice) / Number(ing.conversionRate) / (Number(ing.yieldPercent) / 100)) * qty)}</td>
+                </tr>`;
+            }).join("");
+
+        // Build direction steps
+        const steps = (instructions || "").split("\n").map(l => l.trim()).filter(Boolean);
+        const dirRows = steps.length
+            ? steps.map((l, i) => `<div class="step"><span class="step-num">${i + 1}</span><span class="step-text">${l}</span></div>`).join("")
+            : `<div class="step"><span class="step-text" style="color:#999;font-style:italic">No instructions provided.</span></div>`;
+
+        // Pricing + FC rows
+        const dp = parseFloat(diningPrice);
+        const dlp = parseFloat(deliveryPrice);
+        const diningFCHtml  = dp  > 0 && ingCostPerYield > 0 ? `<span class="pill pill-fc">Dining FC <b>${((ingCostPerYield / dp)  * 100).toFixed(1)}%</b></span>` : "";
+        const delivFCHtml   = dlp > 0 && ingCostPerYield > 0 ? `<span class="pill pill-fc">Delivery FC <b>${((ingCostPerYield / dlp) * 100).toFixed(1)}%</b></span>` : "";
+        const diningPrHtml  = dp  > 0 ? `<span class="pill">Dining <b>${format(dp)}</b></span>`  : "";
+        const delivPrHtml   = dlp > 0 ? `<span class="pill">Delivery <b>${format(dlp)}</b></span>` : "";
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>S.O.P — ${recipeName || "Recipe"}</title>
+<style>
+/* ── Reset ── */
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* ── Screen: outer wrapper ── */
+body{
+  font-family:Georgia,"Times New Roman",serif;
+  background:#f0ede7;
+  color:#1a1a1a;
+  padding:32px 16px;
+}
+.page{
+  background:#fff;
+  max-width:1040px;
+  margin:0 auto;
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 8px 40px rgba(0,0,0,.18);
+}
+
+/* ── Hero image 992 × 650 ── */
+.hero{
+  width:100%;
+  height:650px;
+  background:#111;
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.hero img{
+  width:992px;
+  height:650px;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;   /* show whole dish */
+  object-position:center;
+  display:block;
+}
+.hero-no-img{
+  width:100%;height:100%;
+  background:linear-gradient(135deg,#2a2018 0%,#4a3828 100%);
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.3);font-size:1rem;font-family:Arial,sans-serif;
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.hero-overlay{
+  position:absolute;
+  bottom:0;left:0;right:0;
+  padding:28px 36px 24px;
+  background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,0) 100%);
+}
+.hero-title{
+  font-size:2.6rem;font-weight:700;color:#fff;
+  line-height:1.1;text-shadow:0 2px 12px rgba(0,0,0,.6);
+}
+.hero-meta{
+  margin-top:5px;font-family:Arial,sans-serif;font-size:.88rem;
+  color:rgba(255,255,255,.7);letter-spacing:.02em;
+}
+
+/* ── Stats bar ── */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  background:#1c1a16;
+  color:#fff;
+}
+.stat{
+  padding:11px 6px;text-align:center;
+  border-right:1px solid rgba(255,255,255,.1);
+}
+.stat:last-child{border-right:none}
+.stat-lbl{
+  font-size:.58rem;text-transform:uppercase;letter-spacing:.09em;
+  color:rgba(255,255,255,.5);font-family:Arial,sans-serif;
+}
+.stat-val{font-size:.95rem;font-weight:700;margin-top:3px}
+.stat-val.gold{color:#e8b84b}
+
+/* ── Body ── */
+.body{
+  display:grid;
+  grid-template-columns:42% 1fr;
+  gap:0;
+}
+.col{padding:22px 24px}
+.col-left{border-right:1px solid #ede8e0}
+.col-title{
+  font-size:.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.1em;color:#999;font-family:Arial,sans-serif;
+  margin-bottom:10px;padding-bottom:6px;
+  border-bottom:2px solid #ede8e0;
+}
+
+/* Ingredient table */
+.ing-table{width:100%;border-collapse:collapse}
+.ing-table tr{border-bottom:1px solid #f4f0ea}
+.ing-table tr:last-child{border-bottom:none}
+.ing-qty{
+  font-size:.78rem;font-weight:700;color:#b87c28;
+  font-family:Arial,sans-serif;padding:4px 8px 4px 0;
+  white-space:nowrap;vertical-align:top;width:90px;
+}
+.ing-name{font-size:.82rem;padding:4px 0;vertical-align:top;line-height:1.3}
+.ing-cost{
+  font-size:.72rem;color:#999;font-family:Arial,sans-serif;
+  text-align:right;padding:4px 0 4px 6px;vertical-align:top;
+  white-space:nowrap;
+}
+
+/* Directions */
+.step{display:flex;gap:9px;margin-bottom:7px;align-items:flex-start}
+.step-num{
+  background:#1c1a16;color:#fff;border-radius:50%;
+  width:18px;height:18px;min-width:18px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.6rem;font-weight:700;font-family:Arial,sans-serif;
+  margin-top:1px;
+}
+.step-text{font-size:.82rem;line-height:1.5;color:#333}
+
+/* ── Footer ── */
+.footer{
+  background:#f8f5f0;
+  border-top:1px solid #ede8e0;
+  padding:10px 24px;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.footer-brand{font-family:Arial,sans-serif;font-size:.65rem;color:#999}
+.pills{display:flex;flex-wrap:wrap;gap:5px}
+.pill{
+  background:#fff;border:1px solid #ddd;border-radius:20px;
+  padding:2px 9px;font-size:.65rem;font-family:Arial,sans-serif;color:#555;
+}
+.pill b{color:#1a1a1a}
+.pill-fc b{color:#b87c28}
+
+/* ── Print ── */
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{background:#fff;padding:0}
+  .page{max-width:100%;border-radius:0;box-shadow:none}
+
+  /* Image: scaled for A4, full dish visible */
+  .hero{height:280px}
+  .hero img{width:100%;height:280px}
+  .hero-title{font-size:1.7rem}
+  .hero-meta{font-size:.72rem}
+  .hero-overlay{padding:16px 20px 14px}
+
+  .stats .stat{padding:7px 4px}
+  .stat-val{font-size:.78rem}
+  .stat-lbl{font-size:.5rem}
+
+  .body{grid-template-columns:40% 1fr}
+  .col{padding:12px 14px}
+  .col-title{font-size:.52rem;margin-bottom:7px;padding-bottom:4px}
+
+  .ing-qty{font-size:.68rem;padding:3px 6px 3px 0;width:78px}
+  .ing-name{font-size:.72rem;padding:3px 0}
+  .ing-cost{font-size:.62rem;padding:3px 0 3px 4px}
+
+  .step{margin-bottom:5px;gap:7px}
+  .step-num{width:15px;height:15px;min-width:15px;font-size:.52rem}
+  .step-text{font-size:.72rem;line-height:1.4}
+
+  .footer{padding:7px 14px}
+  .pill{font-size:.58rem;padding:1px 7px}
+
+  @page{size:A4 portrait;margin:8mm 10mm}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Hero -->
+  <div class="hero">
+    ${imageUrl
+        ? `<img src="${imageUrl}" alt="${recipeName}" onerror="this.outerHTML='<div class=hero-no-img>No Image Available</div>'" />`
+        : `<div class="hero-no-img">No Image Available</div>`}
+    <div class="hero-overlay">
+      <div class="hero-title">${recipeName || "Untitled Recipe"}</div>
+      <div class="hero-meta">${category}&ensp;·&ensp;${docCode}</div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-lbl">Prep</div>
+      <div class="stat-val">${prep} min</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Cook</div>
+      <div class="stat-val">${cook} min</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Ready In</div>
+      <div class="stat-val">${ready} min</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Yield</div>
+      <div class="stat-val">${yieldAmount} ${yieldUnit}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-lbl">Ingredient Cost / ${yieldUnit}</div>
+      <div class="stat-val gold">${format(ingCostPerYield)}</div>
+    </div>
+  </div>
+
+  <!-- Body: 2 columns -->
+  <div class="body">
+    <div class="col col-left">
+      <div class="col-title">Ingredients</div>
+      <table class="ing-table">
+        ${ingRows || `<tr><td class="ing-name" colspan="3" style="color:#999;font-style:italic">No ingredients added.</td></tr>`}
+      </table>
+    </div>
+    <div class="col col-right">
+      <div class="col-title">Preparation Steps</div>
+      ${dirRows}
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="footer-brand">Chiang Mai BOH &copy; ${new Date().getFullYear()}</span>
+    <div class="pills">
+      <span class="pill">Ingredients <b>${format(totalIngredientCost)}</b></span>
+      <span class="pill">Labor <b>${format(totalLaborCost)}</b></span>
+      <span class="pill">Total <b>${format(totalCost)}</b></span>
+      ${diningPrHtml}${delivPrHtml}${diningFCHtml}${delivFCHtml}
+    </div>
+    <span class="footer-brand">${docCode}</span>
+  </div>
+
+</div>
+<script>window.onload=function(){window.print();};<\/script>
+</body>
+</html>`;
+
         const win = window.open("", "_blank");
         if (win) { win.document.write(html); win.document.close(); }
     };

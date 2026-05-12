@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Search, ChefHat, Clock, Edit, Trash2, Loader2, Tag, X, Pencil, Settings2, UtensilsCrossed, Bike } from "lucide-react";
 import { useCurrency } from "@/components/currency-context";
+import { CURRENCIES } from "@/lib/currency";
 
 // Food Cost % = ingredient cost only / selling price (industry standard)
 function calcIngredientCost(recipe: RecipeWithIngredients): number {
@@ -56,7 +57,9 @@ export default function RecipesPage() {
     const [renameError, setRenameError] = useState("");
     const [catDeleteError, setCatDeleteError] = useState<string | null>(null);
 
-    const { format } = useCurrency();
+    const { format, symbol, currency } = useCurrency();
+    const rate = CURRENCIES[currency].rateFromTHB;
+    const show = (amt: number, dec = 2) => `${symbol}${amt.toFixed(dec)}`;
     const { categories, loading: catsLoading, addCategory, updateCategory, removeCategory } = useCategories();
 
     useEffect(() => {
@@ -194,15 +197,17 @@ export default function RecipesPage() {
                     const ingCost = calcIngredientCost(recipe);
                     const totalCost = calcTotalCost(recipe);
                     const yield_ = Number(recipe.yieldAmount);
-                    const ingCostPerYield = ingCost / yield_;
+                    const ingCostPerYield = ingCost / yield_;          // THB
+                    const ingCostPerYieldDisplay = ingCostPerYield * rate; // display currency
                     const totalCostPerYield = totalCost / yield_;
 
+                    // sellingPrice stored as display currency (CAD) — do not call format() on it
                     const diningPrice = recipe.sellingPrice != null ? Number(recipe.sellingPrice) : null;
                     const deliveryPrice = recipe.deliveryPrice != null ? Number(recipe.deliveryPrice) : null;
 
-                    // Food Cost % = ingredient cost only / selling price
-                    const diningFC = diningPrice && diningPrice > 0 ? (ingCostPerYield / diningPrice) * 100 : null;
-                    const deliveryFC = deliveryPrice && deliveryPrice > 0 ? (ingCostPerYield / deliveryPrice) * 100 : null;
+                    // Food Cost % = ingredient cost (display currency) / selling price (display currency)
+                    const diningFC = diningPrice && diningPrice > 0 ? (ingCostPerYieldDisplay / diningPrice) * 100 : null;
+                    const deliveryFC = deliveryPrice && deliveryPrice > 0 ? (ingCostPerYieldDisplay / deliveryPrice) * 100 : null;
 
                     // Primary badge: dining first, else delivery
                     const primaryFC = diningFC ?? deliveryFC;
@@ -286,7 +291,7 @@ export default function RecipesPage() {
                                                     <UtensilsCrossed className="h-3 w-3" /> Dining
                                                 </span>
                                                 <span className="flex items-center gap-2">
-                                                    <span className="tabular-nums font-medium">{format(diningPrice)}</span>
+                                                    <span className="tabular-nums font-medium">{show(diningPrice)}</span>
                                                     {diningFC != null && (
                                                         <span className={`font-semibold tabular-nums ${fcColor(diningFC).split(" ")[0]}`}>
                                                             {diningFC.toFixed(1)}%
@@ -301,7 +306,7 @@ export default function RecipesPage() {
                                                     <Bike className="h-3 w-3" /> Delivery
                                                 </span>
                                                 <span className="flex items-center gap-2">
-                                                    <span className="tabular-nums font-medium">{format(deliveryPrice)}</span>
+                                                    <span className="tabular-nums font-medium">{show(deliveryPrice)}</span>
                                                     {deliveryFC != null && (
                                                         <span className={`font-semibold tabular-nums ${fcColor(deliveryFC).split(" ")[0]}`}>
                                                             {deliveryFC.toFixed(1)}%

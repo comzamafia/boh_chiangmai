@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Save, FileText, ArrowLeft, Plus, Trash2, Loader2, ImageIcon, UtensilsCrossed, Bike, ChevronDown, Upload, X, Link } from "lucide-react";
 import { useCurrency } from "@/components/currency-context";
+import { CURRENCIES } from "@/lib/currency";
 import { useCategories, DEFAULT_CATEGORY } from "@/lib/use-categories";
 
 // ─── Protein keyword detection ───────────────────────────────────────────────
@@ -72,7 +73,10 @@ function RecipeBuilderInner() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const editId = searchParams.get("id");
-    const { format, symbol } = useCurrency();
+    const { format, symbol, currency } = useCurrency();
+    const rate = CURRENCIES[currency].rateFromTHB;
+    // show: render a value already in display currency (no THB→CAD conversion)
+    const show = (amt: number, dec = 2) => `${symbol}${amt.toFixed(dec)}`;
     const { categories } = useCategories();
     const [loadingData, setLoadingData] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -159,7 +163,8 @@ function RecipeBuilderInner() {
     const totalEnergyCost = parseFloat(energyCost) || 0;
     const totalCost = totalIngredientCost + totalLaborCost + totalEnergyCost;
     const yieldQty = parseFloat(yieldAmount) || 1;
-    const ingCostPerYield = totalIngredientCost / yieldQty;   // Food Cost basis
+    const ingCostPerYield = totalIngredientCost / yieldQty;         // THB (raw DB value)
+    const ingCostPerYieldDisplay = ingCostPerYield * rate;           // display currency (CAD)
     const totalCostPerYield = totalCost / yieldQty;
 
     // Cost bar percentages
@@ -310,10 +315,10 @@ function RecipeBuilderInner() {
         // Pricing + FC rows
         const dp = parseFloat(diningPrice);
         const dlp = parseFloat(deliveryPrice);
-        const diningFCHtml  = dp  > 0 && ingCostPerYield > 0 ? `<span class="pill pill-fc">Dining FC <b>${((ingCostPerYield / dp)  * 100).toFixed(1)}%</b></span>` : "";
-        const delivFCHtml   = dlp > 0 && ingCostPerYield > 0 ? `<span class="pill pill-fc">Delivery FC <b>${((ingCostPerYield / dlp) * 100).toFixed(1)}%</b></span>` : "";
-        const diningPrHtml  = dp  > 0 ? `<span class="pill">Dining <b>${format(dp)}</b></span>`  : "";
-        const delivPrHtml   = dlp > 0 ? `<span class="pill">Delivery <b>${format(dlp)}</b></span>` : "";
+        const diningFCHtml  = dp  > 0 && ingCostPerYieldDisplay > 0 ? `<span class="pill pill-fc">Dining FC <b>${((ingCostPerYieldDisplay / dp)  * 100).toFixed(1)}%</b></span>` : "";
+        const delivFCHtml   = dlp > 0 && ingCostPerYieldDisplay > 0 ? `<span class="pill pill-fc">Delivery FC <b>${((ingCostPerYieldDisplay / dlp) * 100).toFixed(1)}%</b></span>` : "";
+        const diningPrHtml  = dp  > 0 ? `<span class="pill">Dining <b>${show(dp)}</b></span>`  : "";
+        const delivPrHtml   = dlp > 0 ? `<span class="pill">Delivery <b>${show(dlp)}</b></span>` : "";
 
         const html = `<!DOCTYPE html>
 <html lang="en">
@@ -668,8 +673,8 @@ body{
                         />
                         {(() => {
                             const sp = parseFloat(diningPrice);
-                            if (!sp || sp <= 0 || ingCostPerYield <= 0) return null;
-                            const pct = (ingCostPerYield / sp) * 100;
+                            if (!sp || sp <= 0 || ingCostPerYieldDisplay <= 0) return null;
+                            const pct = (ingCostPerYieldDisplay / sp) * 100;
                             return (
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs text-muted-foreground">Food Cost %</span>
@@ -695,8 +700,8 @@ body{
                         />
                         {(() => {
                             const sp = parseFloat(deliveryPrice);
-                            if (!sp || sp <= 0 || ingCostPerYield <= 0) return null;
-                            const pct = (ingCostPerYield / sp) * 100;
+                            if (!sp || sp <= 0 || ingCostPerYieldDisplay <= 0) return null;
+                            const pct = (ingCostPerYieldDisplay / sp) * 100;
                             return (
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs text-muted-foreground">Food Cost %</span>
@@ -768,7 +773,7 @@ body{
                     <span className="flex items-center gap-2 text-sm">
                         Cost: <span className="font-bold text-primary">{format(ingCostPerYield)}/{yieldUnit || "yield"}</span>
                         {diningPrice && (
-                            <span className="text-muted-foreground">· Dining {format(parseFloat(diningPrice))}</span>
+                            <span className="text-muted-foreground">· Dining {show(parseFloat(diningPrice))}</span>
                         )}
                     </span>
                     <ChevronDown className={`h-4 w-4 transition-transform ${showCostBreakdown ? "rotate-180" : ""}`} />

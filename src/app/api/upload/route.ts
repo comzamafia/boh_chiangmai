@@ -31,7 +31,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ url: blob.url });
     } catch (err) {
         console.error("[upload]", err);
-        const msg = err instanceof Error ? err.message : "Upload failed";
+        const raw = err instanceof Error ? err.message : "Upload failed";
+        const msg = raw.toLowerCase().includes("private")
+            ? "Blob store is set to private access. Go to Vercel Dashboard → Storage → your Blob store → Settings and change access to Public, or create a new Public blob store."
+            : raw;
         return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

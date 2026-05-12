@@ -199,10 +199,11 @@ function RecipeBuilderInner() {
         return next;
     });
 
-    // ─── Image upload ─────────────────────────────────────────────────────────
+    // ─── Image upload (Vercel Blob client upload — bypasses function size limit) ─
     const handleUploadFile = async (file: File) => {
-        if (!file.type.startsWith("image/")) {
-            setUploadError("Please select an image file (JPG, PNG, WebP, etc.)");
+        const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+        if (!ALLOWED.includes(file.type)) {
+            setUploadError("Please select an image file (JPG, PNG, WebP, GIF)");
             return;
         }
         if (file.size > 10 * 1024 * 1024) {
@@ -212,16 +213,15 @@ function RecipeBuilderInner() {
         setUploadError("");
         setUploading(true);
         try {
-            const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
-                method: "POST",
-                body: file,
-                headers: { "Content-Type": file.type },
+            const { upload } = await import("@vercel/blob/client");
+            const blob = await upload(file.name, file, {
+                access: "public",
+                handleUploadUrl: "/api/upload",
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Upload failed");
-            setImageUrl(data.url);
+            setImageUrl(blob.url);
         } catch (err) {
-            setUploadError(err instanceof Error ? err.message : "Upload failed");
+            const msg = err instanceof Error ? err.message : "Upload failed";
+            setUploadError(msg);
         } finally {
             setUploading(false);
         }

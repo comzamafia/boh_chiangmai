@@ -65,7 +65,7 @@ const SUPPLIERS = [
     "Heritage Spice House",
 ];
 
-const CURRENCIES = ["CAD", "THB", "USD"];
+const CURRENCIES = ["CAD"];
 
 const UNITS = ["lbs", "kg", "g", "oz", "L", "ml", "piece", "dozen", "pack", "bag"];
 

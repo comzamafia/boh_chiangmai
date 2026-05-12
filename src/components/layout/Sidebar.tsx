@@ -11,8 +11,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { useCurrency } from "@/components/currency-context";
-import { CURRENCIES, CurrencyCode } from "@/lib/currency";
 import { useAuth } from "@/components/auth-provider";
 import { ROLE_LABELS } from "@/lib/permissions";
 import type { NavSlug } from "@/lib/permissions";
@@ -53,12 +51,11 @@ const GROUP_LABELS: Record<string, string> = {
     admin: "Admin",
 };
 
-const CURRENCY_OPTIONS: CurrencyCode[] = ["CAD", "USD", "THB"];
 
 export function Sidebar({ onClose }: { onClose?: () => void }) {
     const pathname = usePathname();
     const { theme, setTheme } = useTheme();
-    const { currency, setCurrency } = useCurrency();
+
     const { user, loading, permittedSlugs, logout } = useAuth();
 
     const visibleItems = navItems.filter(item => permittedSlugs.includes(item.slug));
@@ -149,33 +146,6 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
 
             {/* ── Footer ── */}
             <div className="border-t border-sidebar-border p-4 space-y-4">
-                {/* Currency */}
-                <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-                        Currency
-                    </p>
-                    <div className="flex gap-1">
-                        {CURRENCY_OPTIONS.map((code) => {
-                            const cfg = CURRENCIES[code];
-                            const isActive = currency === code;
-                            return (
-                                <button
-                                    key={code}
-                                    onClick={() => setCurrency(code)}
-                                    className={cn(
-                                        "flex-1 rounded-md py-1 text-xs font-semibold transition-all border",
-                                        isActive
-                                            ? "bg-sidebar-primary text-sidebar-primary-foreground border-sidebar-primary shadow-sm"
-                                            : "text-sidebar-foreground/50 border-sidebar-border hover:border-sidebar-primary/40 hover:text-sidebar-foreground"
-                                    )}
-                                >
-                                    {cfg.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
                 {/* Theme + User */}
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-sidebar-foreground/70">Theme</span>

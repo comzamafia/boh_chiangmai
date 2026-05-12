@@ -4,7 +4,7 @@
  * Exchange rates: 1 THB = X other currency
  */
 
-export type CurrencyCode = "CAD" | "USD" | "THB";
+export type CurrencyCode = "CAD";
 
 export interface CurrencyConfig {
     code: CurrencyCode;
@@ -14,25 +14,13 @@ export interface CurrencyConfig {
     rateFromTHB: number;
 }
 
-/** Approximate exchange rates (1 THB → target currency) */
+/** Exchange rate: 1 THB → CAD */
 export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
     CAD: {
         code: "CAD",
         symbol: "CA$",
         label: "$CAD",
         rateFromTHB: 0.037,   // 1 THB ≈ 0.037 CAD  (1 CAD ≈ 27 THB)
-    },
-    USD: {
-        code: "USD",
-        symbol: "US$",
-        label: "$USD",
-        rateFromTHB: 0.028,   // 1 THB ≈ 0.028 USD  (1 USD ≈ 35.7 THB)
-    },
-    THB: {
-        code: "THB",
-        symbol: "฿",
-        label: "฿THB",
-        rateFromTHB: 1.0,
     },
 };
 

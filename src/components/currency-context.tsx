@@ -39,7 +39,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         try {
             const stored = localStorage.getItem(STORAGE_KEY) as CurrencyCode | null;
-            if (stored && ["CAD", "USD", "THB"].includes(stored)) {
+            if (stored && (["CAD"] as string[]).includes(stored)) {
                 setCurrencyState(stored);
             }
         } catch {

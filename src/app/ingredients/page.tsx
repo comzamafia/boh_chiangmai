@@ -62,6 +62,7 @@ import {
 import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
+import { CURRENCIES } from "@/lib/currency";
 
 type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier">;
 
@@ -87,7 +88,11 @@ export default function IngredientsPage() {
     const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
     const [form, setForm] = useState<FormState>(emptyForm([]));
 
-    const { format, symbol } = useCurrency();
+    const { format, symbol, currency } = useCurrency();
+    // rate: 1 THB = X display-currency  (e.g. 0.037 for CAD)
+    const rate = CURRENCIES[currency].rateFromTHB;
+    // show: format a value that is ALREADY in display currency (no THB conversion)
+    const show = (amt: number, dec = 2) => `${symbol}${amt.toFixed(dec)}`;
 
     useEffect(() => {
         Promise.all([ingredientsApi.list(), suppliersApi.list()])
@@ -157,7 +162,9 @@ export default function IngredientsPage() {
         setEditTarget(item);
         setForm({
             name: item.name, supplierId: item.supplierId,
-            purchaseUnit: item.purchaseUnit, purchasePrice: Number(item.purchasePrice),
+            purchaseUnit: item.purchaseUnit,
+            // DB stores in THB — convert to display currency so the label matches what user sees
+            purchasePrice: Number(item.purchasePrice) * rate,
             recipeUnit: item.recipeUnit, yieldPercent: Number(item.yieldPercent),
             conversionRate: Number(item.conversionRate),
             groupId: item.groupId, imageUrl: item.imageUrl ?? "",
@@ -170,11 +177,13 @@ export default function IngredientsPage() {
         if (!form.name.trim() || !form.supplierId) return;
         setSaving(true);
         try {
+            // form.purchasePrice is in display currency — convert back to THB for storage
+            const payload = { ...form, purchasePrice: form.purchasePrice / rate };
             if (editTarget) {
-                const updated = await ingredientsApi.update(editTarget.id, form);
+                const updated = await ingredientsApi.update(editTarget.id, payload);
                 setIngredients(prev => prev.map(i => i.id === updated.id ? updated : i));
             } else {
-                const created = await ingredientsApi.create(form);
+                const created = await ingredientsApi.create(payload);
                 setIngredients(prev => [...prev, created]);
             }
             setDialogOpen(false);
@@ -328,8 +337,8 @@ export default function IngredientsPage() {
                                     </TableCell>
                                     <TableCell>
                                         <div className="cursor-help" title={
-                                            `1 ${item.purchaseUnit} @ ${Number(item.purchasePrice).toFixed(2)} = ${Number(item.conversionRate)} ${item.recipeUnit} → raw ${rawCostPerRecipeUnit.toFixed(4)}/${item.recipeUnit}` +
-                                            (hasYieldLoss ? ` ÷ ${Number(item.yieldPercent)}% yield → usable ${effCost.toFixed(4)}/${item.recipeUnit}` : "")
+                                            `1 ${item.purchaseUnit} @ ${format(Number(item.purchasePrice))} = ${Number(item.conversionRate)} ${item.recipeUnit} → raw ${format(rawCostPerRecipeUnit, 4)}/${item.recipeUnit}` +
+                                            (hasYieldLoss ? ` ÷ ${Number(item.yieldPercent)}% yield → usable ${format(effCost, 4)}/${item.recipeUnit}` : "")
                                         }>
                                             <span className="font-semibold text-primary tabular-nums">
                                                 {format(effCost, 4)}
@@ -503,14 +512,14 @@ export default function IngredientsPage() {
                             <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
                                 <span className="text-muted-foreground">Purchase price</span>
                                 <span className="tabular-nums font-medium text-right">
-                                    {format(form.purchasePrice)} / {form.purchaseUnit}
+                                    {show(form.purchasePrice)} / {form.purchaseUnit}
                                 </span>
 
                                 <span className="text-muted-foreground">
                                     ÷ Conversion ({form.conversionRate || 1} {form.recipeUnit}/{form.purchaseUnit})
                                 </span>
                                 <span className="tabular-nums text-right">
-                                    = {format(prevRawCost, 4)} / {form.recipeUnit}
+                                    = {show(prevRawCost, 4)} / {form.recipeUnit}
                                 </span>
 
                                 {form.yieldPercent < 100 && (
@@ -519,7 +528,7 @@ export default function IngredientsPage() {
                                             ÷ Yield ({form.yieldPercent}% usable → {prevUsableQty.toFixed(2)} {form.recipeUnit} per {form.purchaseUnit})
                                         </span>
                                         <span className="tabular-nums text-right text-yellow-600">
-                                            = {format(prevEffCost, 4)} / {form.recipeUnit}
+                                            = {show(prevEffCost, 4)} / {form.recipeUnit}
                                         </span>
                                     </>
                                 )}
@@ -528,7 +537,7 @@ export default function IngredientsPage() {
                             <div className="border-t pt-2 flex items-center justify-between">
                                 <span className="font-semibold">Effective Cost (used in recipes)</span>
                                 <span className="font-bold text-lg text-primary tabular-nums">
-                                    {format(prevEffCost, 4)} / {form.recipeUnit || "unit"}
+                                    {show(prevEffCost, 4)} / {form.recipeUnit || "unit"}
                                 </span>
                             </div>
 

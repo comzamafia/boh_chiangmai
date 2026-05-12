@@ -1,10 +1,7 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
-// Token-generation + completion handler for Vercel Blob client uploads.
-// The browser uploads the file directly to Vercel Blob CDN — it never
-// goes through this function body, so there is no serverless size limit.
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(request: Request) {
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
         return NextResponse.json(
             { error: "Image storage is not configured. Add BLOB_READ_WRITE_TOKEN to your environment variables." },
@@ -12,37 +9,29 @@ export async function POST(request: Request): Promise<NextResponse> {
         );
     }
 
-    let body: HandleUploadBody;
     try {
-        body = (await request.json()) as HandleUploadBody;
-    } catch {
-        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-    }
+        const formData = await request.formData();
+        const file = formData.get("file") as File | null;
 
-    try {
-        const jsonResponse = await handleUpload({
-            body,
-            request,
-            onBeforeGenerateToken: async (pathname) => ({
-                allowedContentTypes: [
-                    "image/jpeg",
-                    "image/jpg",
-                    "image/png",
-                    "image/webp",
-                    "image/gif",
-                ],
-                maximumSizeInBytes: 10 * 1024 * 1024, // 10 MB
-                addRandomSuffix: true,
-                pathname: `recipes/${pathname}`,
-            }),
-            onUploadCompleted: async ({ blob }) => {
-                console.log("[upload] completed:", blob.url);
-            },
+        if (!file || file.size === 0) {
+            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+        }
+
+        const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+        if (!ALLOWED.includes(file.type)) {
+            return NextResponse.json({ error: "Only image files are allowed (JPG, PNG, WebP, GIF)" }, { status: 400 });
+        }
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const blob = await put(`recipes/${Date.now()}-${safeName}`, file, {
+            access: "public",
+            contentType: file.type,
         });
-        return NextResponse.json(jsonResponse);
+
+        return NextResponse.json({ url: blob.url });
     } catch (err) {
         console.error("[upload]", err);
         const msg = err instanceof Error ? err.message : "Upload failed";
-        return NextResponse.json({ error: msg }, { status: 400 });
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

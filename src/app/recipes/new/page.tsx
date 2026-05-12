@@ -199,29 +199,33 @@ function RecipeBuilderInner() {
         return next;
     });
 
-    // ─── Image upload (Vercel Blob client upload — bypasses function size limit) ─
+    // ─── Image upload via FormData → /api/upload → Vercel Blob ──────────────
     const handleUploadFile = async (file: File) => {
         const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
         if (!ALLOWED.includes(file.type)) {
             setUploadError("Please select an image file (JPG, PNG, WebP, GIF)");
             return;
         }
-        if (file.size > 10 * 1024 * 1024) {
-            setUploadError("Image must be under 10 MB");
+        if (file.size > 4 * 1024 * 1024) {
+            setUploadError("Image must be under 4 MB");
             return;
         }
         setUploadError("");
         setUploading(true);
         try {
-            const { upload } = await import("@vercel/blob/client");
-            const blob = await upload(file.name, file, {
-                access: "public",
-                handleUploadUrl: "/api/upload",
-            });
-            setImageUrl(blob.url);
+            const fd = new FormData();
+            fd.append("file", file);
+            const res = await fetch("/api/upload", { method: "POST", body: fd });
+
+            // Safely parse response regardless of content-type
+            let data: { url?: string; error?: string } = {};
+            try { data = await res.json(); } catch {
+                data = { error: await res.text().catch(() => `Upload error (${res.status})`) };
+            }
+            if (!res.ok) throw new Error(data.error ?? `Upload error (${res.status})`);
+            setImageUrl(data.url!);
         } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed";
-            setUploadError(msg);
+            setUploadError(err instanceof Error ? err.message : "Upload failed");
         } finally {
             setUploading(false);
         }
@@ -882,7 +886,7 @@ body{
                                                                 <>
                                                                     <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
                                                                     <p className="text-sm font-medium">Drop image here or click to browse</p>
-                                                                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP · max 10 MB</p>
+                                                                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP · max 4 MB</p>
                                                                 </>
                                                             )}
                                                         </div>

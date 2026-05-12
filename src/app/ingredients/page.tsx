@@ -1,19 +1,54 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ingredientsApi, suppliersApi, Ingredient, Supplier } from "@/lib/api";
 
-const UNITS = {
+// ─── Unit definitions per group ──────────────────────────────────────────────
+const GROUP_UNITS: Record<string, string[]> = {
     Weight: ["kg", "g", "lb", "oz"],
     Volume: ["L", "ml", "fl oz"],
-    Count: ["pc", "pack", "bottle", "can", "box"],
+    Count:  ["piece", "pc", "dozen", "pack", "bottle", "can", "box"],
 };
+
+// Known conversion rates: RATE[purchaseUnit][recipeUnit] = how many recipeUnits in 1 purchaseUnit
+const KNOWN_RATES: Record<string, Record<string, number>> = {
+    // Weight
+    kg:      { g: 1000,       oz: 35.274,    lb: 2.20462  },
+    g:       { kg: 0.001,     oz: 0.035274,  lb: 0.0022046 },
+    lb:      { g: 453.592,    kg: 0.453592,  oz: 16        },
+    oz:      { g: 28.3495,    kg: 0.028350,  lb: 0.0625    },
+    // Volume
+    L:       { ml: 1000,      "fl oz": 33.814              },
+    ml:      { L: 0.001,      "fl oz": 0.033814            },
+    "fl oz": { ml: 29.5735,   L: 0.029574                  },
+    // Count
+    dozen:   { piece: 12,     pc: 12                       },
+    pack:    { piece: 1,      pc: 1                        },
+    bottle:  { piece: 1,      pc: 1                        },
+    can:     { piece: 1,      pc: 1                        },
+    box:     { piece: 1,      pc: 1                        },
+    piece:   { pc: 1                                       },
+    pc:      { piece: 1                                    },
+};
+
+function getKnownRate(pu: string, ru: string): number | null {
+    if (pu === ru) return 1;
+    return KNOWN_RATES[pu]?.[ru] ?? null;
+}
+
+// ─── Effective cost = (price / conversionRate) / (yieldPercent / 100) ────────
+// i.e. cost per USABLE recipe unit, accounting for waste
+function effectiveCost(price: number, rate: number, yieldPct: number): number {
+    if (!rate || !yieldPct) return 0;
+    return (price / rate) / (yieldPct / 100);
+}
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
     Table, TableBody, TableCell, TableHead,
-    TableHeader, TableRow
+    TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,11 +57,22 @@ import {
 } from "@/components/ui/dialog";
 import {
     Select, SelectContent, SelectItem,
-    SelectTrigger, SelectValue
+    SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, ArrowRight, ShoppingCart, Loader2, ImageIcon } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
+
+type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier">;
+
+function emptyForm(suppliers: Supplier[]): FormState {
+    return {
+        name: "", supplierId: suppliers[0]?.id ?? "",
+        purchaseUnit: "kg", purchasePrice: 0,
+        recipeUnit: "g", yieldPercent: 100,
+        conversionRate: 1000, groupId: "Weight", imageUrl: "",
+    };
+}
 
 export default function IngredientsPage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -34,53 +80,94 @@ export default function IngredientsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const [groupFilter, setGroupFilter] = useState<string>("all");
+    const [groupFilter, setGroupFilter] = useState("all");
     const [dialogOpen, setDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<Ingredient | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
+    const [form, setForm] = useState<FormState>(emptyForm([]));
 
-    const emptyForm = (): Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier"> => ({
-        name: "", supplierId: suppliers[0]?.id ?? "", purchaseUnit: "kg",
-        purchasePrice: 0, recipeUnit: "g", yieldPercent: 100,
-        conversionRate: 1000, groupId: "Weight", imageUrl: "",
-    });
-    const [form, setForm] = useState<Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier">>({
-        name: "", supplierId: "", purchaseUnit: "kg",
-        purchasePrice: 0, recipeUnit: "g", yieldPercent: 100,
-        conversionRate: 1000, groupId: "Weight", imageUrl: "",
-    });
+    const { format, symbol } = useCurrency();
 
     useEffect(() => {
         Promise.all([ingredientsApi.list(), suppliersApi.list()])
-            .then(([ings, sups]) => { setIngredients(ings); setSuppliers(sups); })
+            .then(([ings, sups]) => {
+                setIngredients(ings);
+                setSuppliers(sups);
+                setForm(emptyForm(sups));
+            })
             .finally(() => setLoading(false));
     }, []);
 
-    const filtered = ingredients.filter(i => {
-        const matchSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const filtered = useMemo(() => ingredients.filter(i => {
+        const matchSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (i.supplier?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
         const matchGroup = groupFilter === "all" || i.groupId === groupFilter;
         return matchSearch && matchGroup;
-    });
+    }), [ingredients, searchTerm, groupFilter]);
 
-    const getSupplierName = (ing: Ingredient) =>
-        ing.supplier?.name ?? suppliers.find(s => s.id === ing.supplierId)?.name ?? "Unknown";
+    // ─── Derived cost values ───────────────────────────────────────────────────
+    const ingEffCost = (item: Ingredient) =>
+        effectiveCost(Number(item.purchasePrice), Number(item.conversionRate), Number(item.yieldPercent));
 
-    const costPerRecipeUnit = (item: Ingredient) =>
-        (Number(item.purchasePrice) / Number(item.conversionRate)) / (Number(item.yieldPercent) / 100);
+    // ─── Form helpers ──────────────────────────────────────────────────────────
+    const purchaseUnits = GROUP_UNITS[form.groupId] ?? [];
+    const recipeUnits   = form.groupId === "Count"
+        ? [...GROUP_UNITS.Count, ...GROUP_UNITS.Weight] // Count items may be portioned by weight
+        : GROUP_UNITS[form.groupId] ?? [];
 
-    const openAdd = () => { setEditTarget(null); setForm(emptyForm()); setDialogOpen(true); };
-    const openEdit = (item: Ingredient) => {
-        setEditTarget(item);
-        setForm({ name: item.name, supplierId: item.supplierId, purchaseUnit: item.purchaseUnit,
-            purchasePrice: Number(item.purchasePrice), recipeUnit: item.recipeUnit,
-            yieldPercent: Number(item.yieldPercent), conversionRate: Number(item.conversionRate),
-            groupId: item.groupId, imageUrl: item.imageUrl ?? "" });
+    const knownRate = getKnownRate(form.purchaseUnit, form.recipeUnit);
+    const autoFillRate = () => {
+        if (knownRate != null) setForm(f => ({ ...f, conversionRate: knownRate }));
+    };
+
+    // Live preview values
+    const prevRawCost    = form.purchasePrice / (form.conversionRate || 1);
+    const prevUsableQty  = (form.conversionRate || 1) * ((form.yieldPercent || 100) / 100);
+    const prevEffCost    = effectiveCost(form.purchasePrice, form.conversionRate, form.yieldPercent);
+
+    // When group changes: reset units to first sensible pair and auto-fill rate
+    const handleGroupChange = (g: string) => {
+        const pu = GROUP_UNITS[g]?.[0] ?? "kg";
+        const ru = GROUP_UNITS[g]?.[1] ?? GROUP_UNITS[g]?.[0] ?? "g";
+        const rate = getKnownRate(pu, ru) ?? 1;
+        setForm(f => ({ ...f, groupId: g as Ingredient["groupId"], purchaseUnit: pu, recipeUnit: ru, conversionRate: rate }));
+    };
+
+    // When purchase unit changes: auto-fill if known
+    const handlePurchaseUnitChange = (pu: string) => {
+        const rate = getKnownRate(pu, form.recipeUnit);
+        setForm(f => ({ ...f, purchaseUnit: pu, ...(rate != null ? { conversionRate: rate } : {}) }));
+    };
+
+    // When recipe unit changes: auto-fill if known
+    const handleRecipeUnitChange = (ru: string) => {
+        const rate = getKnownRate(form.purchaseUnit, ru);
+        setForm(f => ({ ...f, recipeUnit: ru, ...(rate != null ? { conversionRate: rate } : {}) }));
+    };
+
+    // ─── Dialog open ───────────────────────────────────────────────────────────
+    const openAdd = () => {
+        setEditTarget(null);
+        setForm(emptyForm(suppliers));
         setDialogOpen(true);
     };
 
+    const openEdit = (item: Ingredient) => {
+        setEditTarget(item);
+        setForm({
+            name: item.name, supplierId: item.supplierId,
+            purchaseUnit: item.purchaseUnit, purchasePrice: Number(item.purchasePrice),
+            recipeUnit: item.recipeUnit, yieldPercent: Number(item.yieldPercent),
+            conversionRate: Number(item.conversionRate),
+            groupId: item.groupId, imageUrl: item.imageUrl ?? "",
+        });
+        setDialogOpen(true);
+    };
+
+    // ─── Save / Delete ────────────────────────────────────────────────────────
     const handleSave = async () => {
-        if (!form.name.trim()) return;
+        if (!form.name.trim() || !form.supplierId) return;
         setSaving(true);
         try {
             if (editTarget) {
@@ -91,7 +178,8 @@ export default function IngredientsPage() {
                 setIngredients(prev => [...prev, created]);
             }
             setDialogOpen(false);
-        } catch (err) { console.error(err); } finally { setSaving(false); }
+        } catch (err) { console.error(err); }
+        finally { setSaving(false); }
     };
 
     const handleDelete = async () => {
@@ -100,21 +188,25 @@ export default function IngredientsPage() {
         try {
             await ingredientsApi.delete(deleteTarget.id);
             setIngredients(prev => prev.filter(i => i.id !== deleteTarget.id));
-            setDeleteDialogOpen(false); setDeleteTarget(null);
-        } catch (err) { console.error(err); } finally { setSaving(false); }
+            setDeleteDialogOpen(false);
+            setDeleteTarget(null);
+        } catch (err) { console.error(err); }
+        finally { setSaving(false); }
     };
 
-    const allUnits = [...UNITS.Weight, ...UNITS.Volume, ...UNITS.Count];
-    const { format, symbol } = useCurrency();
-
-    if (loading) return <div className="flex justify-center items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    if (loading) return (
+        <div className="flex justify-center items-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+    );
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-start">
+            {/* Header */}
+            <div className="flex justify-between items-start flex-wrap gap-3">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Ingredients</h2>
-                    <p className="text-muted-foreground">Manage raw materials and unit conversions.</p>
+                    <p className="text-muted-foreground">Manage raw materials, unit conversions and effective costs.</p>
                 </div>
                 <div className="flex gap-2">
                     <Link href="/import-ingredients">
@@ -130,22 +222,27 @@ export default function IngredientsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
                     <ShoppingCart className="h-7 w-7 text-primary opacity-70" />
-                    <div><p className="text-xl font-bold text-primary">{ingredients.length}</p><p className="text-xs text-muted-foreground">Total</p></div>
+                    <div>
+                        <p className="text-xl font-bold text-primary">{ingredients.length}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                    </div>
                 </div>
                 {(["Weight", "Volume", "Count"] as const).map(g => (
-                    <div key={g} className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors"
+                    <div key={g}
+                        className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors"
                         onClick={() => setGroupFilter(groupFilter === g ? "all" : g)}>
                         <p className="text-xl font-bold">{ingredients.filter(i => i.groupId === g).length}</p>
-                        <p className="text-xs text-muted-foreground">{g} items {groupFilter === g ? "✓" : ""}</p>
+                        <p className="text-xs text-muted-foreground">{g} {groupFilter === g ? "✓" : ""}</p>
                     </div>
                 ))}
             </div>
 
-            <div className="flex items-center gap-3">
-                <div className="relative flex-1 max-w-sm">
+            {/* Search / filter */}
+            <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search ingredients..." className="pl-8" value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)} />
+                    <Input placeholder="Search ingredients or supplier…" className="pl-8"
+                        value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
                 <Select value={groupFilter} onValueChange={setGroupFilter}>
                     <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -159,68 +256,104 @@ export default function IngredientsPage() {
                 <p className="text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</p>
             </div>
 
-            <div className="border rounded-md overflow-x-auto">
+            {/* Table */}
+            <div className="border rounded-lg overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-16">Image</TableHead>
-                            <TableHead>Ingredient Name</TableHead>
+                            <TableHead className="w-14">Image</TableHead>
+                            <TableHead>Name</TableHead>
                             <TableHead>Supplier</TableHead>
                             <TableHead>Group</TableHead>
-                            <TableHead>Cost / Purchase Unit</TableHead>
+                            <TableHead>Purchase Price</TableHead>
+                            <TableHead>
+                                <span className="flex items-center gap-1">
+                                    Unit Conversion
+                                    <span title="How many recipe units are in 1 purchase unit" className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </span>
+                                </span>
+                            </TableHead>
                             <TableHead>Yield %</TableHead>
-                            <TableHead>Conversion</TableHead>
-                            <TableHead>Cost / Recipe Unit</TableHead>
+                            <TableHead>
+                                <span className="flex items-center gap-1">
+                                    Effective Cost
+                                    <span title="Cost per usable recipe unit after yield loss. Formula: (Purchase Price ÷ Conversion Rate) ÷ (Yield% ÷ 100)" className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </span>
+                                </span>
+                            </TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filtered.map((item) => (
-                            <TableRow key={item.id}>
-                                <TableCell>
-                                    {item.imageUrl ? (
-                                        <img src={item.imageUrl} alt={item.name}
-                                            className="h-10 w-10 rounded-md object-cover border" />
-                                    ) : (
-                                        <div className="h-10 w-10 rounded-md border bg-muted flex items-center justify-center">
-                                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                        {filtered.map(item => {
+                            const rawCostPerRecipeUnit = Number(item.purchasePrice) / Number(item.conversionRate);
+                            const effCost = ingEffCost(item);
+                            const hasYieldLoss = Number(item.yieldPercent) < 100;
+                            return (
+                                <TableRow key={item.id}>
+                                    <TableCell>
+                                        {item.imageUrl ? (
+                                            <img src={item.imageUrl} alt={item.name}
+                                                className="h-10 w-10 rounded-md object-cover border" />
+                                        ) : (
+                                            <div className="h-10 w-10 rounded-md border bg-muted flex items-center justify-center">
+                                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                                            </div>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        {item.name}
+                                        {item.supplier?.name === "Owner Sauce" && (
+                                            <Badge variant="secondary" className="ml-2 text-[10px]">House-made</Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground text-sm">
+                                        {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline">{item.groupId}</Badge>
+                                    </TableCell>
+                                    <TableCell className="tabular-nums">
+                                        {format(Number(item.purchasePrice))} / {item.purchaseUnit}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground tabular-nums">
+                                        1 {item.purchaseUnit} = {Number(item.conversionRate)} {item.recipeUnit}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className={Number(item.yieldPercent) < 90 ? "text-yellow-600 font-semibold" : ""}>
+                                            {Number(item.yieldPercent)}%
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="cursor-help" title={
+                                            `1 ${item.purchaseUnit} @ ${Number(item.purchasePrice).toFixed(2)} = ${Number(item.conversionRate)} ${item.recipeUnit} → raw ${rawCostPerRecipeUnit.toFixed(4)}/${item.recipeUnit}` +
+                                            (hasYieldLoss ? ` ÷ ${Number(item.yieldPercent)}% yield → usable ${effCost.toFixed(4)}/${item.recipeUnit}` : "")
+                                        }>
+                                            <span className="font-semibold text-primary tabular-nums">
+                                                {format(effCost, 4)}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground ml-1">/ {item.recipeUnit}</span>
+                                            {hasYieldLoss && (
+                                                <span className="ml-1 text-[10px] text-yellow-600 font-medium">
+                                                    (yield adj.)
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                    {item.name}
-                                    {getSupplierName(item) === "Owner Sauce" && (
-                                        <Badge variant="secondary" className="ml-2 text-[10px]">Auto-generated</Badge>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground text-sm">{getSupplierName(item)}</TableCell>
-                                <TableCell><Badge variant="outline">{item.groupId}</Badge></TableCell>
-                                <TableCell>{format(Number(item.purchasePrice))} / {item.purchaseUnit}</TableCell>
-                                <TableCell>
-                                    <span className={Number(item.yieldPercent) < 90 ? "text-yellow-600 dark:text-yellow-400 font-medium" : ""}>
-                                        {Number(item.yieldPercent)}%
-                                    </span>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center text-xs text-muted-foreground">
-                                        1&nbsp;{item.purchaseUnit}&nbsp;<ArrowRight className="h-3 w-3 mx-1" />&nbsp;
-                                        {Number(item.conversionRate)}&nbsp;{item.recipeUnit}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="font-semibold text-primary">
-                                    {format(costPerRecipeUnit(item), 4)} / {item.recipeUnit}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                                        onClick={() => { setDeleteTarget(item); setDeleteDialogOpen(true); }}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
+                                            onClick={() => { setDeleteTarget(item); setDeleteDialogOpen(true); }}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                         {filtered.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
@@ -232,92 +365,185 @@ export default function IngredientsPage() {
                 </Table>
             </div>
 
-            {/* Add/Edit Dialog */}
+            {/* ─── Add / Edit Dialog ─────────────────────────────────────────── */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{editTarget ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle>
                         <DialogDescription>
-                            {editTarget ? `Editing ${editTarget.name}` : "Add a new raw material with unit conversion settings."}
+                            {editTarget ? `Editing ${editTarget.name}` : "Add a raw material with pricing and unit conversion."}
                         </DialogDescription>
                     </DialogHeader>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+                        {/* Name */}
                         <div className="col-span-2 space-y-1.5">
                             <Label>Ingredient Name *</Label>
-                            <Input placeholder="e.g. Tiger Shrimp" value={form.name}
+                            <Input placeholder="e.g. Tiger Shrimp"
+                                value={form.name}
                                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                         </div>
+
+                        {/* Image URL */}
                         <div className="col-span-2 space-y-1.5">
                             <Label>Image URL <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                            <Input placeholder="https://example.com/image.jpg" value={form.imageUrl ?? ""}
+                            <Input placeholder="https://example.com/image.jpg"
+                                value={form.imageUrl ?? ""}
                                 onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} />
                             {form.imageUrl && (
                                 <img src={form.imageUrl} alt="preview"
-                                    className="mt-2 h-24 w-24 rounded-lg object-cover border" />
+                                    className="mt-1 h-20 w-20 rounded-lg object-cover border" />
                             )}
                         </div>
+
+                        {/* Supplier */}
                         <div className="space-y-1.5">
                             <Label>Supplier</Label>
-                            <Select value={form.supplierId} onValueChange={v => setForm(f => ({ ...f, supplierId: v }))}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                            <Select value={form.supplierId}
+                                onValueChange={v => setForm(f => ({ ...f, supplierId: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
                                 <SelectContent>
-                            {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {/* Unit Group */}
                         <div className="space-y-1.5">
                             <Label>Unit Group</Label>
-                            <Select value={form.groupId} onValueChange={v => setForm(f => ({ ...f, groupId: v as Ingredient["groupId"] }))}>
+                            <Select value={form.groupId} onValueChange={handleGroupChange}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Weight">Weight</SelectItem>
-                                    <SelectItem value="Volume">Volume</SelectItem>
-                                    <SelectItem value="Count">Count</SelectItem>
+                                    <SelectItem value="Weight">Weight (kg, g, lb, oz)</SelectItem>
+                                    <SelectItem value="Volume">Volume (L, ml)</SelectItem>
+                                    <SelectItem value="Count">Count (piece, pack, dozen…)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {/* Purchase Unit + Price */}
                         <div className="space-y-1.5">
                             <Label>Purchase Unit</Label>
-                            <Select value={form.purchaseUnit} onValueChange={v => setForm(f => ({ ...f, purchaseUnit: v }))}>
+                            <Select value={form.purchaseUnit} onValueChange={handlePurchaseUnitChange}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                    {purchaseUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
+
                         <div className="space-y-1.5">
-                            <Label>Purchase Price ({symbol} per purchase unit)</Label>
-                            <Input type="number" min={0} step={0.01} value={form.purchasePrice}
+                            <Label>Purchase Price ({symbol} per {form.purchaseUnit})</Label>
+                            <Input type="number" min={0} step={0.01}
+                                value={form.purchasePrice}
                                 onChange={e => setForm(f => ({ ...f, purchasePrice: parseFloat(e.target.value) || 0 }))} />
                         </div>
+
+                        {/* Recipe Unit */}
                         <div className="space-y-1.5">
                             <Label>Recipe Unit</Label>
-                            <Select value={form.recipeUnit} onValueChange={v => setForm(f => ({ ...f, recipeUnit: v }))}>
+                            <Select value={form.recipeUnit} onValueChange={handleRecipeUnitChange}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                    {recipeUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {/* Conversion Rate */}
                         <div className="space-y-1.5">
-                            <Label>Conversion Rate (recipe units per purchase unit)</Label>
-                            <Input type="number" min={1} step={1} value={form.conversionRate}
+                            <Label className="flex items-center justify-between">
+                                <span>
+                                    Conversion Rate
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                        (1 {form.purchaseUnit} = ? {form.recipeUnit})
+                                    </span>
+                                </span>
+                                {knownRate != null && knownRate !== form.conversionRate && (
+                                    <button
+                                        type="button"
+                                        onClick={autoFillRate}
+                                        className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                        <Wand2 className="h-3 w-3" />
+                                        Auto-fill ({knownRate})
+                                    </button>
+                                )}
+                            </Label>
+                            <Input type="number" min={0.0001} step="any"
+                                value={form.conversionRate}
                                 onChange={e => setForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
+                            <p className="text-xs text-muted-foreground">
+                                1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
+                                {knownRate != null && (
+                                    <span className={form.conversionRate === knownRate ? " text-green-600" : " text-yellow-600"}>
+                                        {form.conversionRate === knownRate
+                                            ? " ✓ matches standard"
+                                            : ` (standard: ${knownRate})`}
+                                    </span>
+                                )}
+                            </p>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Yield % (after prep waste)</Label>
-                            <Input type="number" min={1} max={100} step={1} value={form.yieldPercent}
+
+                        {/* Yield % */}
+                        <div className="col-span-2 sm:col-span-1 space-y-1.5">
+                            <Label>
+                                Yield %
+                                <span className="text-xs text-muted-foreground ml-1">(100% = no waste)</span>
+                            </Label>
+                            <Input type="number" min={1} max={100} step={1}
+                                value={form.yieldPercent}
                                 onChange={e => setForm(f => ({ ...f, yieldPercent: parseFloat(e.target.value) || 100 }))} />
                         </div>
-                        {/* Live preview */}
-                        <div className="col-span-2 rounded-lg bg-primary/5 border border-primary/20 p-3 text-sm">
-                            <span className="font-medium text-primary mr-2">Effective cost:</span>
-                            <span>{format((form.purchasePrice / (form.conversionRate || 1)) / ((form.yieldPercent || 100) / 100), 5)} / {form.recipeUnit || "unit"}</span>
+
+                        {/* ─── Live cost breakdown ─────────────────────────── */}
+                        <div className="col-span-2 rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
+                            <p className="font-semibold text-primary mb-3">Cost Calculation Preview</p>
+
+                            <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                                <span className="text-muted-foreground">Purchase price</span>
+                                <span className="tabular-nums font-medium text-right">
+                                    {format(form.purchasePrice)} / {form.purchaseUnit}
+                                </span>
+
+                                <span className="text-muted-foreground">
+                                    ÷ Conversion ({form.conversionRate || 1} {form.recipeUnit}/{form.purchaseUnit})
+                                </span>
+                                <span className="tabular-nums text-right">
+                                    = {format(prevRawCost, 4)} / {form.recipeUnit}
+                                </span>
+
+                                {form.yieldPercent < 100 && (
+                                    <>
+                                        <span className="text-muted-foreground">
+                                            ÷ Yield ({form.yieldPercent}% usable → {prevUsableQty.toFixed(2)} {form.recipeUnit} per {form.purchaseUnit})
+                                        </span>
+                                        <span className="tabular-nums text-right text-yellow-600">
+                                            = {format(prevEffCost, 4)} / {form.recipeUnit}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="border-t pt-2 flex items-center justify-between">
+                                <span className="font-semibold">Effective Cost (used in recipes)</span>
+                                <span className="font-bold text-lg text-primary tabular-nums">
+                                    {format(prevEffCost, 4)} / {form.recipeUnit || "unit"}
+                                </span>
+                            </div>
+
+                            {form.yieldPercent < 100 && (
+                                <p className="text-xs text-muted-foreground">
+                                    Each 1 {form.purchaseUnit} bought gives only {prevUsableQty.toFixed(2)} {form.recipeUnit} of usable ingredient.
+                                    The recipe cost uses this yield-adjusted rate.
+                                </p>
+                            )}
                         </div>
                     </div>
+
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
-                        <Button onClick={handleSave} disabled={!form.name.trim() || saving}>
+                        <Button onClick={handleSave} disabled={!form.name.trim() || !form.supplierId || saving}>
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {editTarget ? "Save Changes" : "Add Ingredient"}
                         </Button>
@@ -325,7 +551,7 @@ export default function IngredientsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Dialog */}
+            {/* ─── Delete Dialog ─────────────────────────────────────────────── */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>

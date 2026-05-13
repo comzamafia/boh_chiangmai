@@ -946,69 +946,110 @@ body{
                                         <Plus className="mr-1.5 h-3.5 w-3.5" /> Add
                                     </Button>
                                 </CardHeader>
-                                <CardContent className="space-y-2 overflow-x-auto">
-                                    {/* Header */}
-                                    <div className="grid grid-cols-[1fr_80px_60px_70px_32px] gap-1.5 px-1 min-w-[380px]">
+                                <CardContent className="space-y-2">
+                                    {/* Desktop column headers (hidden on mobile) */}
+                                    <div className="hidden sm:grid grid-cols-[1fr_80px_60px_70px_32px] gap-1.5 px-1">
                                         <span className="text-xs text-muted-foreground font-medium">Ingredient</span>
                                         <span className="text-xs text-muted-foreground font-medium">Qty</span>
                                         <span className="text-xs text-muted-foreground font-medium">Unit</span>
                                         <span className="text-xs text-muted-foreground font-medium text-right">Cost</span>
                                         <span />
                                     </div>
+
                                     {ingredientRows.map((row) => {
                                         const ing = ingredients.find(i => i.id === row.ingredientId);
                                         const qty = parseFloat(row.quantity);
                                         const costPerUnit = ing ? Number(ing.purchasePrice) / Number(ing.conversionRate) / (Number(ing.yieldPercent) / 100) : 0;
                                         const lineCost = ing && qty ? costPerUnit * qty : 0;
                                         const proteinType = ing ? detectProteinType(ing.name) : null;
+
+                                        const ingredientSelect = (
+                                            <Select value={row.ingredientId} onValueChange={v => updateRow(row.id, "ingredientId", v)}>
+                                                <SelectTrigger className="h-9 text-xs">
+                                                    <SelectValue placeholder="Select ingredient">
+                                                        {ing && (
+                                                            <span className="flex items-center gap-1.5 truncate">
+                                                                {proteinType && (
+                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">{proteinType}</Badge>
+                                                                )}
+                                                                {ing.name}
+                                                            </span>
+                                                        )}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {ingredients.map(mi => (
+                                                        <SelectItem key={mi.id} value={mi.id}>
+                                                            <span className="flex items-center gap-1.5">
+                                                                {detectProteinType(mi.name) && (
+                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">
+                                                                        {detectProteinType(mi.name)}
+                                                                    </Badge>
+                                                                )}
+                                                                {mi.name}
+                                                            </span>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        );
+
                                         return (
-                                            <div key={row.id} className="grid grid-cols-[1fr_80px_60px_70px_32px] gap-1.5 items-center min-w-[380px]">
-                                                <Select value={row.ingredientId} onValueChange={v => updateRow(row.id, "ingredientId", v)}>
-                                                    <SelectTrigger className="h-9 text-xs">
-                                                        <SelectValue placeholder="Select ingredient">
-                                                            {ing && (
-                                                                <span className="flex items-center gap-1.5">
-                                                                    {proteinType && (
-                                                                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{proteinType}</Badge>
-                                                                    )}
-                                                                    {ing.name}
-                                                                </span>
-                                                            )}
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {ingredients.map(mi => (
-                                                            <SelectItem key={mi.id} value={mi.id}>
-                                                                <span className="flex items-center gap-1.5">
-                                                                    {detectProteinType(mi.name) && (
-                                                                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">
-                                                                            {detectProteinType(mi.name)}
-                                                                        </Badge>
-                                                                    )}
-                                                                    {mi.name}
-                                                                </span>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Input
-                                                    className="h-9 text-xs"
-                                                    type="number" min={0} step={0.1} placeholder="0"
-                                                    value={row.quantity}
-                                                    onChange={e => updateRow(row.id, "quantity", e.target.value)}
-                                                />
-                                                <div className="h-9 flex items-center text-xs text-muted-foreground px-2 border rounded-md bg-muted/50 truncate">
-                                                    {ing?.recipeUnit ?? "—"}
+                                            <div key={row.id}>
+                                                {/* ── Mobile card layout ── */}
+                                                <div className="sm:hidden rounded-xl border bg-muted/20 p-2.5 space-y-2">
+                                                    {/* Row 1: ingredient selector + delete */}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 min-w-0">{ingredientSelect}</div>
+                                                        <Button variant="ghost" size="icon"
+                                                            className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                                                            onClick={() => removeRow(row.id)}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                    {/* Row 2: qty · unit · cost */}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1.5 flex-1">
+                                                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Qty</span>
+                                                            <Input
+                                                                className="h-8 text-xs w-20"
+                                                                type="number" min={0} step={0.1} placeholder="0"
+                                                                value={row.quantity}
+                                                                onChange={e => updateRow(row.id, "quantity", e.target.value)}
+                                                            />
+                                                            <span className="text-xs text-muted-foreground bg-muted/60 border rounded px-2 py-1 whitespace-nowrap">
+                                                                {ing?.recipeUnit ?? "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-sm font-semibold text-primary tabular-nums shrink-0">
+                                                            {format(lineCost)}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="h-9 flex items-center justify-end text-xs font-medium px-2 border rounded-md bg-muted/50 tabular-nums">
-                                                    {format(lineCost)}
+
+                                                {/* ── Desktop grid layout ── */}
+                                                <div className="hidden sm:grid grid-cols-[1fr_80px_60px_70px_32px] gap-1.5 items-center">
+                                                    {ingredientSelect}
+                                                    <Input
+                                                        className="h-9 text-xs"
+                                                        type="number" min={0} step={0.1} placeholder="0"
+                                                        value={row.quantity}
+                                                        onChange={e => updateRow(row.id, "quantity", e.target.value)}
+                                                    />
+                                                    <div className="h-9 flex items-center text-xs text-muted-foreground px-2 border rounded-md bg-muted/50 truncate">
+                                                        {ing?.recipeUnit ?? "—"}
+                                                    </div>
+                                                    <div className="h-9 flex items-center justify-end text-xs font-medium px-2 border rounded-md bg-muted/50 tabular-nums">
+                                                        {format(lineCost)}
+                                                    </div>
+                                                    <Button variant="ghost" size="icon" className="h-9 w-8 text-destructive" onClick={() => removeRow(row.id)}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
                                                 </div>
-                                                <Button variant="ghost" size="icon" className="h-9 w-8 text-destructive" onClick={() => removeRow(row.id)}>
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
                                             </div>
                                         );
                                     })}
+
                                     <div className="flex justify-end pt-2 border-t">
                                         <span className="text-sm text-muted-foreground mr-4">Subtotal</span>
                                         <span className="text-sm font-bold text-primary tabular-nums">{format(totalIngredientCost)}</span>

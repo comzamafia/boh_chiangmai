@@ -17,6 +17,7 @@ export const ALL_SLUGS = [
     "import-ingredients",
     "equipment",
     "suppliers",
+    "import-suppliers",
     "inventory",
     "purchases",
     "purchase-orders",
@@ -34,7 +35,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
     admin: [...ALL_SLUGS],
     manager: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "ingredients", "import-ingredients",
-        "suppliers", "inventory", "purchases", "purchase-orders", "analysis", "batch-calculation",
+        "suppliers", "import-suppliers", "inventory", "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production",
     ],
     chef: [
@@ -75,6 +76,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "import-ingredients": "/import-ingredients",
     equipment: "/equipment",
     suppliers: "/suppliers",
+    "import-suppliers": "/import-suppliers",
     inventory: "/inventory",
     purchases: "/purchase-history",
     "purchase-orders": "/purchase-orders",

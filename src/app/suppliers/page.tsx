@@ -19,6 +19,7 @@ import {
     SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Plus, Search, Edit, Trash2, Store, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import Link from "next/link";
 
 const emptyForm = (): Omit<Supplier, "id" | "createdAt" | "updatedAt"> => ({
     name: "", contact: "", email: "", phone: "", address: "",
@@ -99,9 +100,14 @@ export default function SuppliersPage() {
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Suppliers</h2>
                     <p className="text-muted-foreground">Manage vendor contacts and delivery information.</p>
                 </div>
-                <Button onClick={openAdd}>
-                    <Plus className="mr-2 h-4 w-4" /> Add Supplier
-                </Button>
+                <div className="flex gap-2">
+                    <Link href="/import-suppliers">
+                        <Button variant="outline">Import CSV</Button>
+                    </Link>
+                    <Button onClick={openAdd}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Supplier
+                    </Button>
+                </div>
             </div>
 
             {/* Stats row */}

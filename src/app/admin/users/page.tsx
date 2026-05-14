@@ -40,6 +40,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "import-ingredients": "Import Ingredients (CSV)",
     equipment: "Equipment",
     suppliers: "Suppliers",
+    "import-suppliers": "Import Suppliers (CSV)",
     inventory: "Inventory",
     purchases: "Purchase History",
     "purchase-orders": "Purchase Orders",

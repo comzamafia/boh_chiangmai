@@ -163,9 +163,9 @@ export default function SuppliersPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredSuppliers.map((supplier) => (
+                        {filteredSuppliers.map((supplier, idx) => (
                             <TableRow key={supplier.id}>
-                                <TableCell className="font-mono text-xs text-muted-foreground">{supplier.id}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground font-medium w-10">#{idx + 1}</TableCell>
                                 <TableCell className="font-medium">
                                     <span>{supplier.name}</span>
                                     {supplier.isSpecial && (

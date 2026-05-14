@@ -36,6 +36,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     recipes: "Recipes (View)",
     "recipes-new": "Recipes (Create/Edit)",
     "import-recipes": "Import Recipes (CSV)",
+    "menu-items": "Menu Items",
     ingredients: "Ingredients",
     "import-ingredients": "Import Ingredients (CSV)",
     equipment: "Equipment",

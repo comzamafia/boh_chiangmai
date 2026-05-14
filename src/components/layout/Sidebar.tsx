@@ -6,7 +6,7 @@ import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText, TrendingUp,
     Calculator, Scale, PieChart, Calendar, ClipboardList,
-    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag,
+    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
@@ -28,6 +28,7 @@ const navItems: NavItem[] = [
     { name: "Dashboard",      href: "/dashboard",          icon: BarChart2,     slug: "dashboard",        group: "main" },
     { name: "Daily Sales",    href: "/daily-sales",        icon: ShoppingBag,   slug: "daily-sales",      group: "main" },
     { name: "Recipes",        href: "/recipes",            icon: Utensils,      slug: "recipes",          group: "kitchen" },
+    { name: "Menu Items",     href: "/menu-items",         icon: BookOpen,      slug: "menu-items",       group: "kitchen" },
     { name: "New Recipe",     href: "/recipes/new",        icon: ChefHat,       slug: "recipes-new",      group: "kitchen" },
     { name: "Ingredients",    href: "/ingredients",        icon: ShoppingCart,  slug: "ingredients",      group: "kitchen" },
     { name: "Equipment",      href: "/equipment",          icon: Wrench,        slug: "equipment",        group: "kitchen" },

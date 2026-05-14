@@ -13,6 +13,7 @@ export const ALL_SLUGS = [
     "recipes",
     "recipes-new",
     "import-recipes",
+    "menu-items",
     "ingredients",
     "import-ingredients",
     "equipment",
@@ -34,12 +35,13 @@ export type NavSlug = (typeof ALL_SLUGS)[number];
 export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
     admin: [...ALL_SLUGS],
     manager: [
-        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "ingredients", "import-ingredients",
-        "suppliers", "import-suppliers", "inventory", "purchases", "purchase-orders", "analysis", "batch-calculation",
+        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
+        "ingredients", "import-ingredients", "suppliers", "import-suppliers", "inventory",
+        "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production",
     ],
     chef: [
-        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes",
+        "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
         "ingredients", "import-ingredients", "equipment", "inventory", "production",
     ],
     analyst: [
@@ -72,6 +74,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "recipes": "/recipes",
     "recipes-new": "/recipes/new",
     "import-recipes": "/import-recipes",
+    "menu-items": "/menu-items",
     ingredients: "/ingredients",
     "import-ingredients": "/import-ingredients",
     equipment: "/equipment",

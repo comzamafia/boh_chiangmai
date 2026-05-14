@@ -6,35 +6,68 @@ import { ingredientsApi, suppliersApi, Ingredient, Supplier } from "@/lib/api";
 // ─── Unit definitions per group ──────────────────────────────────────────────
 const GROUP_UNITS: Record<string, string[]> = {
     Weight: ["kg", "g", "lb", "oz"],
-    Volume: ["L", "ml", "fl oz"],
-    Count:  ["piece", "pc", "dozen", "pack", "bottle", "can", "box"],
+    Volume: ["L", "ml", "fl oz", "cup", "tbsp", "tsp"],
+    Count:  ["piece", "pc", "dozen", "pack", "bottle", "can", "box", "bag"],
 };
 
-// Known conversion rates: RATE[purchaseUnit][recipeUnit] = how many recipeUnits in 1 purchaseUnit
-const KNOWN_RATES: Record<string, Record<string, number>> = {
-    // Weight
-    kg:      { g: 1000,       oz: 35.274,    lb: 2.20462  },
-    g:       { kg: 0.001,     oz: 0.035274,  lb: 0.0022046 },
-    lb:      { g: 453.592,    kg: 0.453592,  oz: 16        },
-    oz:      { g: 28.3495,    kg: 0.028350,  lb: 0.0625    },
-    // Volume
-    L:       { ml: 1000,      "fl oz": 33.814              },
-    ml:      { L: 0.001,      "fl oz": 0.033814            },
-    "fl oz": { ml: 29.5735,   L: 0.029574                  },
-    // Count
-    dozen:   { piece: 12,     pc: 12                       },
-    pack:    { piece: 1,      pc: 1                        },
-    bottle:  { piece: 1,      pc: 1                        },
-    can:     { piece: 1,      pc: 1                        },
-    box:     { piece: 1,      pc: 1                        },
-    piece:   { pc: 1                                       },
-    pc:      { piece: 1                                    },
+// ─── Graph-based unit conversion ──────────────────────────────────────────────
+// Each group has a "base unit". Any pair can be computed as:
+//   rate(pu → ru) = baseValue[pu] / baseValue[ru]
+// Adding a new unit = 1 line. All cross-pairs work automatically.
+
+/** Weight: base unit = gram (g) */
+const WEIGHT_TO_G: Record<string, number> = {
+    g:   1,
+    kg:  1000,
+    lb:  453.59237,
+    oz:  28.349523,
 };
 
+/** Volume: base unit = millilitre (ml) */
+const VOLUME_TO_ML: Record<string, number> = {
+    ml:       1,
+    L:        1000,
+    "fl oz":  29.5735,
+    cup:      240,        // US cup
+    tbsp:     15,         // US tablespoon
+    tsp:      5,          // US teaspoon
+};
+
+/** Count: base unit = piece. Only units with a fixed piece-count are listed.
+ *  pack / bottle / can / box / bag → always "custom" (depends on the product). */
+const COUNT_TO_PIECE: Record<string, number> = {
+    piece: 1,
+    pc:    1,
+    dozen: 12,
+};
+
+/** Custom-count units (no fixed piece count — user must enter manually). */
+const CUSTOM_COUNT_UNITS = new Set(["pack", "bottle", "can", "box", "bag"]);
+
+/**
+ * Returns the standard conversion rate: how many `ru` are in 1 `pu`.
+ * Returns null when no standard rate exists (cross-group or custom-count units).
+ */
 function getKnownRate(pu: string, ru: string): number | null {
     if (pu === ru) return 1;
-    return KNOWN_RATES[pu]?.[ru] ?? null;
+    // Weight ↔ Weight  (any pair, computed via grams)
+    if (WEIGHT_TO_G[pu] !== undefined && WEIGHT_TO_G[ru] !== undefined)
+        return WEIGHT_TO_G[pu] / WEIGHT_TO_G[ru];
+    // Volume ↔ Volume  (any pair, computed via ml)
+    if (VOLUME_TO_ML[pu] !== undefined && VOLUME_TO_ML[ru] !== undefined)
+        return VOLUME_TO_ML[pu] / VOLUME_TO_ML[ru];
+    // Count ↔ Count  (only for units with a known piece count)
+    if (COUNT_TO_PIECE[pu] !== undefined && COUNT_TO_PIECE[ru] !== undefined)
+        return COUNT_TO_PIECE[pu] / COUNT_TO_PIECE[ru];
+    return null; // custom / cross-group — user must enter manually
 }
+
+/** True when the conversion rate between two units is always 1 (same unit). */
+const isSameUnit = (pu: string, ru: string) => pu === ru;
+
+/** True when the pair has no fixed standard rate (user must define it). */
+const isCustomRate = (pu: string, ru: string) =>
+    CUSTOM_COUNT_UNITS.has(pu) || CUSTOM_COUNT_UNITS.has(ru);
 
 // ─── Effective cost = (price / conversionRate) / (yieldPercent / 100) ────────
 // i.e. cost per USABLE recipe unit, accounting for waste
@@ -121,7 +154,13 @@ export default function IngredientsPage() {
         ? [...GROUP_UNITS.Count, ...GROUP_UNITS.Weight] // Count items may be portioned by weight
         : GROUP_UNITS[form.groupId] ?? [];
 
-    const knownRate = getKnownRate(form.purchaseUnit, form.recipeUnit);
+    const knownRate    = getKnownRate(form.purchaseUnit, form.recipeUnit);
+    const sameUnit     = isSameUnit(form.purchaseUnit, form.recipeUnit);
+    const customRate   = isCustomRate(form.purchaseUnit, form.recipeUnit);
+    // Rate is considered "standard match" when it equals the computed known rate (rounded to 6dp)
+    const rateMatchesStandard = knownRate != null &&
+        Math.abs(form.conversionRate - knownRate) < 0.000001;
+
     const autoFillRate = () => {
         if (knownRate != null) setForm(f => ({ ...f, conversionRate: knownRate }));
     };
@@ -464,11 +503,13 @@ export default function IngredientsPage() {
                             <Label className="flex items-center justify-between">
                                 <span>
                                     Conversion Rate
-                                    <span className="text-xs text-muted-foreground ml-1">
-                                        (1 {form.purchaseUnit} = ? {form.recipeUnit})
-                                    </span>
+                                    {!sameUnit && (
+                                        <span className="text-xs text-muted-foreground ml-1">
+                                            1 {form.purchaseUnit} → ? {form.recipeUnit}
+                                        </span>
+                                    )}
                                 </span>
-                                {knownRate != null && knownRate !== form.conversionRate && (
+                                {!sameUnit && !customRate && knownRate != null && !rateMatchesStandard && (
                                     <button
                                         type="button"
                                         onClick={autoFillRate}
@@ -479,19 +520,44 @@ export default function IngredientsPage() {
                                     </button>
                                 )}
                             </Label>
-                            <Input type="number" min={0.0001} step="any"
-                                value={form.conversionRate}
-                                onChange={e => setForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
-                            <p className="text-xs text-muted-foreground">
-                                1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
-                                {knownRate != null && (
-                                    <span className={form.conversionRate === knownRate ? " text-green-600" : " text-yellow-600"}>
-                                        {form.conversionRate === knownRate
-                                            ? " ✓ matches standard"
-                                            : ` (standard: ${knownRate})`}
+
+                            {sameUnit ? (
+                                /* Same unit — lock to 1 */
+                                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                                    <span className="tabular-nums font-medium text-foreground">1</span>
+                                    <span>— same unit, rate is always 1</span>
+                                </div>
+                            ) : (
+                                <Input type="number" min={0.0001} step="any"
+                                    value={form.conversionRate}
+                                    onChange={e => setForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
+                            )}
+
+                            {/* Guidance / validation text */}
+                            {sameUnit ? null : customRate ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Enter how many <strong>{form.recipeUnit}</strong> are in 1 <strong>{form.purchaseUnit}</strong>.
+                                    <br />
+                                    e.g. 1 bag = 500 g → set recipe unit to <em>g</em> and enter <em>500</em>.
+                                </p>
+                            ) : knownRate != null ? (
+                                <p className="text-xs">
+                                    <span className="text-muted-foreground">
+                                        1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
                                     </span>
-                                )}
-                            </p>
+                                    {rateMatchesStandard ? (
+                                        <span className="ml-1.5 text-green-600 font-medium">✓ matches standard</span>
+                                    ) : (
+                                        <span className="ml-1.5 text-yellow-600">
+                                            (standard: {knownRate})
+                                        </span>
+                                    )}
+                                </p>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">
+                                    1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
+                                </p>
+                            )}
                         </div>
 
                         {/* Yield % */}

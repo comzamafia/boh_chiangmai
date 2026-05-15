@@ -419,214 +419,224 @@ export default function IngredientsPage() {
 
             {/* ─── Add / Edit Dialog ─────────────────────────────────────────── */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
+                <DialogContent className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col p-0 gap-0">
+                    {/* Fixed header */}
+                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
                         <DialogTitle>{editTarget ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle>
                         <DialogDescription>
                             {editTarget ? `Editing ${editTarget.name}` : "Add a raw material with pricing and unit conversion."}
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-                        {/* Name */}
-                        <div className="col-span-2 space-y-1.5">
-                            <Label>Ingredient Name *</Label>
-                            <Input placeholder="e.g. Tiger Shrimp"
-                                value={form.name}
-                                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                        </div>
+                    {/* Scrollable body */}
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
-                        {/* Image URL */}
-                        <div className="col-span-2 space-y-1.5">
-                            <Label>Image URL <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                            <Input placeholder="https://example.com/image.jpg"
-                                value={form.imageUrl ?? ""}
-                                onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} />
-                            {form.imageUrl && (
-                                <img src={form.imageUrl} alt="preview"
-                                    className="mt-1 h-20 w-20 rounded-lg object-cover border" />
-                            )}
-                        </div>
+                        {/* ── Section: Basic Info ── */}
+                        <div className="space-y-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Basic Info</p>
 
-                        {/* Supplier */}
-                        <div className="space-y-1.5">
-                            <Label>Supplier</Label>
-                            <Select value={form.supplierId}
-                                onValueChange={v => setForm(f => ({ ...f, supplierId: v }))}>
-                                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                                <SelectContent>
-                                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                            <div className="space-y-1.5">
+                                <Label>Ingredient Name <span className="text-destructive">*</span></Label>
+                                <Input placeholder="e.g. Tiger Shrimp"
+                                    value={form.name}
+                                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                            </div>
 
-                        {/* Unit Group */}
-                        <div className="space-y-1.5">
-                            <Label>Unit Group</Label>
-                            <Select value={form.groupId} onValueChange={handleGroupChange}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Weight">Weight (kg, g, lb, oz)</SelectItem>
-                                    <SelectItem value="Volume">Volume (L, ml)</SelectItem>
-                                    <SelectItem value="Count">Count (piece, pack, dozen…)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* Purchase Unit + Price */}
-                        <div className="space-y-1.5">
-                            <Label>Purchase Unit</Label>
-                            <Select value={form.purchaseUnit} onValueChange={handlePurchaseUnitChange}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {purchaseUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label>Purchase Price ({symbol} per {form.purchaseUnit})</Label>
-                            <Input type="number" min={0} step={0.01}
-                                value={form.purchasePrice}
-                                onChange={e => setForm(f => ({ ...f, purchasePrice: parseFloat(e.target.value) || 0 }))} />
-                        </div>
-
-                        {/* Recipe Unit */}
-                        <div className="space-y-1.5">
-                            <Label>Recipe Unit</Label>
-                            <Select value={form.recipeUnit} onValueChange={handleRecipeUnitChange}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {recipeUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* Conversion Rate */}
-                        <div className="space-y-1.5">
-                            <Label className="flex items-center justify-between">
-                                <span>
-                                    Conversion Rate
-                                    {!sameUnit && (
-                                        <span className="text-xs text-muted-foreground ml-1">
-                                            1 {form.purchaseUnit} → ? {form.recipeUnit}
-                                        </span>
-                                    )}
-                                </span>
-                                {!sameUnit && !customRate && knownRate != null && !rateMatchesStandard && (
-                                    <button
-                                        type="button"
-                                        onClick={autoFillRate}
-                                        className="flex items-center gap-1 text-xs text-primary hover:underline"
-                                    >
-                                        <Wand2 className="h-3 w-3" />
-                                        Auto-fill ({knownRate})
-                                    </button>
-                                )}
-                            </Label>
-
-                            {sameUnit ? (
-                                /* Same unit — lock to 1 */
-                                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                                    <span className="tabular-nums font-medium text-foreground">1</span>
-                                    <span>— same unit, rate is always 1</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label>Supplier <span className="text-destructive">*</span></Label>
+                                    <Select value={form.supplierId}
+                                        onValueChange={v => setForm(f => ({ ...f, supplierId: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                                        <SelectContent>
+                                            {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            ) : (
-                                <Input type="number" min={0.0001} step="any"
-                                    value={form.conversionRate}
-                                    onChange={e => setForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
-                            )}
 
-                            {/* Guidance / validation text */}
-                            {sameUnit ? null : customRate ? (
-                                <p className="text-xs text-muted-foreground">
-                                    Enter how many <strong>{form.recipeUnit}</strong> are in 1 <strong>{form.purchaseUnit}</strong>.
-                                    <br />
-                                    e.g. 1 bag = 500 g → set recipe unit to <em>g</em> and enter <em>500</em>.
-                                </p>
-                            ) : knownRate != null ? (
-                                <p className="text-xs">
-                                    <span className="text-muted-foreground">
-                                        1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
-                                    </span>
-                                    {rateMatchesStandard ? (
-                                        <span className="ml-1.5 text-green-600 font-medium">✓ matches standard</span>
-                                    ) : (
-                                        <span className="ml-1.5 text-yellow-600">
-                                            (standard: {knownRate})
-                                        </span>
+                                <div className="space-y-1.5">
+                                    <Label>Unit Group</Label>
+                                    <Select value={form.groupId} onValueChange={handleGroupChange}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Weight">Weight (kg, g, lb, oz)</SelectItem>
+                                            <SelectItem value="Volume">Volume (L, ml, cup…)</SelectItem>
+                                            <SelectItem value="Count">Count (piece, pack, dozen…)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label>Image URL <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                                <div className="flex items-center gap-3">
+                                    <Input placeholder="https://example.com/image.jpg"
+                                        className="flex-1"
+                                        value={form.imageUrl ?? ""}
+                                        onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} />
+                                    {form.imageUrl && (
+                                        <img src={form.imageUrl} alt="preview"
+                                            className="h-10 w-10 rounded-lg object-cover border shrink-0" />
                                     )}
-                                </p>
-                            ) : (
-                                <p className="text-xs text-muted-foreground">
-                                    1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
-                                </p>
-                            )}
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Yield % */}
-                        <div className="col-span-2 sm:col-span-1 space-y-1.5">
-                            <Label>
-                                Yield %
-                                <span className="text-xs text-muted-foreground ml-1">(100% = no waste)</span>
-                            </Label>
-                            <Input type="number" min={1} max={100} step={1}
-                                value={form.yieldPercent}
-                                onChange={e => setForm(f => ({ ...f, yieldPercent: parseFloat(e.target.value) || 100 }))} />
+                        {/* ── Section: Purchasing ── */}
+                        <div className="space-y-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Purchasing</p>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label>Purchase Unit</Label>
+                                    <Select value={form.purchaseUnit} onValueChange={handlePurchaseUnitChange}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {purchaseUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label>Price / {form.purchaseUnit} ({symbol})</Label>
+                                    <Input type="number" min={0} step={0.01}
+                                        value={form.purchasePrice}
+                                        onChange={e => setForm(f => ({ ...f, purchasePrice: parseFloat(e.target.value) || 0 }))} />
+                                </div>
+                            </div>
                         </div>
 
-                        {/* ─── Live cost breakdown ─────────────────────────── */}
-                        <div className="col-span-2 rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
-                            <p className="font-semibold text-primary mb-3">Cost Calculation Preview</p>
+                        {/* ── Section: Recipe Unit & Conversion ── */}
+                        <div className="space-y-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Recipe Unit & Conversion</p>
 
-                            <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
-                                <span className="text-muted-foreground">Purchase price</span>
-                                <span className="tabular-nums font-medium text-right">
-                                    {show(form.purchasePrice)} / {form.purchaseUnit}
-                                </span>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label>Recipe Unit</Label>
+                                    <Select value={form.recipeUnit} onValueChange={handleRecipeUnitChange}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {recipeUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                                <span className="text-muted-foreground">
-                                    ÷ Conversion ({form.conversionRate || 1} {form.recipeUnit}/{form.purchaseUnit})
-                                </span>
-                                <span className="tabular-nums text-right">
-                                    = {show(prevRawCost, 4)} / {form.recipeUnit}
-                                </span>
+                                <div className="space-y-1.5">
+                                    <Label>
+                                        Yield %
+                                        <span className="text-xs text-muted-foreground ml-1">100% = no waste</span>
+                                    </Label>
+                                    <Input type="number" min={1} max={100} step={1}
+                                        value={form.yieldPercent}
+                                        onChange={e => setForm(f => ({ ...f, yieldPercent: parseFloat(e.target.value) || 100 }))} />
+                                </div>
+                            </div>
 
+                            {/* Conversion Rate */}
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <Label className="leading-none">
+                                        Conversion Rate
+                                        {!sameUnit && (
+                                            <span className="text-xs text-muted-foreground ml-1.5 font-normal">
+                                                1 {form.purchaseUnit} = ? {form.recipeUnit}
+                                            </span>
+                                        )}
+                                    </Label>
+                                    {!sameUnit && !customRate && knownRate != null && !rateMatchesStandard && (
+                                        <button
+                                            type="button"
+                                            onClick={autoFillRate}
+                                            className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                                        >
+                                            <Wand2 className="h-3 w-3" />
+                                            Auto-fill ({knownRate})
+                                        </button>
+                                    )}
+                                </div>
+
+                                {sameUnit ? (
+                                    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                                        <span className="tabular-nums font-medium text-foreground">1</span>
+                                        <span>— same unit, rate is always 1</span>
+                                    </div>
+                                ) : (
+                                    <Input type="number" min={0.0001} step="any"
+                                        value={form.conversionRate}
+                                        onChange={e => setForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
+                                )}
+
+                                {sameUnit ? null : customRate ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Enter how many <strong>{form.recipeUnit}</strong> are in 1 <strong>{form.purchaseUnit}</strong>.
+                                        e.g. 1 bag = 500 g → recipe unit: g, enter 500.
+                                    </p>
+                                ) : knownRate != null ? (
+                                    <p className="text-xs">
+                                        <span className="text-muted-foreground">1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}</span>
+                                        {rateMatchesStandard
+                                            ? <span className="ml-1.5 text-green-600 font-medium">✓ standard</span>
+                                            : <span className="ml-1.5 text-yellow-600">(standard: {knownRate})</span>
+                                        }
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        1 {form.purchaseUnit} = {form.conversionRate} {form.recipeUnit}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ── Live Cost Preview ── */}
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-primary">Cost Preview</p>
+
+                            <div className="space-y-1 text-sm">
+                                <div className="flex justify-between gap-2">
+                                    <span className="text-muted-foreground truncate">Buy price</span>
+                                    <span className="tabular-nums font-medium shrink-0">
+                                        {show(form.purchasePrice)} / {form.purchaseUnit}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-2">
+                                    <span className="text-muted-foreground truncate">÷ Conversion ({form.conversionRate || 1})</span>
+                                    <span className="tabular-nums shrink-0">
+                                        = {show(prevRawCost, 4)} / {form.recipeUnit}
+                                    </span>
+                                </div>
                                 {form.yieldPercent < 100 && (
-                                    <>
-                                        <span className="text-muted-foreground">
-                                            ÷ Yield ({form.yieldPercent}% usable → {prevUsableQty.toFixed(2)} {form.recipeUnit} per {form.purchaseUnit})
-                                        </span>
-                                        <span className="tabular-nums text-right text-yellow-600">
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground truncate">÷ Yield ({form.yieldPercent}%)</span>
+                                        <span className="tabular-nums text-yellow-600 shrink-0">
                                             = {show(prevEffCost, 4)} / {form.recipeUnit}
                                         </span>
-                                    </>
+                                    </div>
                                 )}
                             </div>
 
-                            <div className="border-t pt-2 flex items-center justify-between">
-                                <span className="font-semibold">Effective Cost (used in recipes)</span>
-                                <span className="font-bold text-lg text-primary tabular-nums">
+                            <div className="border-t pt-2 flex items-center justify-between gap-2">
+                                <span className="font-semibold text-sm">Effective Cost</span>
+                                <span className="font-bold text-base text-primary tabular-nums shrink-0">
                                     {show(prevEffCost, 4)} / {form.recipeUnit || "unit"}
                                 </span>
                             </div>
 
                             {form.yieldPercent < 100 && (
                                 <p className="text-xs text-muted-foreground">
-                                    Each 1 {form.purchaseUnit} bought gives only {prevUsableQty.toFixed(2)} {form.recipeUnit} of usable ingredient.
-                                    The recipe cost uses this yield-adjusted rate.
+                                    1 {form.purchaseUnit} yields only {prevUsableQty.toFixed(2)} {form.recipeUnit} usable.
                                 </p>
                             )}
                         </div>
                     </div>
 
-                    <DialogFooter>
+                    {/* Fixed footer */}
+                    <div className="px-5 py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                         <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
                         <Button onClick={handleSave} disabled={!form.name.trim() || !form.supplierId || saving}>
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {editTarget ? "Save Changes" : "Add Ingredient"}
                         </Button>
-                    </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
 

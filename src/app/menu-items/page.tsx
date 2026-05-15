@@ -403,29 +403,29 @@ export default function MenuItemsPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-10">#</TableHead>
+                            <TableHead className="w-10 hidden sm:table-cell">#</TableHead>
                             <TableHead className="w-12" />
                             <TableHead className="cursor-pointer select-none hover:text-foreground"
                                 onClick={() => handleSort("name")}>
                                 Recipe Name <SortIcon k="name" />
                             </TableHead>
-                            <TableHead className="cursor-pointer select-none hover:text-foreground"
+                            <TableHead className="cursor-pointer select-none hover:text-foreground hidden sm:table-cell"
                                 onClick={() => handleSort("category")}>
                                 Category <SortIcon k="category" />
                             </TableHead>
-                            <TableHead className="cursor-pointer select-none hover:text-foreground text-right"
+                            <TableHead className="cursor-pointer select-none hover:text-foreground text-right hidden md:table-cell"
                                 onClick={() => handleSort("cost")}>
                                 Cost / Serving <SortIcon k="cost" />
                             </TableHead>
                             <TableHead className="cursor-pointer select-none hover:text-foreground text-center"
                                 onClick={() => handleSort("fc")}>
-                                Food Cost % <SortIcon k="fc" />
+                                FC% <SortIcon k="fc" />
                             </TableHead>
                             <TableHead className="cursor-pointer select-none hover:text-foreground text-right"
                                 onClick={() => handleSort("price")}>
                                 <span className="flex items-center justify-end gap-1">
-                                    <UtensilsCrossed className="h-3.5 w-3.5" />
-                                    Dining Price (ex-tax) <SortIcon k="price" />
+                                    <UtensilsCrossed className="h-3.5 w-3.5 hidden sm:inline" />
+                                    Price <SortIcon k="price" />
                                 </span>
                             </TableHead>
                         </TableRow>
@@ -433,7 +433,7 @@ export default function MenuItemsPage() {
                     <TableBody>
                         {filtered.map(({ recipe, costPerServing, diningPrice, fcPct }, idx) => (
                             <TableRow key={recipe.id} className="hover:bg-muted/40 group">
-                                <TableCell className="text-muted-foreground text-sm font-medium">{idx + 1}</TableCell>
+                                <TableCell className="hidden sm:table-cell text-muted-foreground text-sm font-medium">{idx + 1}</TableCell>
 
                                 {/* Thumbnail — click opens popup */}
                                 <TableCell>
@@ -457,13 +457,14 @@ export default function MenuItemsPage() {
                                     >
                                         {recipe.name}
                                     </button>
+                                    <p className="sm:hidden text-xs text-muted-foreground mt-0.5">{recipe.category || "—"}</p>
                                 </TableCell>
 
-                                <TableCell>
+                                <TableCell className="hidden sm:table-cell">
                                     <Badge variant="outline" className="text-xs">{recipe.category || "—"}</Badge>
                                 </TableCell>
 
-                                <TableCell className="text-right tabular-nums">
+                                <TableCell className="hidden md:table-cell text-right tabular-nums">
                                     <span className="font-semibold text-primary">{show(costPerServing)}</span>
                                     <span className="text-xs text-muted-foreground ml-1">/{recipe.yieldUnit || "serving"}</span>
                                 </TableCell>
@@ -474,7 +475,7 @@ export default function MenuItemsPage() {
                                             {fcPct.toFixed(1)}%
                                         </Badge>
                                     ) : (
-                                        <span className="text-xs text-muted-foreground">No price</span>
+                                        <span className="text-xs text-muted-foreground">—</span>
                                     )}
                                 </TableCell>
 

@@ -165,7 +165,7 @@ export default function AdminUsersPage() {
 
     return (
         <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-500 pb-12">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary flex items-center gap-3">
                         <ShieldCheck className="h-8 w-8" /> User Management
@@ -203,30 +203,33 @@ export default function AdminUsersPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Name</TableHead>
-                                    <TableHead>Email</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Email</TableHead>
                                     <TableHead>Role</TableHead>
-                                    <TableHead>Permissions</TableHead>
-                                    <TableHead>Status</TableHead>
+                                    <TableHead className="hidden md:table-cell">Permissions</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Status</TableHead>
                                     <TableHead className="w-16"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {users.map(user => (
                                     <TableRow key={user.id}>
-                                        <TableCell className="font-medium">{user.name}</TableCell>
-                                        <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                                        <TableCell className="font-medium">
+                                            {user.name}
+                                            <p className="sm:hidden text-xs text-muted-foreground">{user.email}</p>
+                                        </TableCell>
+                                        <TableCell className="hidden sm:table-cell text-muted-foreground">{user.email}</TableCell>
                                         <TableCell>
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${ROLE_COLORS[user.role]}`}>
                                                 {ROLE_LABELS[user.role as Role] ?? user.role}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">
+                                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                                             {user.permissions.length > 0
                                                 ? <span className="flex items-center gap-1"><Key className="h-3 w-3" /> Custom ({user.permissions.length} menus)</span>
                                                 : <span className="opacity-60">Role default ({ROLE_DEFAULTS[user.role as Role]?.length ?? 0} menus)</span>
                                             }
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             <Badge variant={user.isActive ? "default" : "secondary"} className={user.isActive ? "bg-green-500/10 text-green-700 border-green-200" : ""}>
                                                 {user.isActive ? "Active" : "Inactive"}
                                             </Badge>

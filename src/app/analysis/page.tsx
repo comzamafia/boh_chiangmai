@@ -59,7 +59,7 @@ export default function AnalysisDashboard() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Cost Analysis</h2>
                     <p className="text-muted-foreground">Interactive charts and profit margins across your menu.</p>

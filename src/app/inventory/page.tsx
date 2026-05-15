@@ -209,7 +209,7 @@ export default function InventoryPage() {
         <div className="space-y-6 animate-in fade-in duration-500">
 
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Inventory</h2>
                     <p className="text-muted-foreground">Stock management and goods receiving.</p>
@@ -229,17 +229,19 @@ export default function InventoryPage() {
             )}
 
             <Tabs defaultValue="stock">
-                <TabsList>
-                    <TabsTrigger value="stock">
+                <div className="overflow-x-auto pb-1">
+                <TabsList className="w-full sm:w-auto">
+                    <TabsTrigger value="stock" className="flex-1 sm:flex-none">
                         <Warehouse className="mr-2 h-4 w-4" /> Stock Levels
                     </TabsTrigger>
-                    <TabsTrigger value="receive">
+                    <TabsTrigger value="receive" className="flex-1 sm:flex-none">
                         <PackagePlus className="mr-2 h-4 w-4" /> Receive Goods
                     </TabsTrigger>
-                    <TabsTrigger value="history">
+                    <TabsTrigger value="history" className="flex-1 sm:flex-none">
                         <History className="mr-2 h-4 w-4" /> Receiving History
                     </TabsTrigger>
                 </TabsList>
+                </div>
 
                 {/* ── STOCK LEVELS ─────────────────────────────────────────────── */}
                 <TabsContent value="stock" className="space-y-4 mt-4">
@@ -263,11 +265,11 @@ export default function InventoryPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Product Name</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead className="text-right">Current Stock</TableHead>
-                                    <TableHead className="text-right">Max</TableHead>
-                                    <TableHead className="text-right">Safety Stock</TableHead>
-                                    <TableHead className="text-right">ROP</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Category</TableHead>
+                                    <TableHead className="text-right">Stock</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">Max</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">Safety</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">ROP</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
@@ -284,16 +286,19 @@ export default function InventoryPage() {
                                                 status === "low"      ? "bg-yellow-500/5" : ""
                                             }
                                         >
-                                            <TableCell className="font-medium">
+                                                            <TableCell className="font-medium">
                                                 {isEditing
-                                                    ? <Input value={editRow.productName ?? ""} onChange={e => setEditRow(r => ({ ...r, productName: e.target.value }))} className="h-8 w-40" />
-                                                    : item.productName}
+                                                    ? <Input value={editRow.productName ?? ""} onChange={e => setEditRow(r => ({ ...r, productName: e.target.value }))} className="h-8 w-36" />
+                                                    : <>
+                                                        {item.productName}
+                                                        <span className="sm:hidden block text-xs text-muted-foreground">{item.category}</span>
+                                                      </>}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="hidden sm:table-cell">
                                                 {isEditing
                                                     ? (
                                                         <Select value={editRow.category} onValueChange={v => setEditRow(r => ({ ...r, category: v }))}>
-                                                            <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                                                            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                                                             <SelectContent>
                                                                 {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                                             </SelectContent>
@@ -313,17 +318,17 @@ export default function InventoryPage() {
                                                         </>
                                                     )}
                                             </TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right hidden md:table-cell">
                                                 {isEditing
                                                     ? <Input type="number" value={editRow.max ?? ""} onChange={e => setEditRow(r => ({ ...r, max: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
                                                     : item.max}
                                             </TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right hidden md:table-cell">
                                                 {isEditing
                                                     ? <Input type="number" value={editRow.safetyStock ?? ""} onChange={e => setEditRow(r => ({ ...r, safetyStock: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
                                                     : item.safetyStock}
                                             </TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right hidden md:table-cell">
                                                 {isEditing
                                                     ? <Input type="number" value={editRow.rop ?? ""} onChange={e => setEditRow(r => ({ ...r, rop: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
                                                     : item.rop}
@@ -363,7 +368,7 @@ export default function InventoryPage() {
                         </Table>
                     </div>
 
-                    <div className="flex gap-6 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-destructive inline-block" /> Critical — at or below Safety Stock</span>
                         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> Reorder — at or below ROP</span>
                         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-600 inline-block" /> OK</span>

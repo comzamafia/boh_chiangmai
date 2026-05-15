@@ -87,7 +87,7 @@ export default function EquipmentPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-start">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Equipment</h2>
                     <p className="text-muted-foreground">Manage kitchen tools and their operational status.</p>
@@ -97,7 +97,7 @@ export default function EquipmentPage() {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="rounded-xl border border-border bg-card px-5 py-4 flex items-center gap-4">
                     <Wrench className="h-8 w-8 text-primary opacity-70" />
                     <div><p className="text-2xl font-bold text-primary">{equipment.length}</p><p className="text-xs text-muted-foreground">Total Items</p></div>
@@ -124,7 +124,7 @@ export default function EquipmentPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>ID</TableHead>
+                            <TableHead className="hidden sm:table-cell">ID</TableHead>
                             <TableHead>Equipment Name</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Status</TableHead>
@@ -134,7 +134,7 @@ export default function EquipmentPage() {
                     <TableBody>
                         {filtered.map((item) => (
                             <TableRow key={item.id}>
-                                <TableCell className="font-mono text-xs text-muted-foreground">{item.id}</TableCell>
+                                <TableCell className="hidden sm:table-cell font-mono text-xs text-muted-foreground">{item.id}</TableCell>
                                 <TableCell className="font-medium">{item.name}</TableCell>
                                 <TableCell><Badge variant="outline">{item.type}</Badge></TableCell>
                                 <TableCell>

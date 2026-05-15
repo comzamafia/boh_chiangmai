@@ -495,8 +495,8 @@ export default function PurchaseOrdersPage() {
         return (
             <div className="space-y-6 animate-in fade-in duration-300 pb-16">
                 {/* Header */}
-                <div className="flex items-center justify-between print:hidden">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-wrap gap-3 items-center justify-between print:hidden">
+                    <div className="flex items-center gap-3 flex-wrap">
                         <Button variant="ghost" size="sm" onClick={() => setView("list")}>
                             <X className="h-4 w-4 mr-1" /> Back
                         </Button>
@@ -504,7 +504,7 @@ export default function PurchaseOrdersPage() {
                         <h2 className="text-2xl font-bold font-playfair text-primary">{po.poNumber}</h2>
                         <StatusBadge status={po.status} />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         {po.status === "Draft" && (
                             <Button size="sm" onClick={() => updateStatus(po.id, "Sent")}>
                                 <Send className="mr-2 h-3.5 w-3.5" /> Mark as Sent
@@ -636,7 +636,7 @@ export default function PurchaseOrdersPage() {
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-12">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Purchase Orders</h2>
                     <p className="text-muted-foreground">Create, track and manage orders with your suppliers.</p>
@@ -712,9 +712,9 @@ export default function PurchaseOrdersPage() {
                             <TableRow>
                                 <TableHead>PO Number</TableHead>
                                 <TableHead>Supplier</TableHead>
-                                <TableHead>Order Date</TableHead>
-                                <TableHead>Delivery Date</TableHead>
-                                <TableHead className="text-right">Items</TableHead>
+                                <TableHead className="hidden sm:table-cell">Order Date</TableHead>
+                                <TableHead className="hidden md:table-cell">Delivery Date</TableHead>
+                                <TableHead className="text-right hidden sm:table-cell">Items</TableHead>
                                 <TableHead className="text-right">Total</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead />
@@ -726,9 +726,9 @@ export default function PurchaseOrdersPage() {
                                     onClick={() => { setDetailPO(po); setView("detail"); }}>
                                     <TableCell className="font-mono font-semibold">{po.poNumber}</TableCell>
                                     <TableCell>{po.supplierName}</TableCell>
-                                    <TableCell>{po.orderDate}</TableCell>
-                                    <TableCell className="text-muted-foreground">{po.deliveryDate || "—"}</TableCell>
-                                    <TableCell className="text-right">{po.items.length}</TableCell>
+                                    <TableCell className="hidden sm:table-cell">{po.orderDate}</TableCell>
+                                    <TableCell className="hidden md:table-cell text-muted-foreground">{po.deliveryDate || "—"}</TableCell>
+                                    <TableCell className="text-right hidden sm:table-cell">{po.items.length}</TableCell>
                                     <TableCell className="text-right font-semibold">${Number(po.grandTotal).toFixed(2)}</TableCell>
                                     <TableCell><StatusBadge status={po.status} /></TableCell>
                                     <TableCell>

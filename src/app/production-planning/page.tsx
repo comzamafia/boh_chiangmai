@@ -64,12 +64,12 @@ export default async function ProductionPlanningOverview() {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-12">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Production Planning</h2>
                     <p className="text-muted-foreground">Manage your kitchen workflow from schedule to prep station.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <Link href="/production-calendar">
                         <Button variant="outline">Create Schedule</Button>
                     </Link>

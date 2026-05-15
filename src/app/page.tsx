@@ -16,15 +16,15 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center space-y-16 py-12">
-      <section className="text-center space-y-6 max-w-3xl">
-        <h1 className="text-5xl font-playfair font-bold tracking-tight text-primary">
+    <div className="flex flex-col items-center justify-center space-y-10 sm:space-y-16 py-8 sm:py-12">
+      <section className="text-center space-y-4 sm:space-y-6 max-w-3xl px-2">
+        <h1 className="text-3xl sm:text-5xl font-playfair font-bold tracking-tight text-primary">
           Welcome to Chiang Mai BOH
         </h1>
-        <p className="text-xl text-muted-foreground">
+        <p className="text-base sm:text-xl text-muted-foreground">
           The ultimate back-of-house operating system designed to streamline your kitchen, control costs, and maximize profits.
         </p>
-        <div className="flex justify-center gap-4 pt-4">
+        <div className="flex justify-center gap-4 pt-2 sm:pt-4">
           <Link href="/dashboard">
             <Button size="lg" className="font-semibold px-8">
               Get Started

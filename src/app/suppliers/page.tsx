@@ -95,12 +95,12 @@ export default function SuppliersPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-start">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Suppliers</h2>
                     <p className="text-muted-foreground">Manage vendor contacts and delivery information.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <Link href="/import-suppliers">
                         <Button variant="outline">Import CSV</Button>
                     </Link>
@@ -154,10 +154,10 @@ export default function SuppliersPage() {
                         <TableRow>
                             <TableHead>ID</TableHead>
                             <TableHead>Supplier Name</TableHead>
-                            <TableHead>Contact Person</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Address</TableHead>
+                            <TableHead className="hidden sm:table-cell">Contact Person</TableHead>
+                            <TableHead className="hidden md:table-cell">Email</TableHead>
+                            <TableHead className="hidden md:table-cell">Phone</TableHead>
+                            <TableHead className="hidden lg:table-cell">Address</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -171,11 +171,13 @@ export default function SuppliersPage() {
                                     {supplier.isSpecial && (
                                         <Badge variant="secondary" className="ml-2 text-xs">Special</Badge>
                                     )}
+                                    {/* Contact info shown inline on mobile */}
+                                    <p className="sm:hidden text-xs text-muted-foreground mt-0.5">{supplier.contact}</p>
                                 </TableCell>
-                                <TableCell>{supplier.contact}</TableCell>
-                                <TableCell className="text-muted-foreground">{supplier.email}</TableCell>
-                                <TableCell>{supplier.phone}</TableCell>
-                                <TableCell className="text-muted-foreground max-w-[180px] truncate text-sm">{supplier.address}</TableCell>
+                                <TableCell className="hidden sm:table-cell">{supplier.contact}</TableCell>
+                                <TableCell className="hidden md:table-cell text-muted-foreground">{supplier.email}</TableCell>
+                                <TableCell className="hidden md:table-cell">{supplier.phone}</TableCell>
+                                <TableCell className="hidden lg:table-cell text-muted-foreground max-w-[180px] truncate text-sm">{supplier.address}</TableCell>
                                 <TableCell>
                                     <Badge variant={supplier.status === "Active" ? "default" : "secondary"}>
                                         {supplier.status}
@@ -216,18 +218,17 @@ export default function SuppliersPage() {
                             {editTarget ? `Editing ${editTarget.name}` : "Fill in the supplier details below."}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-2">
+                    <div className="grid gap-3 py-2">
                         {[
                             { label: "Name *", key: "name", placeholder: "Supplier company name", type: "text" },
-                            { label: "Contact", key: "contact", placeholder: "Contact person name", type: "text" },
+                            { label: "Contact Person", key: "contact", placeholder: "Contact person name", type: "text" },
                             { label: "Email", key: "email", placeholder: "email@example.com", type: "email" },
                             { label: "Phone", key: "phone", placeholder: "02-XXX-XXXX", type: "text" },
                             { label: "Address", key: "address", placeholder: "Street, City", type: "text" },
                         ].map(({ label, key, placeholder, type }) => (
-                            <div key={key} className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right text-sm">{label}</Label>
+                            <div key={key} className="space-y-1.5">
+                                <Label>{label}</Label>
                                 <Input
-                                    className="col-span-3"
                                     type={type}
                                     placeholder={placeholder}
                                     value={(form as Record<string, unknown>)[key] as string}
@@ -235,10 +236,10 @@ export default function SuppliersPage() {
                                 />
                             </div>
                         ))}
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right text-sm">Status</Label>
+                        <div className="space-y-1.5">
+                            <Label>Status</Label>
                             <Select value={form.status} onValueChange={(v) => setForm(f => ({ ...f, status: v as "Active" | "Inactive" }))}>
-                                <SelectTrigger className="col-span-3">
+                                <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>

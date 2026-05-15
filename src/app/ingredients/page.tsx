@@ -309,12 +309,12 @@ export default function IngredientsPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-14">Image</TableHead>
+                            <TableHead className="w-14 hidden sm:table-cell">Image</TableHead>
                             <TableHead>Name</TableHead>
-                            <TableHead>Supplier</TableHead>
-                            <TableHead>Group</TableHead>
+                            <TableHead className="hidden sm:table-cell">Supplier</TableHead>
+                            <TableHead className="hidden md:table-cell">Group</TableHead>
                             <TableHead>Purchase Price</TableHead>
-                            <TableHead>
+                            <TableHead className="hidden lg:table-cell">
                                 <span className="flex items-center gap-1">
                                     Unit Conversion
                                     <span title="How many recipe units are in 1 purchase unit" className="cursor-help">
@@ -322,10 +322,10 @@ export default function IngredientsPage() {
                                     </span>
                                 </span>
                             </TableHead>
-                            <TableHead>Yield %</TableHead>
+                            <TableHead className="hidden md:table-cell">Yield %</TableHead>
                             <TableHead>
                                 <span className="flex items-center gap-1">
-                                    Effective Cost
+                                    Eff. Cost
                                     <span title="Cost per usable recipe unit after yield loss. Formula: (Purchase Price ÷ Conversion Rate) ÷ (Yield% ÷ 100)" className="cursor-help">
                                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
@@ -341,7 +341,7 @@ export default function IngredientsPage() {
                             const hasYieldLoss = Number(item.yieldPercent) < 100;
                             return (
                                 <TableRow key={item.id}>
-                                    <TableCell>
+                                    <TableCell className="hidden sm:table-cell">
                                         {item.imageUrl ? (
                                             <img src={item.imageUrl} alt={item.name}
                                                 className="h-10 w-10 rounded-md object-cover border" />
@@ -356,20 +356,24 @@ export default function IngredientsPage() {
                                         {item.supplier?.name === "Owner Sauce" && (
                                             <Badge variant="secondary" className="ml-2 text-[10px]">House-made</Badge>
                                         )}
+                                        {/* Supplier shown inline on mobile */}
+                                        <p className="sm:hidden text-xs text-muted-foreground mt-0.5">
+                                            {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
+                                        </p>
                                     </TableCell>
-                                    <TableCell className="text-muted-foreground text-sm">
+                                    <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                                         {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden md:table-cell">
                                         <Badge variant="outline">{item.groupId}</Badge>
                                     </TableCell>
-                                    <TableCell className="tabular-nums">
+                                    <TableCell className="tabular-nums text-sm">
                                         {format(Number(item.purchasePrice))} / {item.purchaseUnit}
                                     </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground tabular-nums">
+                                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground tabular-nums">
                                         1 {item.purchaseUnit} = {Number(item.conversionRate)} {item.recipeUnit}
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden md:table-cell">
                                         <span className={Number(item.yieldPercent) < 90 ? "text-yellow-600 font-semibold" : ""}>
                                             {Number(item.yieldPercent)}%
                                         </span>

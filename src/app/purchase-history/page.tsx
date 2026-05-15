@@ -151,7 +151,7 @@ export default function PurchaseHistoryPage() {
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-12">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Purchase History</h2>
                     <p className="text-muted-foreground flex items-center gap-1.5 mt-1">
@@ -211,11 +211,11 @@ export default function PurchaseHistoryPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>PO #</TableHead>
-                            <TableHead>Order Date</TableHead>
+                            <TableHead className="hidden sm:table-cell">Order Date</TableHead>
                             <TableHead>Supplier</TableHead>
                             <TableHead>Ingredient</TableHead>
-                            <TableHead className="text-right">Qty</TableHead>
-                            <TableHead className="text-right">Unit Price</TableHead>
+                            <TableHead className="text-right hidden sm:table-cell">Qty</TableHead>
+                            <TableHead className="text-right hidden md:table-cell">Unit Price</TableHead>
                             <TableHead className="text-right">Total ({symbol})</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -223,13 +223,13 @@ export default function PurchaseHistoryPage() {
                         {filtered.map(r => (
                             <TableRow key={r.rowId}>
                                 <TableCell className="font-medium font-mono text-sm">{r.poNumber}</TableCell>
-                                <TableCell>{r.date}</TableCell>
+                                <TableCell className="hidden sm:table-cell">{r.date}</TableCell>
                                 <TableCell>
                                     <Badge variant="outline">{r.supplierName}</Badge>
                                 </TableCell>
                                 <TableCell>{r.ingredientName}</TableCell>
-                                <TableCell className="text-right">{r.qty} {r.unit}</TableCell>
-                                <TableCell className="text-right">{format(r.unitPrice)}</TableCell>
+                                <TableCell className="text-right hidden sm:table-cell">{r.qty} {r.unit}</TableCell>
+                                <TableCell className="text-right hidden md:table-cell">{format(r.unitPrice)}</TableCell>
                                 <TableCell className="text-right font-semibold">{format(r.total)}</TableCell>
                             </TableRow>
                         ))}

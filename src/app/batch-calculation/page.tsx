@@ -141,7 +141,7 @@ export default function BatchCalculationPage() {
                             <CardDescription>Combined cost of selected recipes</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-4xl font-bold font-playfair text-primary mb-6">
+                            <div className="text-3xl sm:text-4xl font-bold font-playfair text-primary mb-6">
                                 {format(totalCost)}
                             </div>
 

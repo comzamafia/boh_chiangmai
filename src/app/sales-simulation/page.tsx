@@ -150,7 +150,7 @@ export default function SalesSimulationPage() {
                         <div className="relative pt-6">
                             <div className="absolute top-0 left-0 w-full h-px bg-border" />
                             <Label className="text-muted-foreground">Gross Profit</Label>
-                            <div className={`flex items-center gap-2 mt-1 text-4xl font-black font-playfair tracking-tight ${profitMargin < 0 ? 'text-destructive' : 'text-green-600 dark:text-green-500'}`}>
+                            <div className={`flex items-center gap-2 mt-1 text-2xl sm:text-4xl font-black font-playfair tracking-tight ${profitMargin < 0 ? 'text-destructive' : 'text-green-600 dark:text-green-500'}`}>
                                 {profitMargin < 0 ? <TrendingDown className="h-8 w-8" /> : <TrendingUp className="h-8 w-8" />}
                                 {format(grossProfit, 0)}
                             </div>

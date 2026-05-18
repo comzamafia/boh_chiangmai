@@ -1,0 +1,19 @@
+Name,Supplier Name,Purchase Unit,Purchase Price,Recipe Unit,Yield %,Conversion Rate,Group
+Bean Sprouts,Fresh Produce Co.,lb,25,oz,95,1,Weight
+Chicken Breast,Meat Select Providers,kg,110,g,90,1000,Weight
+Chili Flakes,Heritage Spice House,kg,150,g,100,1000,Weight
+Dried Shrimp,Golden Dry Goods,kg,280,g,100,1000,Weight
+Egg (Chicken),Fresh Produce Co.,dozen,72,piece,100,12,Count
+Fish Sauce (Nam Pla),Golden Dry Goods,L,55,ml,100,1000,Volume
+Oyster Sauce,Golden Dry Goods,L,90,ml,100,1000,Volume
+Pad Thai Noodles (Sen Lek),Golden Dry Goods,kg,45,g,100,1000,Weight
+Pad Thai Sauce Base,Owner Sauce,L,120,ml,100,1000,Volume
+Palm Sugar,Golden Dry Goods,kg,55,g,100,1000,Weight
+Peanuts (Raw),Golden Dry Goods,kg,80,g,100,1000,Weight
+Sesame Oil,Golden Dry Goods,L,180,ml,100,1000,Volume
+Soy Sauce (Light),Golden Dry Goods,L,45,ml,100,1000,Volume
+Spring Onion,Fresh Produce Co.,kg,35,g,90,1000,Weight
+Tamarind Paste,Golden Dry Goods,kg,65,g,100,1000,Weight
+Tiger Shrimp,Seafood Direct Co.,kg,420,g,80,1000,Weight
+Tofu (Firm),Fresh Produce Co.,piece,18,g,100,200,Weight
+Vegetable Oil,Golden Dry Goods,L,40,ml,100,1000,Volume

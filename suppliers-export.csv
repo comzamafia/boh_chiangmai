@@ -1,0 +1,7 @@
+Name,Contact,Email,Phone,Address,Status,IsSpecial
+Fresh Produce Co.,Somchai Jaidee,somchai@freshproduce.th,02-111-2233,"12/34 Talat Thai, Pathum Thani",Active,false
+Golden Dry Goods,Preecha Lamduan,preecha@goldendry.th,02-899-0011,Bang Na Industrial Estate,Active,false
+Heritage Spice House,Malee Thongdam,malee@heritagespice.th,053-221-445,"Night Bazaar, Chiang Mai",Inactive,false
+Meat Select Providers,Wanchai Butthong,wanchai@meatselect.th,02-555-9988,"7 Srinakarin Road, Bangkok",Active,false
+Owner Sauce,Internal,internal@padthaichaiyo.com,-,"Central Kitchen, Silom",Active,true
+Seafood Direct Co.,Nittaya Prayong,nittaya@seafooddirect.th,038-412-876,"Mahachai Pier, Samut Sakhon",Active,false

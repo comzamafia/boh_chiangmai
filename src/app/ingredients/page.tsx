@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ingredientsApi, suppliersApi, Ingredient, Supplier } from "@/lib/api";
+import { ingredientsApi, suppliersApi, ingredientCategoriesApi, Ingredient, Supplier, IngredientCategory } from "@/lib/api";
 
 // ─── Unit definitions per group ──────────────────────────────────────────────
 const GROUP_UNITS: Record<string, string[]> = {
@@ -97,7 +97,7 @@ import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
 
-type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier">;
+type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier" | "category">;
 
 function emptyForm(suppliers: Supplier[]): FormState {
     return {
@@ -105,16 +105,19 @@ function emptyForm(suppliers: Supplier[]): FormState {
         purchaseUnit: "kg", purchasePrice: 0,
         recipeUnit: "g", yieldPercent: 100,
         conversionRate: 1000, groupId: "Weight", imageUrl: "",
+        categoryId: null,
     };
 }
 
 export default function IngredientsPage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [categories, setCategories] = useState<IngredientCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [groupFilter, setGroupFilter] = useState("all");
+    const [categoryFilter, setCategoryFilter] = useState("all");
     const [dialogOpen, setDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<Ingredient | null>(null);
@@ -128,10 +131,11 @@ export default function IngredientsPage() {
     const show = (amt: number, dec = 2) => `${symbol}${amt.toFixed(dec)}`;
 
     useEffect(() => {
-        Promise.all([ingredientsApi.list(), suppliersApi.list()])
-            .then(([ings, sups]) => {
+        Promise.all([ingredientsApi.list(), suppliersApi.list(), ingredientCategoriesApi.list()])
+            .then(([ings, sups, cats]) => {
                 setIngredients(ings);
                 setSuppliers(sups);
+                setCategories(cats);
                 setForm(emptyForm(sups));
             })
             .finally(() => setLoading(false));
@@ -140,9 +144,14 @@ export default function IngredientsPage() {
     const filtered = useMemo(() => ingredients.filter(i => {
         const matchSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (i.supplier?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
-        const matchGroup = groupFilter === "all" || i.groupId === groupFilter;
-        return matchSearch && matchGroup;
-    }), [ingredients, searchTerm, groupFilter]);
+        const matchGroup    = groupFilter === "all" || i.groupId === groupFilter;
+        const matchCategory = categoryFilter === "all"
+            ? true
+            : categoryFilter === "none"
+                ? !i.categoryId
+                : i.categoryId === categoryFilter;
+        return matchSearch && matchGroup && matchCategory;
+    }), [ingredients, searchTerm, groupFilter, categoryFilter]);
 
     // ─── Derived cost values ───────────────────────────────────────────────────
     const ingEffCost = (item: Ingredient) =>
@@ -207,6 +216,7 @@ export default function IngredientsPage() {
             recipeUnit: item.recipeUnit, yieldPercent: Number(item.yieldPercent),
             conversionRate: Number(item.conversionRate),
             groupId: item.groupId, imageUrl: item.imageUrl ?? "",
+            categoryId: item.categoryId ?? null,
         });
         setDialogOpen(true);
     };
@@ -301,6 +311,16 @@ export default function IngredientsPage() {
                         <SelectItem value="Count">Count</SelectItem>
                     </SelectContent>
                 </Select>
+                {categories.length > 0 && (
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            <SelectItem value="none">Uncategorised</SelectItem>
+                            {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                )}
                 <p className="text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</p>
             </div>
 
@@ -312,6 +332,7 @@ export default function IngredientsPage() {
                             <TableHead className="w-14 hidden sm:table-cell">Image</TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead className="hidden sm:table-cell">Supplier</TableHead>
+                            <TableHead className="hidden lg:table-cell">Category</TableHead>
                             <TableHead className="hidden md:table-cell">Group</TableHead>
                             <TableHead>Purchase Price</TableHead>
                             <TableHead className="hidden lg:table-cell">
@@ -364,6 +385,11 @@ export default function IngredientsPage() {
                                     <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                                         {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
                                     </TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">
+                                        {item.category
+                                            ? <Badge variant="secondary">{item.category.name}</Badge>
+                                            : <span className="text-muted-foreground text-xs">—</span>}
+                                    </TableCell>
                                     <TableCell className="hidden md:table-cell">
                                         <Badge variant="outline">{item.groupId}</Badge>
                                     </TableCell>
@@ -408,7 +434,7 @@ export default function IngredientsPage() {
                         })}
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                                     No ingredients found.
                                 </TableCell>
                             </TableRow>
@@ -466,6 +492,21 @@ export default function IngredientsPage() {
                                     </Select>
                                 </div>
                             </div>
+
+                            {categories.length > 0 && (
+                                <div className="space-y-1.5">
+                                    <Label>Category <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                                    <Select
+                                        value={form.categoryId ?? "none"}
+                                        onValueChange={v => setForm(f => ({ ...f, categoryId: v === "none" ? null : v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">— None —</SelectItem>
+                                            {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
 
                             <div className="space-y-1.5">
                                 <Label>Image URL <span className="text-xs text-muted-foreground">(optional)</span></Label>

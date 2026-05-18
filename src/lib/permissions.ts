@@ -28,6 +28,7 @@ export const ALL_SLUGS = [
     "sales-simulation",
     "production",
     "admin",
+    "admin-audit",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -38,7 +39,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
         "ingredients", "import-ingredients", "suppliers", "import-suppliers", "inventory",
         "purchases", "purchase-orders", "analysis", "batch-calculation",
-        "batch-scaling", "sales-simulation", "production",
+        "batch-scaling", "sales-simulation", "production", "admin-audit",
     ],
     chef: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
@@ -89,6 +90,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "sales-simulation": "/sales-simulation",
     production: "/production-planning",
     admin: "/admin",
+    "admin-audit": "/admin/audit-log",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

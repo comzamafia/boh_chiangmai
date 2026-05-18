@@ -13,13 +13,9 @@ model User {
   password    String   // bcrypt hash
   role        String   @default("staff") // "admin" | "manager" | "chef" | "analyst" | "staff"
   permissions String[] // custom slug overrides; empty = use role defaults
-  department  String?  // e.g. "Bar", "Kitchen", "Bakery", "Pastry"
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  categoryPermissions UserCategoryPermission[]
-  auditLogs           AuditLog[]
 
   @@map("users")
 }
@@ -43,21 +39,19 @@ model Supplier {
 }
 
 model Ingredient {
-  id             String              @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
   supplierId     String
-  supplier       Supplier            @relation(fields: [supplierId], references: [id])
+  supplier       Supplier  @relation(fields: [supplierId], references: [id])
   purchaseUnit   String
-  purchasePrice  Decimal             @db.Decimal(10, 2)
+  purchasePrice  Decimal   @db.Decimal(10, 2)
   recipeUnit     String
-  yieldPercent   Decimal             @db.Decimal(5, 2)
-  conversionRate Decimal             @db.Decimal(10, 4)
-  groupId        String              // "Weight" | "Volume" | "Count" (unit measurement type)
-  categoryId     String?             // FK to IngredientCategory (food category)
-  category       IngredientCategory? @relation(fields: [categoryId], references: [id])
+  yieldPercent   Decimal   @db.Decimal(5, 2)
+  conversionRate Decimal   @db.Decimal(10, 4)
+  groupId        String    // "Weight" | "Volume" | "Count"
   imageUrl       String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   recipeItems   RecipeIngredient[]
   inventoryItem InventoryItem?
@@ -230,55 +224,4 @@ model InventoryTransaction {
   @@index([type])
   @@index([date])
   @@map("inventory_transactions")
-}
-
-// ─── V2: RBAC & Audit Trail ───────────────────────────────────────────────────
-
-model IngredientCategory {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  ingredients         Ingredient[]
-  categoryPermissions UserCategoryPermission[]
-
-  @@map("ingredient_categories")
-}
-
-model UserCategoryPermission {
-  id         String             @id @default(cuid())
-  userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId String
-  category   IngredientCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  canEdit    Boolean            @default(true)
-  assignedAt DateTime           @default(now())
-
-  @@unique([userId, categoryId])
-  @@map("user_category_permissions")
-}
-
-model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userName    String?  // denormalized — kept even if user is deleted
-  userEmail   String?
-  userRole    String?
-  action      String   // "CREATE" | "UPDATE" | "DELETE" | "WASTE_LOG" | "RECEIVE" | "LOGIN"
-  targetTable String   // "Ingredient" | "Recipe" | "InventoryItem" | "WasteLog" etc.
-  targetId    String
-  targetName  String?  // human-readable name of the affected record
-  oldValues   Json?    // snapshot before change
-  newValues   Json?    // snapshot after change
-  ipAddress   String?
-  createdAt   DateTime @default(now())
-
-  @@index([userId])
-  @@index([targetTable])
-  @@index([createdAt])
-  @@map("audit_logs")
 }

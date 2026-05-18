@@ -1,6 +1,4 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 /**
@@ -14,9 +12,6 @@ import { NextResponse } from "next/server";
  */
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
         const body = await request.json();
         const {
             ingredientId,
@@ -46,9 +41,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Ingredient is not being tracked in inventory. Add it to tracking first." }, { status: 400 });
         }
 
-        const convRate     = Number(ingredient.conversionRate);
-        const yieldPct     = Number(ingredient.yieldPercent) / 100;
-        const stockAdded   = Number(purchaseQty) * convRate * yieldPct;
+        const convRate    = Number(ingredient.conversionRate);
+        const yieldPct    = Number(ingredient.yieldPercent) / 100;
+        const stockAdded  = Number(purchaseQty) * convRate * yieldPct;
         const newUnitPrice = Number(purchaseQty) > 0
             ? Number(purchasePrice) / Number(purchaseQty)
             : 0;
@@ -93,17 +88,6 @@ export async function POST(request: Request) {
             include: {
                 ingredient: { include: { supplier: { select: { id: true, name: true } } } },
             },
-        });
-
-        logAudit({
-            session, action: "RECEIVE", targetTable: "InventoryTransaction",
-            targetId: invItem.id, targetName: ingredient.name,
-            newValues: {
-                ingredientId, purchaseQty, purchasePrice, stockAdded,
-                date, supplierId, priceAlert,
-                oldPurchasePrice: oldPrice, newUnitPrice,
-            },
-            request,
         });
 
         return NextResponse.json({

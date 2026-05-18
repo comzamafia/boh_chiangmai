@@ -108,49 +108,6 @@ export const inventoryApi = {
     alerts: () => apiFetch<InventoryAlert[]>("/inventory/alerts"),
 };
 
-// ─── Ingredient Categories ────────────────────────────────────────────────────
-export const ingredientCategoriesApi = {
-    list: () => apiFetch<IngredientCategory[]>("/ingredient-categories"),
-    create: (data: { name: string; description?: string; sortOrder?: number }) =>
-        apiFetch<IngredientCategory>("/ingredient-categories", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<Pick<IngredientCategory, "name" | "description" | "sortOrder">>) =>
-        apiFetch<IngredientCategory>(`/ingredient-categories/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    delete: (id: string) => apiFetch<void>(`/ingredient-categories/${id}`, { method: "DELETE" }),
-};
-
-// ─── Category Permissions ─────────────────────────────────────────────────────
-export const categoryPermissionsApi = {
-    listForUser: (userId: string) =>
-        apiFetch<UserCategoryPermission[]>(`/users/${userId}/category-permissions`),
-    setForUser: (userId: string, permissions: { categoryId: string; canEdit: boolean }[]) =>
-        apiFetch<UserCategoryPermission[]>(`/users/${userId}/category-permissions`, {
-            method: "PUT",
-            body: JSON.stringify({ permissions }),
-        }),
-};
-
-// ─── Audit Logs ───────────────────────────────────────────────────────────────
-export const auditApi = {
-    list: (params?: {
-        userId?: string;
-        action?: string;
-        targetTable?: string;
-        from?: string;
-        to?: string;
-        limit?: number;
-    }) => {
-        const q = new URLSearchParams();
-        if (params?.userId)      q.set("userId",      params.userId);
-        if (params?.action)      q.set("action",      params.action);
-        if (params?.targetTable) q.set("targetTable", params.targetTable);
-        if (params?.from)        q.set("from",        params.from);
-        if (params?.to)          q.set("to",          params.to);
-        if (params?.limit)       q.set("limit",       String(params.limit));
-        const qs = q.toString();
-        return apiFetch<AuditLog[]>(`/audit-logs${qs ? `?${qs}` : ""}`);
-    },
-};
-
 // ─── Analysis ────────────────────────────────────────────────────────────────
 export const analysisApi = {
     recipeCosts:  () => apiFetch<RecipeCostSummary[]>("/analysis/recipe-costs"),
@@ -192,8 +149,6 @@ export interface Ingredient {
     yieldPercent: number;
     conversionRate: number;
     groupId: "Weight" | "Volume" | "Count";
-    categoryId?: string | null;
-    category?: IngredientCategory | null;
     imageUrl?: string | null;
     createdAt?: string;
     updatedAt?: string;
@@ -354,39 +309,4 @@ export interface PriceVarianceAlert {
     newPrice:     number;
     changePct:    number;
     date:         string;
-}
-
-export interface IngredientCategory {
-    id:           string;
-    name:         string;
-    description?: string | null;
-    sortOrder:    number;
-    createdAt?:   string;
-    updatedAt?:   string;
-    _count?: { ingredients: number };
-}
-
-export interface UserCategoryPermission {
-    id:         string;
-    userId:     string;
-    categoryId: string;
-    category:   IngredientCategory;
-    canEdit:    boolean;
-    assignedAt: string;
-}
-
-export interface AuditLog {
-    id:          string;
-    userId?:     string | null;
-    userName?:   string | null;
-    userEmail?:  string | null;
-    userRole?:   string | null;
-    action:      string;
-    targetTable: string;
-    targetId:    string;
-    targetName?: string | null;
-    oldValues?:  Record<string, unknown> | null;
-    newValues?:  Record<string, unknown> | null;
-    ipAddress?:  string | null;
-    createdAt:   string;
 }

@@ -1,6 +1,4 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 const SIGN: Record<string, number> = {
@@ -43,9 +41,6 @@ export async function GET(request: Request) {
 // POST /api/inventory/transactions — create a new transaction and update stock
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
         const body = await request.json();
         const { inventoryItemId, ingredientId, type, qty, unit, costPerUnit, reason, note, date, recipeId } = body;
 
@@ -88,17 +83,6 @@ export async function POST(request: Request) {
                     data:  { currentStock: { increment: sign * qtyNum } },
                 }),
         ]);
-
-        // Audit WASTE_LOG separately (non-blocking)
-        if (type === "Waste") {
-            const ingName = txn.ingredient?.name ?? ingredientId;
-            logAudit({
-                session, action: "WASTE_LOG", targetTable: "InventoryTransaction",
-                targetId: txn.id, targetName: ingName,
-                newValues: { ingredientId, qty: qtyNum, unit, reason, costPerUnit, date },
-                request,
-            });
-        }
 
         return NextResponse.json(txn, { status: 201 });
     } catch {

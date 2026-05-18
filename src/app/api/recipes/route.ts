@@ -1,6 +1,4 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -25,41 +23,33 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
         const body = await request.json();
         const recipe = await prisma.recipe.create({
             data: {
-                name:               body.name,
-                category:           body.category,
-                yieldAmount:        body.yieldAmount,
-                yieldUnit:          body.yieldUnit,
-                prepTime:           body.prepTime,
-                cookTime:           body.cookTime,
-                laborCostPerHour:   body.laborCostPerHour ?? 50,
+                name: body.name,
+                category: body.category,
+                yieldAmount: body.yieldAmount,
+                yieldUnit: body.yieldUnit,
+                prepTime: body.prepTime,
+                cookTime: body.cookTime,
+                laborCostPerHour: body.laborCostPerHour ?? 50,
                 energyCostPerBatch: body.energyCostPerBatch ?? 2,
-                sellingPrice:       body.sellingPrice ?? null,
-                deliveryPrice:      body.deliveryPrice ?? null,
-                imageUrl:           body.imageUrl,
-                isMainSauce:        body.isMainSauce ?? false,
-                instructions:       body.instructions,
+                sellingPrice: body.sellingPrice ?? null,
+                deliveryPrice: body.deliveryPrice ?? null,
+                imageUrl: body.imageUrl,
+                isMainSauce: body.isMainSauce ?? false,
+                instructions: body.instructions,
+                // Create nested ingredients in one transaction
                 ingredients: body.ingredients?.length
                     ? {
                           create: body.ingredients.map((ri: { ingredientId: string; quantity: number }) => ({
                               ingredientId: ri.ingredientId,
-                              quantity:     ri.quantity,
+                              quantity: ri.quantity,
                           })),
                       }
                     : undefined,
             },
             include: { ingredients: { include: { ingredient: true } } },
-        });
-        logAudit({
-            session, action: "CREATE", targetTable: "Recipe",
-            targetId: recipe.id, targetName: recipe.name,
-            newValues: { name: recipe.name, category: recipe.category },
-            request,
         });
         return NextResponse.json(recipe, { status: 201 });
     } catch {

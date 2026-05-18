@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle
@@ -24,16 +23,11 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
     DropdownMenuSeparator, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Users, Plus, Pencil, Trash2, MoreHorizontal,
-    ShieldCheck, Loader2, AlertCircle, Key, Tags
+    ShieldCheck, Loader2, AlertCircle, Key
 } from "lucide-react";
 import { ALL_SLUGS, ROLE_DEFAULTS, ROLE_LABELS, type Role, type NavSlug } from "@/lib/permissions";
-import {
-    ingredientCategoriesApi, categoryPermissionsApi,
-    type IngredientCategory, type UserCategoryPermission,
-} from "@/lib/api";
 
 const SLUG_LABELS: Record<NavSlug, string> = {
     home: "Home",
@@ -57,7 +51,6 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "sales-simulation": "Sales Simulation",
     production: "Production Planning",
     admin: "Admin Panel (Users)",
-    "admin-audit": "Audit Log",
 };
 
 interface UserRow {
@@ -86,19 +79,12 @@ export default function AdminUsersPage() {
     const [users, setUsers] = useState<UserRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogTab, setDialogTab] = useState("details");
     const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState(emptyForm);
     const [saving, setSaving] = useState(false);
     const [apiError, setApiError] = useState("");
     const [useCustomPermissions, setUseCustomPermissions] = useState(false);
-
-    // Category permissions state
-    const [categories, setCategories] = useState<IngredientCategory[]>([]);
-    const [catPerms, setCatPerms] = useState<Map<string, boolean>>(new Map()); // categoryId → canEdit
-    const [catPermsSaving, setCatPermsSaving] = useState(false);
-    const [catPermsLoaded, setCatPermsLoaded] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -109,33 +95,11 @@ export default function AdminUsersPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    // Load categories once
-    useEffect(() => {
-        ingredientCategoriesApi.list().then(setCategories).catch(() => {});
-    }, []);
-
-    // Load category permissions when editing a user
-    const loadCatPerms = useCallback(async (userId: string) => {
-        setCatPermsLoaded(false);
-        try {
-            const perms: UserCategoryPermission[] = await categoryPermissionsApi.listForUser(userId);
-            const map = new Map<string, boolean>();
-            perms.forEach(p => map.set(p.categoryId, p.canEdit));
-            setCatPerms(map);
-        } catch {
-            setCatPerms(new Map());
-        }
-        setCatPermsLoaded(true);
-    }, []);
-
     const openCreate = () => {
         setEditingId(null);
         setForm(emptyForm);
         setUseCustomPermissions(false);
         setApiError("");
-        setCatPerms(new Map());
-        setCatPermsLoaded(true);
-        setDialogTab("details");
         setDialogOpen(true);
     };
 
@@ -151,10 +115,7 @@ export default function AdminUsersPage() {
         });
         setUseCustomPermissions(user.permissions.length > 0);
         setApiError("");
-        setCatPermsLoaded(false);
-        setDialogTab("details");
         setDialogOpen(true);
-        loadCatPerms(user.id);
     };
 
     const togglePermission = (slug: NavSlug) => {
@@ -195,45 +156,11 @@ export default function AdminUsersPage() {
         setSaving(false);
     };
 
-    const handleSaveCatPerms = async () => {
-        if (!editingId) return;
-        setCatPermsSaving(true);
-        try {
-            const permissions = Array.from(catPerms.entries()).map(([categoryId, canEdit]) => ({ categoryId, canEdit }));
-            await categoryPermissionsApi.setForUser(editingId, permissions);
-        } catch {
-            // silent — show nothing for now
-        }
-        setCatPermsSaving(false);
-    };
-
     const handleDelete = async () => {
         if (!deleteTarget) return;
         await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
         setDeleteTarget(null);
         load();
-    };
-
-    const toggleCatPerm = (categoryId: string) => {
-        setCatPerms(prev => {
-            const next = new Map(prev);
-            if (next.has(categoryId)) {
-                next.delete(categoryId); // remove = no access
-            } else {
-                next.set(categoryId, true); // default canEdit = true
-            }
-            return next;
-        });
-    };
-
-    const toggleCatEdit = (categoryId: string) => {
-        setCatPerms(prev => {
-            const next = new Map(prev);
-            if (next.has(categoryId)) {
-                next.set(categoryId, !next.get(categoryId));
-            }
-            return next;
-        });
     };
 
     return (
@@ -342,197 +269,126 @@ export default function AdminUsersPage() {
 
             {/* Create / Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[92dvh] flex flex-col p-0 gap-0">
-                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
                         <DialogTitle>{editingId ? "Edit User" : "Create New User"}</DialogTitle>
-                        <DialogDescription>Configure account details, menu access, and category permissions.</DialogDescription>
+                        <DialogDescription>Configure account details and menu access permissions.</DialogDescription>
                     </DialogHeader>
 
-                    <Tabs value={dialogTab} onValueChange={setDialogTab} className="flex-1 flex flex-col min-h-0">
-                        <TabsList className="mx-5 mt-3 shrink-0 w-auto justify-start">
-                            <TabsTrigger value="details">Details & Permissions</TabsTrigger>
-                            {editingId && (
-                                <TabsTrigger value="category-perms" className="flex items-center gap-1.5">
-                                    <Tags className="h-3.5 w-3.5" /> Category Access
-                                </TabsTrigger>
-                            )}
-                        </TabsList>
-
-                        {/* ── Tab: Details ── */}
-                        <TabsContent value="details" className="flex-1 overflow-y-auto px-5 py-4 space-y-5 mt-0">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label>Full Name *</Label>
-                                    <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Somchai Jaidee" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label>Email *</Label>
-                                    <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="user@chiangmai.ca" />
-                                </div>
+                    <div className="space-y-5 py-2">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label>Full Name *</Label>
+                                <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Somchai Jaidee" />
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label>{editingId ? "New Password (leave blank to keep)" : "Password *"}</Label>
-                                    <Input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label>Role</Label>
-                                    <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as Role }))}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {ROLES.map(r => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            <div className="space-y-1.5">
+                                <Label>Email *</Label>
+                                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="user@chiangmai.ca" />
                             </div>
+                        </div>
 
-                            {editingId && (
-                                <div className="flex items-center gap-2">
-                                    <Checkbox id="isActive" checked={form.isActive} onCheckedChange={v => setForm(p => ({ ...p, isActive: !!v }))} />
-                                    <Label htmlFor="isActive" className="cursor-pointer">Account is active</Label>
-                                </div>
-                            )}
-
-                            {/* Permissions */}
-                            <div className="space-y-3 p-4 border rounded-lg bg-accent/20">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium text-sm">Menu Access Permissions</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {form.role === "admin"
-                                                ? "Administrator — full access to all menus (cannot be restricted)"
-                                                : useCustomPermissions
-                                                    ? "Custom — override individual menus"
-                                                    : `Using role default (${ROLE_DEFAULTS[form.role]?.length ?? 0} menus for ${ROLE_LABELS[form.role]})`}
-                                        </p>
-                                    </div>
-                                    {form.role !== "admin" && (
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                id="customPerms"
-                                                checked={useCustomPermissions}
-                                                onCheckedChange={v => {
-                                                    setUseCustomPermissions(!!v);
-                                                    if (v) setForm(p => ({ ...p, permissions: [...ROLE_DEFAULTS[form.role]] }));
-                                                    else setForm(p => ({ ...p, permissions: [] }));
-                                                }}
-                                            />
-                                            <Label htmlFor="customPerms" className="text-xs cursor-pointer">Customize</Label>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {form.role === "admin" && (
-                                    <div className="flex flex-wrap gap-1.5 pt-1">
-                                        {ALL_SLUGS.map(slug => (
-                                            <span key={slug} className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-200 dark:text-red-400 dark:border-red-900">
-                                                {SLUG_LABELS[slug]}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {form.role !== "admin" && useCustomPermissions && (
-                                    <div className="grid grid-cols-2 gap-2 pt-2">
-                                        {ALL_SLUGS.map(slug => (
-                                            <label key={slug} className="flex items-center gap-2 p-2 rounded-md hover:bg-accent cursor-pointer transition-colors">
-                                                <Checkbox
-                                                    checked={form.permissions.includes(slug)}
-                                                    onCheckedChange={() => togglePermission(slug)}
-                                                />
-                                                <span className="text-sm">{SLUG_LABELS[slug]}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {form.role !== "admin" && !useCustomPermissions && (
-                                    <div className="flex flex-wrap gap-1.5 pt-1">
-                                        {effectivePermissions.map(slug => (
-                                            <span key={slug} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                                                {SLUG_LABELS[slug]}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label>{editingId ? "New Password (leave blank to keep)" : "Password *"}</Label>
+                                <Input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
                             </div>
+                            <div className="space-y-1.5">
+                                <Label>Role</Label>
+                                <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as Role }))}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {ROLES.map(r => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
 
-                            {apiError && (
-                                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                                    <AlertCircle className="h-4 w-4 shrink-0" />
-                                    {apiError}
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        {/* ── Tab: Category Permissions ── */}
                         {editingId && (
-                            <TabsContent value="category-perms" className="flex-1 overflow-y-auto px-5 py-4 mt-0 space-y-4">
-                                <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
-                                    <strong>Note:</strong> Admin and Manager roles always see all categories. Category restrictions only apply to Chef, Staff, and Analyst roles. If no categories are assigned, the user sees all ingredients.
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <Checkbox id="isActive" checked={form.isActive} onCheckedChange={v => setForm(p => ({ ...p, isActive: !!v }))} />
+                                <Label htmlFor="isActive" className="cursor-pointer">Account is active</Label>
+                            </div>
+                        )}
 
-                                {!catPermsLoaded ? (
-                                    <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-                                ) : categories.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        <Tags className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                                        <p className="font-medium">No categories yet</p>
-                                        <p className="text-sm">Ask an admin to create ingredient categories first.</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {categories.map(cat => {
-                                            const hasAccess = catPerms.has(cat.id);
-                                            const canEdit   = catPerms.get(cat.id) ?? false;
-                                            return (
-                                                <div key={cat.id} className={`flex items-center justify-between gap-4 px-4 py-3 rounded-lg border transition-colors ${hasAccess ? "bg-primary/5 border-primary/20" : "bg-muted/20"}`}>
-                                                    <div className="flex items-center gap-3 min-w-0">
-                                                        <Switch
-                                                            checked={hasAccess}
-                                                            onCheckedChange={() => toggleCatPerm(cat.id)}
-                                                        />
-                                                        <div className="min-w-0">
-                                                            <p className="font-medium text-sm truncate">{cat.name}</p>
-                                                            {cat.description && (
-                                                                <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    {hasAccess && (
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-xs text-muted-foreground">Can edit</span>
-                                                            <Switch
-                                                                checked={canEdit}
-                                                                onCheckedChange={() => toggleCatEdit(cat.id)}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
+                        {/* Permissions */}
+                        <div className="space-y-3 p-4 border rounded-lg bg-accent/20">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium text-sm">Menu Access Permissions</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {form.role === "admin"
+                                            ? "Administrator — full access to all menus (cannot be restricted)"
+                                            : useCustomPermissions
+                                                ? "Custom — override individual menus"
+                                                : `Using role default (${ROLE_DEFAULTS[form.role]?.length ?? 0} menus for ${ROLE_LABELS[form.role]})`}
+                                    </p>
+                                </div>
+                                {form.role !== "admin" && (
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="customPerms"
+                                            checked={useCustomPermissions}
+                                            onCheckedChange={v => {
+                                                setUseCustomPermissions(!!v);
+                                                if (v) setForm(p => ({ ...p, permissions: [...ROLE_DEFAULTS[form.role]] }));
+                                                else setForm(p => ({ ...p, permissions: [] }));
+                                            }}
+                                        />
+                                        <Label htmlFor="customPerms" className="text-xs cursor-pointer">Customize</Label>
                                     </div>
                                 )}
-                            </TabsContent>
-                        )}
-                    </Tabs>
+                            </div>
 
-                    {/* Footer */}
-                    <div className="px-5 py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                        <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving || catPermsSaving}>Cancel</Button>
-                        {dialogTab === "category-perms" && editingId ? (
-                            <Button onClick={handleSaveCatPerms} disabled={catPermsSaving || !catPermsLoaded}>
-                                {catPermsSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Save Category Access
-                            </Button>
-                        ) : (
-                            <Button onClick={handleSave} disabled={saving}>
-                                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {editingId ? "Save Changes" : "Create User"}
-                            </Button>
+                            {form.role === "admin" && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {ALL_SLUGS.map(slug => (
+                                        <span key={slug} className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-200 dark:text-red-400 dark:border-red-900">
+                                            {SLUG_LABELS[slug]}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {form.role !== "admin" && useCustomPermissions && (
+                                <div className="grid grid-cols-2 gap-2 pt-2">
+                                    {ALL_SLUGS.map(slug => (
+                                        <label key={slug} className="flex items-center gap-2 p-2 rounded-md hover:bg-accent cursor-pointer transition-colors">
+                                            <Checkbox
+                                                checked={form.permissions.includes(slug)}
+                                                onCheckedChange={() => togglePermission(slug)}
+                                            />
+                                            <span className="text-sm">{SLUG_LABELS[slug]}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+
+                            {form.role !== "admin" && !useCustomPermissions && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {effectivePermissions.map(slug => (
+                                        <span key={slug} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                            {SLUG_LABELS[slug]}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {apiError && (
+                            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                {apiError}
+                            </div>
                         )}
                     </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={saving}>
+                            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {editingId ? "Save Changes" : "Create User"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

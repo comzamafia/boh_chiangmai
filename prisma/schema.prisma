@@ -53,7 +53,9 @@ model Ingredient {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  recipeItems RecipeIngredient[]
+  recipeItems   RecipeIngredient[]
+  inventoryItem InventoryItem?
+  inventoryTxns InventoryTransaction[]
 
   @@map("ingredients")
 }
@@ -182,4 +184,44 @@ model SalesEntry {
 
   @@index([date])
   @@map("sales_entries")
+}
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  ingredientId  String    @unique
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  currentStock  Decimal   @db.Decimal(10, 4)  // in recipe units (g, ml, piece)
+  parMin        Decimal   @db.Decimal(10, 4)  // safety stock level
+  parMax        Decimal   @db.Decimal(10, 4)  // max stock level
+  reorderPoint  Decimal   @db.Decimal(10, 4)
+  leadTimeDays  Int       @default(1)
+  lastCountDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions InventoryTransaction[]
+
+  @@map("inventory_items")
+}
+
+model InventoryTransaction {
+  id              String        @id @default(cuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  ingredientId    String
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  type            String        // "In" | "Out" | "Waste" | "Adjust" | "Stocktake"
+  qty             Decimal       @db.Decimal(10, 4)  // always positive; direction implied by type
+  unit            String        // recipe unit (g, ml, piece)
+  costPerUnit     Decimal?      @db.Decimal(10, 6)  // for In transactions
+  reason          String?       // for Waste: "Spoiled" | "Overcooked" | "Staff" | "Other"
+  note            String?
+  date            String        // YYYY-MM-DD
+  recipeId        String?       // for Out: sale that triggered this
+  createdAt       DateTime      @default(now())
+
+  @@index([inventoryItemId])
+  @@index([type])
+  @@index([date])
+  @@map("inventory_transactions")
 }

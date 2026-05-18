@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
-import { suppliersApi, ingredientsApi, Supplier, Ingredient } from "@/lib/api";
+import { suppliersApi, ingredientsApi, inventoryApi, Supplier, Ingredient, InventoryAlert } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
     FilePlus2, Printer, Trash2, Plus, X, Search,
     CheckCircle2, Clock, PackageCheck, XCircle, ChevronRight,
-    Loader2, FileText, Send,
+    Loader2, FileText, Send, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -106,6 +106,8 @@ export default function PurchaseOrdersPage() {
     const [loading, setLoading]       = useState(true);
     const [search, setSearch]         = useState("");
     const [statusFilter, setStatusFilter] = useState<POStatus | "All">("All");
+    const [stockAlerts, setStockAlerts] = useState<InventoryAlert[]>([]);
+    const [alertsDismissed, setAlertsDismissed] = useState(false);
 
     // Views: "list" | "create" | "detail"
     const [view, setView]         = useState<"list" | "create" | "detail">("list");
@@ -125,8 +127,12 @@ export default function PurchaseOrdersPage() {
     const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        Promise.all([suppliersApi.list(), ingredientsApi.list()])
-            .then(([sups, ings]) => { setSuppliers(sups); setIngredients(ings); })
+        Promise.all([suppliersApi.list(), ingredientsApi.list(), inventoryApi.alerts().catch(() => [])])
+            .then(([sups, ings, alrts]) => {
+                setSuppliers(sups);
+                setIngredients(ings);
+                setStockAlerts(alrts);
+            })
             .finally(() => setLoading(false));
     }, []);
 
@@ -663,6 +669,71 @@ export default function PurchaseOrdersPage() {
                     </Card>
                 ))}
             </div>
+
+            {/* ── Suggested Orders Banner (Phase 3) ── */}
+            {!alertsDismissed && stockAlerts.length > 0 && (
+                <Card className="border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
+                            <CardTitle className="text-base text-yellow-800 dark:text-yellow-300">
+                                {stockAlerts.length} item{stockAlerts.length !== 1 ? "s" : ""} need reordering
+                            </CardTitle>
+                        </div>
+                        <button
+                            onClick={() => setAlertsDismissed(true)}
+                            className="text-muted-foreground hover:text-foreground"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                        <div className="space-y-1.5 mb-3">
+                            {stockAlerts.map(a => (
+                                <div key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
+                                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${a.status === "critical" ? "bg-red-100 text-red-800 border-red-200" : "bg-yellow-100 text-yellow-800 border-yellow-200"}`}>
+                                        {a.status === "critical" ? "Critical" : "Reorder"}
+                                    </span>
+                                    <span className="font-medium">{a.ingredient.name}</span>
+                                    <span className="text-muted-foreground text-xs">
+                                        {Number(a.currentStock).toFixed(1)} / {Number(a.parMax).toFixed(1)} {a.ingredient.recipeUnit} in stock
+                                    </span>
+                                    {a.suggestedSupplierName && (
+                                        <span className="text-muted-foreground text-xs">· {a.suggestedSupplierName}</span>
+                                    )}
+                                    <span className="text-xs text-primary font-medium">
+                                        Order ≈ {Number(a.qtyToOrder).toFixed(1)} {a.ingredient.recipeUnit}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                // Group alerts by supplier and pre-fill a new PO
+                                const firstSupplierId = stockAlerts[0]?.suggestedSupplierId;
+                                if (firstSupplierId) {
+                                    handleSupplierChange(firstSupplierId);
+                                    const sameSupplierAlerts = stockAlerts.filter(a => a.suggestedSupplierId === firstSupplierId);
+                                    const lineItems = sameSupplierAlerts.map(a => ({
+                                        id:             `li-${Date.now()}-${a.id}`,
+                                        ingredientId:   a.ingredientId,
+                                        ingredientName: a.ingredient.name,
+                                        qty:            Number(a.qtyToOrder),
+                                        unit:           a.ingredient.purchaseUnit,
+                                        unitPrice:      Number(a.ingredient.purchasePrice),
+                                        total:          Number(a.qtyToOrder) * Number(a.ingredient.purchasePrice),
+                                    }));
+                                    setPoItems(lineItems.length > 0 ? lineItems : [emptyLineItem()]);
+                                }
+                                setView("create");
+                            }}
+                        >
+                            <FilePlus2 className="mr-2 h-4 w-4" /> Create Draft PO from Alerts
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-center">

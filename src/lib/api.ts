@@ -74,9 +74,44 @@ export const purchaseApi = {
     delete: (id: string) => apiFetch<void>(`/purchase-history/${id}`, { method: "DELETE" }),
 };
 
+// ─── Inventory ────────────────────────────────────────────────────────────────
+export const inventoryApi = {
+    list:    ()  => apiFetch<InventoryItem[]>("/inventory"),
+    get:     (id: string) => apiFetch<InventoryItem>(`/inventory/${id}`),
+    create:  (data: { ingredientId: string; currentStock?: number; parMin?: number; parMax?: number; reorderPoint?: number; leadTimeDays?: number }) =>
+        apiFetch<InventoryItem>("/inventory", { method: "POST", body: JSON.stringify(data) }),
+    update:  (id: string, data: Partial<Pick<InventoryItem, "parMin" | "parMax" | "reorderPoint" | "leadTimeDays" | "currentStock">>) =>
+        apiFetch<InventoryItem>(`/inventory/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete:  (id: string) => apiFetch<void>(`/inventory/${id}`, { method: "DELETE" }),
+
+    transactions: (params?: { type?: string; ingredientId?: string; from?: string; to?: string; limit?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.type)         q.set("type",         params.type);
+        if (params?.ingredientId) q.set("ingredientId", params.ingredientId);
+        if (params?.from)         q.set("from",         params.from);
+        if (params?.to)           q.set("to",           params.to);
+        if (params?.limit)        q.set("limit",        String(params.limit));
+        const qs = q.toString();
+        return apiFetch<InventoryTransaction[]>(`/inventory/transactions${qs ? `?${qs}` : ""}`);
+    },
+    logTransaction: (data: {
+        inventoryItemId: string; ingredientId: string; type: string;
+        qty: number; unit: string; costPerUnit?: number; reason?: string;
+        note?: string; date: string; recipeId?: string;
+    }) => apiFetch<InventoryTransaction>("/inventory/transactions", { method: "POST", body: JSON.stringify(data) }),
+
+    receive: (data: {
+        ingredientId: string; purchaseQty: number; purchasePrice: number;
+        date: string; note?: string; supplierId?: string;
+    }) => apiFetch<ReceiveGoodsResult>("/inventory/receive", { method: "POST", body: JSON.stringify(data) }),
+
+    alerts: () => apiFetch<InventoryAlert[]>("/inventory/alerts"),
+};
+
 // ─── Analysis ────────────────────────────────────────────────────────────────
 export const analysisApi = {
-    recipeCosts: () => apiFetch<RecipeCostSummary[]>("/analysis/recipe-costs"),
+    recipeCosts:  () => apiFetch<RecipeCostSummary[]>("/analysis/recipe-costs"),
+    priceTrends:  (months = 6) => apiFetch<PriceTrendsResult>(`/analysis/price-trends?months=${months}`),
 };
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
@@ -214,4 +249,64 @@ export interface RecipeCostSummary {
     laborCost: number;
     energyCost: number;
     costPerYield: number;
+}
+
+export interface InventoryItem {
+    id: string;
+    ingredientId: string;
+    ingredient: Ingredient;
+    currentStock: number;
+    parMin: number;
+    parMax: number;
+    reorderPoint: number;
+    leadTimeDays: number;
+    lastCountDate?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface InventoryTransaction {
+    id: string;
+    inventoryItemId: string;
+    ingredientId: string;
+    ingredient?: { id: string; name: string; recipeUnit: string };
+    type: "In" | "Out" | "Waste" | "Adjust" | "Stocktake";
+    qty: number;
+    unit: string;
+    costPerUnit?: number | null;
+    reason?: string | null;
+    note?: string | null;
+    date: string;
+    recipeId?: string | null;
+    createdAt?: string;
+}
+
+export interface InventoryAlert extends InventoryItem {
+    status: "critical" | "low";
+    qtyToOrder: number;
+    suggestedSupplierId: string;
+    suggestedSupplierName: string;
+}
+
+export interface ReceiveGoodsResult {
+    inventoryItem: InventoryItem;
+    stockAdded: number;
+    priceAlert: boolean;
+    priceChangePct: number;
+}
+
+export interface PriceTrendsResult {
+    monthlyTrend:    Record<string, string | number>[];
+    alerts:          PriceVarianceAlert[];
+    ingredientNames: string[];
+}
+
+export interface PriceVarianceAlert {
+    ingredient:   string;
+    supplierId:   string;
+    supplierName: string;
+    prevPrice:    number;
+    newPrice:     number;
+    changePct:    number;
+    date:         string;
 }

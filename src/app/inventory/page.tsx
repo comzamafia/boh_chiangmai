@@ -1,18 +1,22 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import {
+    inventoryApi, ingredientsApi, suppliersApi,
+    InventoryItem, InventoryTransaction, InventoryAlert,
+    Ingredient, Supplier,
+} from "@/lib/api";
+import { useCurrency } from "@/components/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
     Table, TableBody, TableCell, TableHead,
     TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, PackagePlus, Warehouse, History, Search, Pencil, Check, X } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
     Dialog, DialogContent, DialogDescription,
     DialogFooter, DialogHeader, DialogTitle,
@@ -21,346 +25,411 @@ import {
     Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StockItem {
-    id: string;
-    productName: string;
-    category: string;
-    currentStock: number;
-    unit: string;
-    max: number;
-    safetyStock: number;
-    rop: number;
-}
-
-interface GoodsReceipt {
-    id: string;
-    date: string;
-    productName: string;
-    supplier: string;
-    purchaseQty: number;
-    purchaseUnit: string;
-    purchasePrice: number;
-    currency: string;
-    portionSize: number;
-    portionUnit: string;
-    packs: number;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const CATEGORIES = [
-    "Vegetables", "Proteins", "Noodles & Rice",
-    "Sauces", "Dairy", "Dry Goods", "Beverages", "Other",
-];
-
-const SUPPLIERS = [
-    "Fresh Produce Co.",
-    "Meat Select Providers",
-    "Owner Sauce",
-    "Seafood Direct Co.",
-    "Golden Dry Goods",
-    "Heritage Spice House",
-];
-
-const CURRENCIES = ["CAD"];
-
-const UNITS = ["lbs", "kg", "g", "oz", "L", "ml", "piece", "dozen", "pack", "bag"];
-
-const DEFAULT_STOCK: StockItem[] = [
-    { id: "S001", productName: "Bean Sprouts",        category: "Vegetables",     currentStock: 10, unit: "pack", max: 100, safetyStock: 20, rop: 30 },
-    { id: "S002", productName: "Pad Thai Noodles",    category: "Noodles & Rice", currentStock: 75, unit: "pack", max: 200, safetyStock: 40, rop: 60 },
-    { id: "S003", productName: "Tiger Shrimp",        category: "Proteins",       currentStock: 8,  unit: "pack", max: 50,  safetyStock: 10, rop: 15 },
-    { id: "S004", productName: "Chicken Breast",      category: "Proteins",       currentStock: 25, unit: "pack", max: 80,  safetyStock: 15, rop: 20 },
-    { id: "S005", productName: "Pad Thai Sauce Base", category: "Sauces",         currentStock: 30, unit: "pack", max: 60,  safetyStock: 10, rop: 15 },
-];
+import {
+    AlertCircle, PackagePlus, Warehouse, History, Search,
+    Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
+    CheckCircle2, TrendingDown, BarChart2,
+} from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type StockStatus = "critical" | "low" | "ok";
 
-function stockStatus(item: StockItem): StockStatus {
-    if (item.currentStock <= item.safetyStock) return "critical";
-    if (item.currentStock <= item.rop)         return "low";
+function stockStatus(item: InventoryItem): StockStatus {
+    const cur = Number(item.currentStock);
+    if (cur <= Number(item.parMin))       return "critical";
+    if (cur <= Number(item.reorderPoint)) return "low";
     return "ok";
 }
 
+const STATUS_CONFIG: Record<StockStatus, { label: string; badge: string }> = {
+    critical: { label: "Critical",  badge: "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800" },
+    low:      { label: "Reorder",   badge: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-800" },
+    ok:       { label: "OK",        badge: "bg-green-100 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800" },
+};
+
+const TXN_CONFIG: Record<string, { label: string; badge: string; sign: string }> = {
+    In:        { label: "Received",  badge: "bg-green-100 text-green-800 border-green-200",  sign: "+" },
+    Out:       { label: "Used",      badge: "bg-blue-100 text-blue-800 border-blue-200",     sign: "−" },
+    Waste:     { label: "Waste",     badge: "bg-red-100 text-red-800 border-red-200",        sign: "−" },
+    Adjust:    { label: "Adjust",    badge: "bg-purple-100 text-purple-800 border-purple-200", sign: "±" },
+    Stocktake: { label: "Stocktake", badge: "bg-slate-100 text-slate-800 border-slate-200",  sign: "=" },
+};
+
+const WASTE_REASONS = ["Spoiled", "Overcooked", "Staff Meal", "Dropped", "Over-prep", "Other"];
+
+const PIE_COLORS = ["#b8860b", "#e07b39", "#4a9e6b", "#6366f1", "#f43f5e", "#94a3b8"];
+
+function today() { return new Date().toISOString().split("T")[0]; }
+
+// ─── Status Badge ──────────────────────────────────────────────────────────────
+
 function StatusBadge({ status }: { status: StockStatus }) {
-    if (status === "critical") return <Badge variant="destructive">Critical</Badge>;
-    if (status === "low")      return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white">Reorder</Badge>;
-    return <Badge className="bg-green-600 hover:bg-green-700 text-white">OK</Badge>;
+    const cfg = STATUS_CONFIG[status];
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${cfg.badge}`}>
+            {status === "critical" && <AlertCircle className="h-3 w-3" />}
+            {status === "low"      && <AlertTriangle className="h-3 w-3" />}
+            {status === "ok"       && <CheckCircle2 className="h-3 w-3" />}
+            {cfg.label}
+        </span>
+    );
+}
+
+// ─── Stock Progress Bar ────────────────────────────────────────────────────────
+
+function StockBar({ item }: { item: InventoryItem }) {
+    const cur = Number(item.currentStock);
+    const max = Number(item.parMax);
+    const pct = max > 0 ? Math.min(100, Math.round((cur / max) * 100)) : 0;
+    const status = stockStatus(item);
+    const color = status === "critical" ? "bg-red-500" : status === "low" ? "bg-yellow-500" : "bg-green-500";
+    return (
+        <div className="flex items-center gap-2 min-w-[120px]">
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs text-muted-foreground tabular-nums w-8 text-right">{pct}%</span>
+        </div>
+    );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
-    const [stockItems, setStockItems] = useState<StockItem[]>(DEFAULT_STOCK);
-    const [receipts, setReceipts]     = useState<GoodsReceipt[]>([]);
-    const [search, setSearch]         = useState("");
+    const { format } = useCurrency();
 
-    // Inline edit state
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editRow, setEditRow]     = useState<Partial<StockItem>>({});
+    // Core data
+    const [items,       setItems]       = useState<InventoryItem[]>([]);
+    const [allIngr,     setAllIngr]     = useState<Ingredient[]>([]);
+    const [suppliers,   setSuppliers]   = useState<Supplier[]>([]);
+    const [alerts,      setAlerts]      = useState<InventoryAlert[]>([]);
+    const [txns,        setTxns]        = useState<InventoryTransaction[]>([]);
+    const [loading,     setLoading]     = useState(true);
+    const [saving,      setSaving]      = useState(false);
 
-    // Add product dialog
-    const [addOpen, setAddOpen] = useState(false);
-    const [newStock, setNewStock] = useState<Partial<StockItem>>({
-        category: "Vegetables", unit: "pack", max: 100, safetyStock: 10, rop: 20, currentStock: 0,
-    });
+    // Search / filter
+    const [search,      setSearch]      = useState("");
+    const [activeTab,   setActiveTab]   = useState("stock");
 
-    // Receive Goods form
-    const [form, setForm] = useState({
-        date:          new Date().toISOString().split("T")[0],
-        productName:   "",
-        supplier:      "",
-        purchaseQty:   "",
-        purchaseUnit:  "lbs",
-        purchasePrice: "",
-        currency:      "CAD",
-        portionSize:   "",
-        portionUnit:   "lbs",
-    });
-    const [receiveSuccess, setReceiveSuccess] = useState(false);
+    // Add to tracking dialog
+    const [addOpen,     setAddOpen]     = useState(false);
+    const [addForm,     setAddForm]     = useState({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
 
-    // Auto-calculated packs
-    const packs =
-        form.purchaseQty && form.portionSize && parseFloat(form.portionSize) > 0
-            ? Math.floor(parseFloat(form.purchaseQty) / parseFloat(form.portionSize))
-            : 0;
+    // Receive goods form
+    const [rcvForm,     setRcvForm]     = useState({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
+    const [rcvResult,   setRcvResult]   = useState<{ stockAdded: number; priceAlert: boolean; priceChangePct: number } | null>(null);
 
-    const filteredStock = stockItems.filter(s =>
-        s.productName.toLowerCase().includes(search.toLowerCase()) ||
-        s.category.toLowerCase().includes(search.toLowerCase())
+    // Waste log form
+    const [wasteForm,   setWasteForm]   = useState({ inventoryItemId: "", ingredientId: "", qty: "", reason: "Spoiled", note: "", date: today() });
+
+    // Stock count state (map id → physical count string)
+    const [countMap,    setCountMap]    = useState<Record<string, string>>({});
+    const [countSaving, setCountSaving] = useState(false);
+
+    // Txn filter
+    const [txnType,     setTxnType]     = useState("all");
+
+    // mounted for charts
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    // Load data
+    const loadData = useCallback(async () => {
+        try {
+            const [inv, ingr, sup, alrt, t] = await Promise.all([
+                inventoryApi.list(),
+                ingredientsApi.list(),
+                suppliersApi.list(),
+                inventoryApi.alerts(),
+                inventoryApi.transactions({ limit: 300 }),
+            ]);
+            setItems(inv);
+            setAllIngr(ingr);
+            setSuppliers(sup);
+            setAlerts(alrt);
+            setTxns(t);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { loadData(); }, [loadData]);
+
+    // Untracked ingredients (not yet in InventoryItem)
+    const trackedIds    = new Set(items.map(i => i.ingredientId));
+    const untrackedIngr = allIngr.filter(i => !trackedIds.has(i.id));
+
+    // Filtered stock table
+    const filteredItems = items.filter(i =>
+        i.ingredient.name.toLowerCase().includes(search.toLowerCase()) ||
+        i.ingredient.groupId?.toLowerCase().includes(search.toLowerCase())
     );
 
-    const criticalCount = stockItems.filter(s => stockStatus(s) === "critical").length;
-    const reorderCount  = stockItems.filter(s => stockStatus(s) === "low").length;
-    const alertCount    = criticalCount + reorderCount;
+    // Waste analytics (from txns)
+    const wasteTxns = txns.filter(t => t.type === "Waste");
+    const wasteByIngr = wasteTxns.reduce<Record<string, { name: string; cost: number }>>((acc, t) => {
+        const name = t.ingredient?.name ?? t.ingredientId;
+        if (!acc[name]) acc[name] = { name, cost: 0 };
+        acc[name].cost += Number(t.qty) * Number(t.costPerUnit ?? 0);
+        return acc;
+    }, {});
+    const top5Waste = Object.values(wasteByIngr).sort((a, b) => b.cost - a.cost).slice(0, 5);
 
-    // ── Receive Goods ──────────────────────────────────────────────────────────
-    function handleReceive() {
-        if (!form.productName || !form.supplier || !form.purchaseQty || !form.portionSize || !form.purchasePrice) return;
+    const wasteByReason = wasteTxns.reduce<Record<string, number>>((acc, t) => {
+        const r = t.reason ?? "Other";
+        acc[r] = (acc[r] ?? 0) + 1;
+        return acc;
+    }, {});
+    const wasteReasonData = Object.entries(wasteByReason).map(([name, value]) => ({ name, value }));
 
-        const receipt: GoodsReceipt = {
-            id:            `RCV-${Date.now()}`,
-            date:          form.date,
-            productName:   form.productName,
-            supplier:      form.supplier,
-            purchaseQty:   parseFloat(form.purchaseQty),
-            purchaseUnit:  form.purchaseUnit,
-            purchasePrice: parseFloat(form.purchasePrice),
-            currency:      form.currency,
-            portionSize:   parseFloat(form.portionSize),
-            portionUnit:   form.portionUnit,
-            packs,
-        };
+    const totalWasteCost = wasteTxns.reduce((s, t) => s + Number(t.qty) * Number(t.costPerUnit ?? 0), 0);
 
-        setReceipts(prev => [receipt, ...prev]);
+    // Counts
+    const critCount = alerts.filter(a => a.status === "critical").length;
+    const lowCount  = alerts.filter(a => a.status === "low").length;
 
-        // Update existing stock or add new
-        setStockItems(prev => {
-            const match = prev.find(
-                s => s.productName.toLowerCase() === form.productName.toLowerCase()
+    // ── Handlers ────────────────────────────────────────────────────────────────
+
+    async function handleAddToTracking() {
+        if (!addForm.ingredientId) return;
+        setSaving(true);
+        try {
+            const item = await inventoryApi.create({
+                ingredientId: addForm.ingredientId,
+                currentStock: 0,
+                parMin:       Number(addForm.parMin || 0),
+                parMax:       Number(addForm.parMax || 0),
+                reorderPoint: Number(addForm.reorderPoint || 0),
+                leadTimeDays: Number(addForm.leadTimeDays || 1),
+            });
+            setItems(prev => [...prev, item]);
+            setAddOpen(false);
+            setAddForm({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
+        } catch (e) { console.error(e); } finally { setSaving(false); }
+    }
+
+    async function handleRemove(id: string) {
+        if (!confirm("Remove this ingredient from inventory tracking?")) return;
+        await inventoryApi.delete(id);
+        setItems(prev => prev.filter(i => i.id !== id));
+    }
+
+    async function handleReceive() {
+        if (!rcvForm.ingredientId || !rcvForm.purchaseQty || !rcvForm.purchasePrice || !rcvForm.date) return;
+        setSaving(true);
+        try {
+            const result = await inventoryApi.receive({
+                ingredientId:  rcvForm.ingredientId,
+                purchaseQty:   Number(rcvForm.purchaseQty),
+                purchasePrice: Number(rcvForm.purchasePrice),
+                date:          rcvForm.date,
+                note:          rcvForm.note || undefined,
+            });
+            setRcvResult({ stockAdded: result.stockAdded, priceAlert: result.priceAlert, priceChangePct: result.priceChangePct });
+            setItems(prev => prev.map(i => i.ingredientId === rcvForm.ingredientId ? result.inventoryItem : i));
+            await loadData(); // refresh alerts + txns
+            setRcvForm({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
+            setTimeout(() => setRcvResult(null), 6000);
+        } catch (e) { console.error(e); } finally { setSaving(false); }
+    }
+
+    async function handleWaste() {
+        if (!wasteForm.inventoryItemId || !wasteForm.qty || !wasteForm.date) return;
+        setSaving(true);
+        try {
+            const item  = items.find(i => i.id === wasteForm.inventoryItemId);
+            const ingr  = item?.ingredient;
+            const cpUnit = ingr
+                ? Number(ingr.purchasePrice) / (Number(ingr.conversionRate) * (Number(ingr.yieldPercent) / 100))
+                : 0;
+
+            await inventoryApi.logTransaction({
+                inventoryItemId: wasteForm.inventoryItemId,
+                ingredientId:    wasteForm.ingredientId,
+                type:            "Waste",
+                qty:             Number(wasteForm.qty),
+                unit:            ingr?.recipeUnit ?? "",
+                costPerUnit:     cpUnit,
+                reason:          wasteForm.reason,
+                note:            wasteForm.note || undefined,
+                date:            wasteForm.date,
+            });
+            await loadData();
+            setWasteForm({ inventoryItemId: "", ingredientId: "", qty: "", reason: "Spoiled", note: "", date: today() });
+        } catch (e) { console.error(e); } finally { setSaving(false); }
+    }
+
+    async function handleStockCount() {
+        if (Object.keys(countMap).length === 0) return;
+        setCountSaving(true);
+        try {
+            await Promise.all(
+                Object.entries(countMap).map(([id, countStr]) => {
+                    const item = items.find(i => i.id === id);
+                    if (!item || countStr === "") return Promise.resolve();
+                    return inventoryApi.logTransaction({
+                        inventoryItemId: id,
+                        ingredientId:    item.ingredientId,
+                        type:            "Stocktake",
+                        qty:             Number(countStr),
+                        unit:            item.ingredient.recipeUnit,
+                        date:            today(),
+                        note:            "Physical count",
+                    });
+                })
             );
-            if (match) {
-                return prev.map(s =>
-                    s.id === match.id ? { ...s, currentStock: s.currentStock + packs } : s
-                );
-            }
-            return [...prev, {
-                id:           `S${Date.now()}`,
-                productName:  form.productName,
-                category:     "Other",
-                currentStock: packs,
-                unit:         "pack",
-                max:          packs * 2,
-                safetyStock:  Math.ceil(packs * 0.2),
-                rop:          Math.ceil(packs * 0.3),
-            }];
-        });
-
-        setReceiveSuccess(true);
-        setForm({
-            date:          new Date().toISOString().split("T")[0],
-            productName:   "",
-            supplier:      "",
-            purchaseQty:   "",
-            purchaseUnit:  "lbs",
-            purchasePrice: "",
-            currency:      "CAD",
-            portionSize:   "",
-            portionUnit:   "lbs",
-        });
-        setTimeout(() => setReceiveSuccess(false), 4000);
+            await loadData();
+            setCountMap({});
+        } catch (e) { console.error(e); } finally { setCountSaving(false); }
     }
 
-    // ── Inline edit ────────────────────────────────────────────────────────────
-    function startEdit(item: StockItem) { setEditingId(item.id); setEditRow({ ...item }); }
-    function saveEdit() {
-        setStockItems(prev => prev.map(s => s.id === editingId ? { ...s, ...editRow } as StockItem : s));
-        setEditingId(null);
-    }
-    function cancelEdit() { setEditingId(null); }
+    // Receive goods — selected ingredient details
+    const rcvIngredient = rcvForm.ingredientId
+        ? (items.find(i => i.ingredientId === rcvForm.ingredientId)?.ingredient ?? null)
+        : null;
 
-    // ─── Render ────────────────────────────────────────────────────────────────
+    if (loading) return (
+        <div className="flex justify-center items-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+    );
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
 
-            {/* Header */}
+            {/* ── Header ── */}
             <div className="flex flex-wrap gap-3 justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Inventory</h2>
-                    <p className="text-muted-foreground">Stock management and goods receiving.</p>
+                    <p className="text-muted-foreground">Live stock tracking, waste logging & stocktake.</p>
                 </div>
+                <Button onClick={() => setAddOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Track Ingredient
+                </Button>
             </div>
 
-            {/* Alert Banner */}
-            {alertCount > 0 && (
+            {/* ── Alert Banner ── */}
+            {(critCount + lowCount) > 0 && (
                 <Alert variant="destructive" className="bg-destructive/10 border-destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Stock Alert</AlertTitle>
+                    <AlertTitle>Stock Alerts</AlertTitle>
                     <AlertDescription>
-                        {criticalCount > 0 && <span><strong>{criticalCount}</strong> item(s) below Safety Stock. </span>}
-                        {reorderCount  > 0 && <span><strong>{reorderCount}</strong> item(s) at Reorder Point.</span>}
+                        {critCount > 0 && <span><strong>{critCount}</strong> item(s) below safety stock. </span>}
+                        {lowCount  > 0 && <span><strong>{lowCount}</strong> item(s) at reorder point.</span>}
                     </AlertDescription>
                 </Alert>
             )}
 
-            <Tabs defaultValue="stock">
+            {/* ── Stat Cards ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
+                    <Warehouse className="h-7 w-7 text-primary opacity-70 shrink-0" />
+                    <div>
+                        <p className="text-2xl font-bold text-primary">{items.length}</p>
+                        <p className="text-xs text-muted-foreground">Tracked Items</p>
+                    </div>
+                </div>
+                <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
+                    <CheckCircle2 className="h-7 w-7 text-green-500 opacity-70 shrink-0" />
+                    <div>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            {items.filter(i => stockStatus(i) === "ok").length}
+                        </p>
+                        <p className="text-xs text-muted-foreground">OK</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => setActiveTab("stock")}
+                    className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3 text-left hover:border-yellow-400"
+                >
+                    <AlertTriangle className="h-7 w-7 text-yellow-500 opacity-70 shrink-0" />
+                    <div>
+                        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{lowCount}</p>
+                        <p className="text-xs text-muted-foreground">Reorder</p>
+                    </div>
+                </button>
+                <button
+                    onClick={() => setActiveTab("stock")}
+                    className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3 text-left hover:border-red-400"
+                >
+                    <AlertCircle className="h-7 w-7 text-red-500 opacity-70 shrink-0" />
+                    <div>
+                        <p className="text-2xl font-bold text-red-600 dark:text-red-400">{critCount}</p>
+                        <p className="text-xs text-muted-foreground">Critical</p>
+                    </div>
+                </button>
+            </div>
+
+            {/* ── Tabs ── */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <div className="overflow-x-auto pb-1">
-                <TabsList className="w-full sm:w-auto">
-                    <TabsTrigger value="stock" className="flex-1 sm:flex-none">
-                        <Warehouse className="mr-2 h-4 w-4" /> Stock Levels
-                    </TabsTrigger>
-                    <TabsTrigger value="receive" className="flex-1 sm:flex-none">
-                        <PackagePlus className="mr-2 h-4 w-4" /> Receive Goods
-                    </TabsTrigger>
-                    <TabsTrigger value="history" className="flex-1 sm:flex-none">
-                        <History className="mr-2 h-4 w-4" /> Receiving History
-                    </TabsTrigger>
-                </TabsList>
+                    <TabsList className="w-max sm:w-auto">
+                        <TabsTrigger value="stock"     className="flex-1 sm:flex-none"><Warehouse    className="mr-1.5 h-4 w-4" />Stock Levels</TabsTrigger>
+                        <TabsTrigger value="receive"   className="flex-1 sm:flex-none"><PackagePlus  className="mr-1.5 h-4 w-4" />Receive Goods</TabsTrigger>
+                        <TabsTrigger value="waste"     className="flex-1 sm:flex-none"><TrendingDown className="mr-1.5 h-4 w-4" />Waste Log</TabsTrigger>
+                        <TabsTrigger value="stocktake" className="flex-1 sm:flex-none"><ClipboardList className="mr-1.5 h-4 w-4" />Stock Count</TabsTrigger>
+                        <TabsTrigger value="history"   className="flex-1 sm:flex-none"><History      className="mr-1.5 h-4 w-4" />History</TabsTrigger>
+                    </TabsList>
                 </div>
 
-                {/* ── STOCK LEVELS ─────────────────────────────────────────────── */}
+                {/* ══ STOCK LEVELS ═══════════════════════════════════════════════ */}
                 <TabsContent value="stock" className="space-y-4 mt-4">
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="relative max-w-sm flex-1">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search product or category..."
-                                className="pl-8"
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                            />
-                        </div>
-                        <Button onClick={() => setAddOpen(true)}>
-                            <PackagePlus className="mr-2 h-4 w-4" /> Add Product
-                        </Button>
+                    <div className="relative max-w-sm">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search ingredient..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
 
-                    <div className="border rounded-md overflow-x-auto">
+                    <div className="border rounded-lg overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Product Name</TableHead>
-                                    <TableHead className="hidden sm:table-cell">Category</TableHead>
-                                    <TableHead className="text-right">Stock</TableHead>
-                                    <TableHead className="text-right hidden md:table-cell">Max</TableHead>
-                                    <TableHead className="text-right hidden md:table-cell">Safety</TableHead>
-                                    <TableHead className="text-right hidden md:table-cell">ROP</TableHead>
+                                    <TableHead>Ingredient</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Unit</TableHead>
+                                    <TableHead className="text-right">Current Stock</TableHead>
+                                    <TableHead className="hidden md:table-cell">Level</TableHead>
+                                    <TableHead className="hidden lg:table-cell text-right">PAR Min / ROP / Max</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
+                                    <TableHead className="w-10"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredStock.map(item => {
-                                    const status    = stockStatus(item);
-                                    const isEditing = editingId === item.id;
+                                {filteredItems.map(item => {
+                                    const status = stockStatus(item);
                                     return (
-                                        <TableRow
-                                            key={item.id}
-                                            className={
-                                                status === "critical" ? "bg-destructive/5" :
-                                                status === "low"      ? "bg-yellow-500/5" : ""
-                                            }
-                                        >
-                                                            <TableCell className="font-medium">
-                                                {isEditing
-                                                    ? <Input value={editRow.productName ?? ""} onChange={e => setEditRow(r => ({ ...r, productName: e.target.value }))} className="h-8 w-36" />
-                                                    : <>
-                                                        {item.productName}
-                                                        <span className="sm:hidden block text-xs text-muted-foreground">{item.category}</span>
-                                                      </>}
+                                        <TableRow key={item.id} className={status === "critical" ? "bg-destructive/5" : status === "low" ? "bg-yellow-500/5" : ""}>
+                                            <TableCell className="font-medium">
+                                                {item.ingredient.name}
+                                                <span className="sm:hidden block text-xs text-muted-foreground">{item.ingredient.recipeUnit}</span>
                                             </TableCell>
-                                            <TableCell className="hidden sm:table-cell">
-                                                {isEditing
-                                                    ? (
-                                                        <Select value={editRow.category} onValueChange={v => setEditRow(r => ({ ...r, category: v }))}>
-                                                            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>
-                                                                {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    )
-                                                    : <span className="text-muted-foreground text-sm">{item.category}</span>}
+                                            <TableCell className="hidden sm:table-cell text-muted-foreground">{item.ingredient.recipeUnit}</TableCell>
+                                            <TableCell className="text-right tabular-nums font-semibold">
+                                                {Number(item.currentStock).toFixed(1)}
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                {isEditing
-                                                    ? <Input type="number" value={editRow.currentStock ?? ""} onChange={e => setEditRow(r => ({ ...r, currentStock: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
-                                                    : (
-                                                        <>
-                                                            <span className={`font-semibold ${status === "critical" ? "text-destructive" : status === "low" ? "text-yellow-600" : ""}`}>
-                                                                {item.currentStock}
-                                                            </span>
-                                                            <span className="text-muted-foreground text-xs ml-1">{item.unit}</span>
-                                                        </>
-                                                    )}
+                                            <TableCell className="hidden md:table-cell">
+                                                <StockBar item={item} />
                                             </TableCell>
-                                            <TableCell className="text-right hidden md:table-cell">
-                                                {isEditing
-                                                    ? <Input type="number" value={editRow.max ?? ""} onChange={e => setEditRow(r => ({ ...r, max: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
-                                                    : item.max}
+                                            <TableCell className="hidden lg:table-cell text-right text-xs text-muted-foreground tabular-nums">
+                                                {Number(item.parMin).toFixed(0)} / {Number(item.reorderPoint).toFixed(0)} / {Number(item.parMax).toFixed(0)}
                                             </TableCell>
-                                            <TableCell className="text-right hidden md:table-cell">
-                                                {isEditing
-                                                    ? <Input type="number" value={editRow.safetyStock ?? ""} onChange={e => setEditRow(r => ({ ...r, safetyStock: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
-                                                    : item.safetyStock}
-                                            </TableCell>
-                                            <TableCell className="text-right hidden md:table-cell">
-                                                {isEditing
-                                                    ? <Input type="number" value={editRow.rop ?? ""} onChange={e => setEditRow(r => ({ ...r, rop: parseFloat(e.target.value) }))} className="h-8 w-20 text-right ml-auto" />
-                                                    : item.rop}
-                                            </TableCell>
+                                            <TableCell><StatusBadge status={status} /></TableCell>
                                             <TableCell>
-                                                <StatusBadge status={status} />
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {isEditing
-                                                    ? (
-                                                        <div className="flex justify-end gap-1">
-                                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600" onClick={saveEdit}>
-                                                                <Check className="h-4 w-4" />
-                                                            </Button>
-                                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={cancelEdit}>
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-                                                    )
-                                                    : (
-                                                        <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
-                                                            <Pencil className="mr-1 h-3 w-3" /> Edit
-                                                        </Button>
-                                                    )}
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleRemove(item.id)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     );
                                 })}
-                                {filteredStock.length === 0 && (
+                                {filteredItems.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                                            No stock items found.
+                                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                                            {items.length === 0 ? 'No ingredients tracked yet. Click "Track Ingredient" to begin.' : "No results match your search."}
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -369,262 +438,503 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-destructive inline-block" /> Critical — at or below Safety Stock</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> Reorder — at or below ROP</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-600 inline-block" /> OK</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Critical — at or below Safety Stock (PAR Min)</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> Reorder — at or below Reorder Point</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> OK</span>
                     </div>
                 </TabsContent>
 
-                {/* ── RECEIVE GOODS ─────────────────────────────────────────────── */}
+                {/* ══ RECEIVE GOODS ══════════════════════════════════════════════ */}
                 <TabsContent value="receive" className="mt-4">
-                    <Card className="max-w-2xl">
-                        <CardHeader>
-                            <CardTitle className="text-lg">Goods Receipt Entry</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Goods Receipt</CardTitle>
+                                <CardDescription>Record incoming stock. Stock is auto-converted to recipe units.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {rcvResult && (
+                                    <Alert className={rcvResult.priceAlert ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-950/30" : "bg-green-50 border-green-400 dark:bg-green-950/30"}>
+                                        {rcvResult.priceAlert ? <AlertTriangle className="h-4 w-4 text-yellow-600" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                                        <AlertTitle>{rcvResult.priceAlert ? `Price Alert: +${rcvResult.priceChangePct}% increase` : "Receipt Confirmed"}</AlertTitle>
+                                        <AlertDescription>
+                                            {rcvResult.stockAdded.toFixed(2)} {rcvIngredient?.recipeUnit ?? ""} added to stock.
+                                            {rcvResult.priceAlert && " Consider switching supplier or updating menu prices."}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
 
-                            {receiveSuccess && (
-                                <Alert className="bg-green-500/10 border-green-500">
-                                    <Check className="h-4 w-4 text-green-600" />
-                                    <AlertTitle className="text-green-700">Received Successfully</AlertTitle>
-                                    <AlertDescription className="text-green-700">
-                                        Stock has been updated.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <Label>Date Received</Label>
-                                    <Input
-                                        type="date"
-                                        value={form.date}
-                                        onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Product Name</Label>
-                                    <Input
-                                        placeholder="e.g. Bean Sprouts"
-                                        value={form.productName}
-                                        onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label>Supplier</Label>
-                                <Select value={form.supplier} onValueChange={v => setForm(f => ({ ...f, supplier: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select supplier..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {SUPPLIERS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label>Purchase Quantity</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        type="number" min={0} step={0.01}
-                                        placeholder="25"
-                                        value={form.purchaseQty}
-                                        onChange={e => setForm(f => ({ ...f, purchaseQty: e.target.value }))}
-                                        className="flex-1"
-                                    />
-                                    <Select value={form.purchaseUnit} onValueChange={v => setForm(f => ({ ...f, purchaseUnit: v }))}>
-                                        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                                <div className="space-y-1.5">
+                                    <Label>Ingredient <span className="text-destructive">*</span></Label>
+                                    <Select value={rcvForm.ingredientId} onValueChange={v => setRcvForm(f => ({ ...f, ingredientId: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select tracked ingredient..." /></SelectTrigger>
                                         <SelectContent>
-                                            {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                            {items.map(i => (
+                                                <SelectItem key={i.ingredientId} value={i.ingredientId}>
+                                                    {i.ingredient.name} <span className="text-muted-foreground ml-1">({i.ingredient.purchaseUnit})</span>
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                            </div>
 
-                            <div className="space-y-1">
-                                <Label>Purchase Price (total)</Label>
-                                <div className="flex gap-2">
-                                    <Select value={form.currency} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
-                                        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                    <Input
-                                        type="number" min={0} step={0.01}
-                                        placeholder="25.00"
-                                        value={form.purchasePrice}
-                                        onChange={e => setForm(f => ({ ...f, purchasePrice: e.target.value }))}
-                                        className="flex-1"
-                                    />
-                                </div>
-                            </div>
+                                {rcvIngredient && (
+                                    <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                                        <p><strong>Purchase unit:</strong> {rcvIngredient.purchaseUnit} → <strong>Recipe unit:</strong> {rcvIngredient.recipeUnit}</p>
+                                        <p><strong>Conversion rate:</strong> {Number(rcvIngredient.conversionRate)} · <strong>Yield:</strong> {Number(rcvIngredient.yieldPercent)}%</p>
+                                    </div>
+                                )}
 
-                            <div className="space-y-1">
-                                <Label>Portion Size per Pack</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        type="number" min={0} step={0.01}
-                                        placeholder="0.5"
-                                        value={form.portionSize}
-                                        onChange={e => setForm(f => ({ ...f, portionSize: e.target.value }))}
-                                        className="flex-1"
-                                    />
-                                    <Select value={form.portionUnit} onValueChange={v => setForm(f => ({ ...f, portionUnit: v }))}>
-                                        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Packs = Purchase Qty ÷ Portion Size (rounded down)
-                                </p>
-                            </div>
-
-                            {/* Live Summary */}
-                            {packs > 0 && (
-                                <div className="rounded-lg bg-muted/50 border p-4 space-y-3">
-                                    <p className="font-semibold text-sm">Receipt Summary</p>
-                                    <div className="grid grid-cols-2 gap-y-1.5 text-sm">
-                                        <span className="text-muted-foreground">Product</span>
-                                        <span className="font-medium">{form.productName || "—"}</span>
-                                        <span className="text-muted-foreground">Supplier</span>
-                                        <span>{form.supplier || "—"}</span>
-                                        <span className="text-muted-foreground">Date</span>
-                                        <span>{form.date}</span>
-                                        <span className="text-muted-foreground">Purchased</span>
-                                        <span>{form.purchaseQty} {form.purchaseUnit} @ {form.currency} {form.purchasePrice}</span>
-                                        <span className="text-muted-foreground">Portion</span>
-                                        <span>{form.portionSize} {form.portionUnit} / pack</span>
-                                        <span className="text-muted-foreground">Packs to receive</span>
-                                        <span className="text-primary font-bold text-base">{packs} packs</span>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label>Qty Received <span className="text-destructive">*</span></Label>
+                                        <div className="flex items-center gap-1.5">
+                                            <Input type="number" min={0} step={0.01} placeholder="25" value={rcvForm.purchaseQty} onChange={e => setRcvForm(f => ({ ...f, purchaseQty: e.target.value }))} />
+                                            <span className="text-sm text-muted-foreground shrink-0">{rcvIngredient?.purchaseUnit ?? "units"}</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Total Price <span className="text-destructive">*</span></Label>
+                                        <Input type="number" min={0} step={0.01} placeholder="0.00" value={rcvForm.purchasePrice} onChange={e => setRcvForm(f => ({ ...f, purchasePrice: e.target.value }))} />
                                     </div>
                                 </div>
-                            )}
 
-                            <div className="flex justify-end">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label>Date <span className="text-destructive">*</span></Label>
+                                        <Input type="date" value={rcvForm.date} onChange={e => setRcvForm(f => ({ ...f, date: e.target.value }))} />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Note</Label>
+                                        <Input placeholder="optional" value={rcvForm.note} onChange={e => setRcvForm(f => ({ ...f, note: e.target.value }))} />
+                                    </div>
+                                </div>
+
+                                {rcvIngredient && rcvForm.purchaseQty && (
+                                    <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-sm">
+                                        <p className="text-muted-foreground text-xs mb-1">Will add to stock:</p>
+                                        <p className="font-bold text-primary">
+                                            {(Number(rcvForm.purchaseQty) * Number(rcvIngredient.conversionRate) * (Number(rcvIngredient.yieldPercent) / 100)).toFixed(2)} {rcvIngredient.recipeUnit}
+                                        </p>
+                                    </div>
+                                )}
+
                                 <Button
+                                    className="w-full"
                                     onClick={handleReceive}
-                                    disabled={packs === 0 || !form.productName || !form.supplier || !form.purchasePrice}
+                                    disabled={saving || !rcvForm.ingredientId || !rcvForm.purchaseQty || !rcvForm.purchasePrice}
                                 >
+                                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                     <PackagePlus className="mr-2 h-4 w-4" /> Confirm Receipt
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        {/* Suggested reorders from alerts */}
+                        {alerts.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <AlertTriangle className="h-5 w-5 text-yellow-500" /> Items to Reorder
+                                    </CardTitle>
+                                    <CardDescription>Click an ingredient to pre-fill the receipt form</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-2">
+                                        {alerts.map(a => (
+                                            <button
+                                                key={a.id}
+                                                onClick={() => setRcvForm(f => ({ ...f, ingredientId: a.ingredientId }))}
+                                                className={`w-full text-left rounded-lg border px-3 py-2 text-sm flex justify-between items-center hover:border-primary/40 transition-colors ${rcvForm.ingredientId === a.ingredientId ? "border-primary/60 bg-primary/5" : ""}`}
+                                            >
+                                                <span className="font-medium">{a.ingredient.name}</span>
+                                                <span className="flex items-center gap-2">
+                                                    <StatusBadge status={a.status} />
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {Number(a.currentStock).toFixed(1)} / {Number(a.parMax).toFixed(1)} {a.ingredient.recipeUnit}
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                </TabsContent>
+
+                {/* ══ WASTE LOG ═══════════════════════════════════════════════════ */}
+                <TabsContent value="waste" className="mt-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* Entry form */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Log Waste</CardTitle>
+                                <CardDescription>Record spoilage, overcooking, or any ingredient loss.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <Label>Ingredient <span className="text-destructive">*</span></Label>
+                                    <Select
+                                        value={wasteForm.inventoryItemId}
+                                        onValueChange={v => {
+                                            const item = items.find(i => i.id === v);
+                                            setWasteForm(f => ({ ...f, inventoryItemId: v, ingredientId: item?.ingredientId ?? "" }));
+                                        }}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="Select ingredient..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {items.map(i => (
+                                                <SelectItem key={i.id} value={i.id}>
+                                                    {i.ingredient.name} — {Number(i.currentStock).toFixed(1)} {i.ingredient.recipeUnit} in stock
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label>Qty Wasted <span className="text-destructive">*</span></Label>
+                                        <div className="flex items-center gap-1.5">
+                                            <Input type="number" min={0} step={0.01} placeholder="0" value={wasteForm.qty} onChange={e => setWasteForm(f => ({ ...f, qty: e.target.value }))} />
+                                            <span className="text-sm text-muted-foreground shrink-0">
+                                                {items.find(i => i.id === wasteForm.inventoryItemId)?.ingredient.recipeUnit ?? ""}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Reason</Label>
+                                        <Select value={wasteForm.reason} onValueChange={v => setWasteForm(f => ({ ...f, reason: v }))}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                {WASTE_REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label>Date</Label>
+                                        <Input type="date" value={wasteForm.date} onChange={e => setWasteForm(f => ({ ...f, date: e.target.value }))} />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Note</Label>
+                                        <Input placeholder="optional" value={wasteForm.note} onChange={e => setWasteForm(f => ({ ...f, note: e.target.value }))} />
+                                    </div>
+                                </div>
+
+                                <Button
+                                    variant="destructive"
+                                    className="w-full"
+                                    onClick={handleWaste}
+                                    disabled={saving || !wasteForm.inventoryItemId || !wasteForm.qty}
+                                >
+                                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    <TrendingDown className="mr-2 h-4 w-4" /> Log Waste
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        {/* Waste summary */}
+                        <div className="space-y-4">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <BarChart2 className="h-5 w-5 text-primary" /> Waste Summary
+                                    </CardTitle>
+                                    <CardDescription>Total waste cost tracked: <strong>{format(totalWasteCost)}</strong></CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    {top5Waste.length > 0 ? (
+                                        <>
+                                            <div>
+                                                <p className="text-xs font-medium text-muted-foreground mb-2">Top 5 Waste Items (by cost)</p>
+                                                {mounted && (
+                                                    <ResponsiveContainer width="100%" height={160}>
+                                                        <BarChart data={top5Waste} layout="vertical" margin={{ left: 10, right: 20 }}>
+                                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                                            <XAxis type="number" tickFormatter={v => format(Number(v), 0)} tick={{ fontSize: 11 }} />
+                                                            <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+                                                            <Tooltip formatter={v => [format(Number(v)), "Cost"]} />
+                                                            <Bar dataKey="cost" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={16} />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                )}
+                                            </div>
+
+                                            {wasteReasonData.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-2">Waste by Reason</p>
+                                                    {mounted && (
+                                                        <ResponsiveContainer width="100%" height={160}>
+                                                            <PieChart>
+                                                                <Pie data={wasteReasonData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
+                                                                    {wasteReasonData.map((_, i) => (
+                                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                                    ))}
+                                                                </Pie>
+                                                                <Tooltip />
+                                                                <Legend />
+                                                            </PieChart>
+                                                        </ResponsiveContainer>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground text-center py-4">No waste logged yet.</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
+                    {/* Recent waste log table */}
+                    {wasteTxns.length > 0 && (
+                        <Card className="mt-4">
+                            <CardHeader>
+                                <CardTitle>Recent Waste Entries</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="border rounded-md overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Date</TableHead>
+                                                <TableHead>Ingredient</TableHead>
+                                                <TableHead className="text-right">Qty</TableHead>
+                                                <TableHead>Reason</TableHead>
+                                                <TableHead className="text-right hidden sm:table-cell">Est. Cost</TableHead>
+                                                <TableHead className="hidden md:table-cell">Note</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {wasteTxns.slice(0, 20).map(t => (
+                                                <TableRow key={t.id}>
+                                                    <TableCell className="text-sm">{t.date}</TableCell>
+                                                    <TableCell className="font-medium">{t.ingredient?.name ?? "—"}</TableCell>
+                                                    <TableCell className="text-right tabular-nums">{Number(t.qty).toFixed(2)} {t.unit}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="text-xs">{t.reason ?? "—"}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right hidden sm:table-cell tabular-nums">
+                                                        {format(Number(t.qty) * Number(t.costPerUnit ?? 0))}
+                                                    </TableCell>
+                                                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{t.note ?? "—"}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </TabsContent>
+
+                {/* ══ STOCK COUNT (STOCKTAKE) ══════════════════════════════════════ */}
+                <TabsContent value="stocktake" className="mt-4 space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Physical Stock Count</CardTitle>
+                            <CardDescription>
+                                Enter the physical count for each ingredient. The system will update stock to match and log a Stocktake transaction.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="border rounded-md overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Ingredient</TableHead>
+                                            <TableHead className="text-right hidden sm:table-cell">System Stock</TableHead>
+                                            <TableHead className="text-right">Physical Count</TableHead>
+                                            <TableHead className="text-right hidden md:table-cell">Variance</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {items.map(item => {
+                                            const physical  = countMap[item.id];
+                                            const variance  = physical !== undefined && physical !== ""
+                                                ? Number(physical) - Number(item.currentStock)
+                                                : null;
+                                            return (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="font-medium">
+                                                        {item.ingredient.name}
+                                                        <span className="block text-xs text-muted-foreground">{item.ingredient.recipeUnit}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right hidden sm:table-cell tabular-nums">
+                                                        {Number(item.currentStock).toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Input
+                                                            type="number" min={0} step={0.01}
+                                                            placeholder={Number(item.currentStock).toFixed(2)}
+                                                            value={countMap[item.id] ?? ""}
+                                                            onChange={e => setCountMap(m => ({ ...m, [item.id]: e.target.value }))}
+                                                            className="w-28 ml-auto text-right h-8"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-right hidden md:table-cell tabular-nums">
+                                                        {variance !== null && (
+                                                            <span className={`font-medium ${variance < 0 ? "text-red-600" : variance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                                                                {variance > 0 ? "+" : ""}{variance.toFixed(2)}
+                                                            </span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                        {items.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                    No ingredients tracked yet.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            <div className="flex justify-end mt-4">
+                                <Button
+                                    onClick={handleStockCount}
+                                    disabled={countSaving || Object.values(countMap).every(v => v === "")}
+                                >
+                                    {countSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    <ClipboardList className="mr-2 h-4 w-4" /> Save Stock Count
                                 </Button>
                             </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* ── RECEIVING HISTORY ─────────────────────────────────────────── */}
-                <TabsContent value="history" className="mt-4">
-                    <div className="border rounded-md overflow-x-auto">
+                {/* ══ TRANSACTION HISTORY ═════════════════════════════════════════ */}
+                <TabsContent value="history" className="mt-4 space-y-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <Select value={txnType} onValueChange={setTxnType}>
+                            <SelectTrigger className="w-40"><SelectValue placeholder="All types" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Types</SelectItem>
+                                {["In", "Out", "Waste", "Adjust", "Stocktake"].map(t => (
+                                    <SelectItem key={t} value={t}>{TXN_CONFIG[t]?.label ?? t}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                            {txns.filter(t => txnType === "all" || t.type === txnType).length} records
+                        </p>
+                    </div>
+
+                    <div className="border rounded-lg overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Receipt #</TableHead>
                                     <TableHead>Date</TableHead>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>Supplier</TableHead>
-                                    <TableHead>Qty Purchased</TableHead>
-                                    <TableHead>Price</TableHead>
-                                    <TableHead>Portion / Pack</TableHead>
-                                    <TableHead className="text-right">Packs</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Ingredient</TableHead>
+                                    <TableHead className="text-right">Qty</TableHead>
+                                    <TableHead className="hidden sm:table-cell text-right">Unit Cost</TableHead>
+                                    <TableHead className="hidden md:table-cell">Reason / Note</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {receipts.length === 0
-                                    ? (
-                                        <TableRow>
-                                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                                                No receiving records yet. Use &quot;Receive Goods&quot; tab to log incoming stock.
+                                {txns.filter(t => txnType === "all" || t.type === txnType).slice(0, 100).map(t => {
+                                    const cfg  = TXN_CONFIG[t.type] ?? { label: t.type, badge: "", sign: "?" };
+                                    return (
+                                        <TableRow key={t.id}>
+                                            <TableCell className="text-sm text-muted-foreground">{t.date}</TableCell>
+                                            <TableCell>
+                                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${cfg.badge}`}>
+                                                    {cfg.label}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="font-medium">{t.ingredient?.name ?? "—"}</TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                <span className={t.type === "In" ? "text-green-600" : t.type === "Out" || t.type === "Waste" ? "text-red-600" : ""}>
+                                                    {cfg.sign}{Number(t.qty).toFixed(2)}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground ml-1">{t.unit}</span>
+                                            </TableCell>
+                                            <TableCell className="hidden sm:table-cell text-right tabular-nums text-muted-foreground text-sm">
+                                                {t.costPerUnit != null ? format(Number(t.costPerUnit)) : "—"}
+                                            </TableCell>
+                                            <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                                                {t.reason ? <Badge variant="outline" className="text-xs mr-1">{t.reason}</Badge> : null}
+                                                {t.note ?? ""}
                                             </TableCell>
                                         </TableRow>
-                                    )
-                                    : receipts.map(r => (
-                                        <TableRow key={r.id}>
-                                            <TableCell className="text-xs text-muted-foreground font-mono">{r.id}</TableCell>
-                                            <TableCell>{r.date}</TableCell>
-                                            <TableCell className="font-medium">{r.productName}</TableCell>
-                                            <TableCell className="text-muted-foreground">{r.supplier}</TableCell>
-                                            <TableCell>{r.purchaseQty} {r.purchaseUnit}</TableCell>
-                                            <TableCell>{r.currency} {r.purchasePrice.toFixed(2)}</TableCell>
-                                            <TableCell>{r.portionSize} {r.portionUnit}</TableCell>
-                                            <TableCell className="text-right font-semibold text-primary">{r.packs}</TableCell>
-                                        </TableRow>
-                                    ))
-                                }
+                                    );
+                                })}
+                                {txns.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                                            No transactions yet. Receive goods or log waste to see history.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                     </div>
                 </TabsContent>
             </Tabs>
 
-            {/* ── ADD PRODUCT DIALOG ─────────────────────────────────────────────── */}
+            {/* ══ ADD TO TRACKING DIALOG ════════════════════════════════════════ */}
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Add New Product to Stock</DialogTitle>
-                        <DialogDescription>
-                            Set stock parameters. You can edit these later inline.
-                        </DialogDescription>
+                <DialogContent className="w-full sm:max-w-md max-h-[92dvh] flex flex-col p-0 gap-0">
+                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+                        <DialogTitle>Track Ingredient</DialogTitle>
+                        <DialogDescription>Add an ingredient to live inventory tracking and set PAR levels.</DialogDescription>
                     </DialogHeader>
-                    <div className="grid grid-cols-2 gap-3 py-2">
-                        <div className="col-span-2 space-y-1">
-                            <Label>Product Name</Label>
-                            <Input
-                                value={newStock.productName ?? ""}
-                                onChange={e => setNewStock(s => ({ ...s, productName: e.target.value }))}
-                                placeholder="e.g. Bean Sprouts"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>Category</Label>
-                            <Select value={newStock.category} onValueChange={v => setNewStock(s => ({ ...s, category: v }))}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                        <div className="space-y-1.5">
+                            <Label>Ingredient <span className="text-destructive">*</span></Label>
+                            <Select value={addForm.ingredientId} onValueChange={v => setAddForm(f => ({ ...f, ingredientId: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select ingredient..." /></SelectTrigger>
                                 <SelectContent>
-                                    {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                    {untrackedIngr.length === 0
+                                        ? <SelectItem value="_none" disabled>All ingredients are already tracked</SelectItem>
+                                        : untrackedIngr.map(i => (
+                                            <SelectItem key={i.id} value={i.id}>{i.name} <span className="text-muted-foreground">({i.recipeUnit})</span></SelectItem>
+                                        ))
+                                    }
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-1">
-                            <Label>Unit</Label>
-                            <Select value={newStock.unit} onValueChange={v => setNewStock(s => ({ ...s, unit: v }))}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {["pack", "kg", "lbs", "L", "piece", "bag"].map(u =>
-                                        <SelectItem key={u} value={u}>{u}</SelectItem>
-                                    )}
-                                </SelectContent>
-                            </Select>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label>Safety Stock (PAR Min)</Label>
+                                <Input type="number" min={0} placeholder="e.g. 500" value={addForm.parMin} onChange={e => setAddForm(f => ({ ...f, parMin: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Reorder Point</Label>
+                                <Input type="number" min={0} placeholder="e.g. 1000" value={addForm.reorderPoint} onChange={e => setAddForm(f => ({ ...f, reorderPoint: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Max Stock (PAR Max)</Label>
+                                <Input type="number" min={0} placeholder="e.g. 5000" value={addForm.parMax} onChange={e => setAddForm(f => ({ ...f, parMax: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Lead Time (days)</Label>
+                                <Input type="number" min={1} placeholder="1" value={addForm.leadTimeDays} onChange={e => setAddForm(f => ({ ...f, leadTimeDays: e.target.value }))} />
+                            </div>
                         </div>
-                        <div className="space-y-1">
-                            <Label>Max Stock</Label>
-                            <Input type="number" value={newStock.max ?? ""} onChange={e => setNewStock(s => ({ ...s, max: parseFloat(e.target.value) }))} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>Safety Stock</Label>
-                            <Input type="number" value={newStock.safetyStock ?? ""} onChange={e => setNewStock(s => ({ ...s, safetyStock: parseFloat(e.target.value) }))} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>ROP (Reorder Point)</Label>
-                            <Input type="number" value={newStock.rop ?? ""} onChange={e => setNewStock(s => ({ ...s, rop: parseFloat(e.target.value) }))} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>Current Stock</Label>
-                            <Input type="number" value={newStock.currentStock ?? ""} onChange={e => setNewStock(s => ({ ...s, currentStock: parseFloat(e.target.value) }))} />
-                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                            Stock levels are in the ingredient&apos;s recipe unit. You can update PAR levels later by editing them inline.
+                        </p>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                        <Button onClick={() => {
-                            if (!newStock.productName) return;
-                            setStockItems(prev => [...prev, { ...newStock, id: `S${Date.now()}` } as StockItem]);
-                            setAddOpen(false);
-                            setNewStock({ category: "Vegetables", unit: "pack", max: 100, safetyStock: 10, rop: 20, currentStock: 0 });
-                        }}>
-                            Add Product
+
+                    <div className="px-5 py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                        <Button variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</Button>
+                        <Button onClick={handleAddToTracking} disabled={saving || !addForm.ingredientId}>
+                            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Start Tracking
                         </Button>
-                    </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

@@ -60,6 +60,7 @@ export const recipesApi = {
     update: (id: string, data: Partial<Recipe>) =>
         apiFetch<RecipeWithIngredients>(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/recipes/${id}`, { method: "DELETE" }),
+    duplicate: (id: string) => apiFetch<RecipeWithIngredients>(`/recipes/${id}/duplicate`, { method: "POST" }),
     getIngredients: (id: string) => apiFetch<RecipeIngredientRow[]>(`/recipes/${id}/ingredients`),
     setIngredients: (id: string, rows: { ingredientId: string; quantity: number }[]) =>
         apiFetch<RecipeIngredientRow[]>(`/recipes/${id}/ingredients`, { method: "PUT", body: JSON.stringify(rows) }),

@@ -14,7 +14,7 @@ import {
     Dialog, DialogContent, DialogDescription,
     DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, ChefHat, Clock, Edit, Trash2, Loader2, Tag, X, Pencil, Settings2, UtensilsCrossed, Bike } from "lucide-react";
+import { Plus, Search, ChefHat, Clock, Edit, Trash2, Loader2, Tag, X, Pencil, Settings2, UtensilsCrossed, Bike, Copy } from "lucide-react";
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
 
@@ -48,6 +48,7 @@ export default function RecipesPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [catFilter, setCatFilter] = useState("all");
     const [deleteTarget, setDeleteTarget] = useState<RecipeWithIngredients | null>(null);
+    const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
     const [manageOpen, setManageOpen] = useState(false);
     const [newCatName, setNewCatName] = useState("");
@@ -73,6 +74,23 @@ export default function RecipesPage() {
         const matchCat = catFilter === "all" || r.category === catFilter;
         return matchSearch && matchCat;
     });
+
+    const handleDuplicate = async (recipe: RecipeWithIngredients, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (duplicatingId) return;
+        setDuplicatingId(recipe.id);
+        try {
+            const copy = await recipesApi.duplicate(recipe.id);
+            // Add to the top of the list so it's immediately visible
+            setRecipes(prev => [copy, ...prev]);
+            // Open the copy in the editor right away so user can swap the protein
+            router.push(`/recipes/new?id=${copy.id}`);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setDuplicatingId(null);
+        }
+    };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
@@ -320,20 +338,32 @@ export default function RecipesPage() {
                             </CardContent>
 
                             <CardFooter className="p-3 pt-0 flex justify-end items-center border-t bg-muted/30">
+                                <span className="text-xs text-muted-foreground mr-auto">Total: {format(totalCost)}</span>
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                     <Link href={`/recipes/new?id=${recipe.id}`} onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit recipe">
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                     </Link>
                                     <Button
+                                        variant="ghost" size="icon" className="h-8 w-8"
+                                        title="Duplicate recipe — opens copy in editor"
+                                        disabled={duplicatingId === recipe.id}
+                                        onClick={(e) => handleDuplicate(recipe, e)}
+                                    >
+                                        {duplicatingId === recipe.id
+                                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                                            : <Copy className="h-4 w-4" />
+                                        }
+                                    </Button>
+                                    <Button
                                         variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                                        title="Delete recipe"
                                         onClick={(e) => { e.stopPropagation(); setDeleteTarget(recipe); }}
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
-                                <span className="text-xs text-muted-foreground mr-auto">Total: {format(totalCost)}</span>
                             </CardFooter>
                         </Card>
                     );

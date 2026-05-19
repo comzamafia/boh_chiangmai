@@ -16,6 +16,7 @@ import { Save, FileText, ArrowLeft, Plus, Trash2, Loader2, ImageIcon, UtensilsCr
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
 import { useCategories, DEFAULT_CATEGORY } from "@/lib/use-categories";
+import { IngredientPicker } from "@/components/ingredient-picker";
 
 // ─── Protein keyword detection ───────────────────────────────────────────────
 const PROTEIN_KEYWORDS: Record<string, string> = {
@@ -964,34 +965,11 @@ body{
                                         const proteinType = ing ? detectProteinType(ing.name) : null;
 
                                         const ingredientSelect = (
-                                            <Select value={row.ingredientId} onValueChange={v => updateRow(row.id, "ingredientId", v)}>
-                                                <SelectTrigger className="h-9 text-xs">
-                                                    <SelectValue placeholder="Select ingredient">
-                                                        {ing && (
-                                                            <span className="flex items-center gap-1.5 truncate">
-                                                                {proteinType && (
-                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">{proteinType}</Badge>
-                                                                )}
-                                                                {ing.name}
-                                                            </span>
-                                                        )}
-                                                    </SelectValue>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {ingredients.map(mi => (
-                                                        <SelectItem key={mi.id} value={mi.id}>
-                                                            <span className="flex items-center gap-1.5">
-                                                                {detectProteinType(mi.name) && (
-                                                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">
-                                                                        {detectProteinType(mi.name)}
-                                                                    </Badge>
-                                                                )}
-                                                                {mi.name}
-                                                            </span>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <IngredientPicker
+                                                ingredients={ingredients}
+                                                value={row.ingredientId}
+                                                onChange={v => updateRow(row.id, "ingredientId", v)}
+                                            />
                                         );
 
                                         return (

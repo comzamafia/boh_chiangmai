@@ -82,6 +82,7 @@ function RecipeBuilderInner() {
     const [loadingData, setLoadingData] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState("");
+    const [savedFlash, setSavedFlash] = useState(false);
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
     const [equipment, setEquipment] = useState<Equipment[]>([]);
     const [activeTab, setActiveTab] = useState("info");
@@ -279,10 +280,13 @@ function RecipeBuilderInner() {
             if (editId) {
                 await recipesApi.update(editId, payload);
                 await recipesApi.setIngredients(editId, rows);
+                // Stay on the editor — flash a "Saved ✓" confirmation
+                setSavedFlash(true);
+                setTimeout(() => setSavedFlash(false), 2500);
             } else {
                 await recipesApi.create(payload);
+                router.push("/recipes");
             }
-            router.push("/recipes");
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save recipe. Please try again.");
             console.error(err);
@@ -797,9 +801,16 @@ body{
                         <Button variant="outline" size="sm" onClick={handleExportSOP} disabled={!recipeName.trim()}>
                             <FileText className="mr-1.5 h-4 w-4" /> S.O.P
                         </Button>
-                        <Button size="sm" disabled={!recipeName.trim() || saving} onClick={handleSave}>
-                            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-                            {editId ? "Update" : "Save"}
+                        <Button
+                            size="sm"
+                            disabled={!recipeName.trim() || saving}
+                            onClick={handleSave}
+                            className={savedFlash ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+                        >
+                            {saving
+                                ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                : <Save className="mr-1.5 h-4 w-4" />}
+                            {savedFlash ? "Saved ✓" : editId ? "Update" : "Save"}
                         </Button>
                     </div>
                 </div>

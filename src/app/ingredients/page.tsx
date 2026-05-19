@@ -268,9 +268,12 @@ export default function IngredientsPage() {
                 </div>
                 <div className="flex gap-2">
                     <Link href="/import-ingredients">
-                        <Button variant="outline">Import CSV</Button>
+                        <Button variant="outline" className="text-xs sm:text-sm px-3 sm:px-4">
+                            Import CSV
+                        </Button>
                     </Link>
-                    <Button onClick={openAdd}>
+                    {/* Hidden on mobile — FAB handles Add on small screens */}
+                    <Button onClick={openAdd} className="hidden sm:flex">
                         <Plus className="mr-2 h-4 w-4" /> Add Ingredient
                     </Button>
                 </div>
@@ -296,36 +299,106 @@ export default function IngredientsPage() {
             </div>
 
             {/* Search / filter */}
-            <div className="flex items-center gap-3 flex-wrap">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-3 sm:flex-wrap">
+                {/* Search — always full-width on mobile */}
+                <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search ingredients or supplier…" className="pl-8"
+                    <Input placeholder="Search ingredients or supplier…" className="pl-8 w-full"
                         value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <Select value={groupFilter} onValueChange={setGroupFilter}>
-                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Groups</SelectItem>
-                        <SelectItem value="Weight">Weight</SelectItem>
-                        <SelectItem value="Volume">Volume</SelectItem>
-                        <SelectItem value="Count">Count</SelectItem>
-                    </SelectContent>
-                </Select>
-                {categories.length > 0 && (
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                {/* Filters — inline row on mobile */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={groupFilter} onValueChange={setGroupFilter}>
+                        <SelectTrigger className="w-32 sm:w-36 h-9 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Categories</SelectItem>
-                            <SelectItem value="none">Uncategorised</SelectItem>
-                            {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            <SelectItem value="all">All Groups</SelectItem>
+                            <SelectItem value="Weight">Weight</SelectItem>
+                            <SelectItem value="Volume">Volume</SelectItem>
+                            <SelectItem value="Count">Count</SelectItem>
                         </SelectContent>
                     </Select>
-                )}
-                <p className="text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</p>
+                    {categories.length > 0 && (
+                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                            <SelectTrigger className="w-36 sm:w-40 h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Categories</SelectItem>
+                                <SelectItem value="none">Uncategorised</SelectItem>
+                                {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    <p className="text-sm text-muted-foreground whitespace-nowrap">
+                        {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+                    </p>
+                </div>
             </div>
 
-            {/* Table */}
-            <div className="border rounded-lg overflow-x-auto">
+            {/* ─── Mobile card list (sm and below) ──────────────────────────── */}
+            <div className="sm:hidden space-y-2">
+                {filtered.length === 0 && (
+                    <p className="text-center py-10 text-sm text-muted-foreground">No ingredients found.</p>
+                )}
+                {filtered.map(item => {
+                    const effCost = ingEffCost(item);
+                    return (
+                        <div key={item.id}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-xs">
+                            {/* Thumbnail */}
+                            {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name}
+                                    className="h-12 w-12 rounded-lg object-cover border shrink-0" />
+                            ) : (
+                                <div className="h-12 w-12 rounded-lg border bg-muted flex items-center justify-center shrink-0">
+                                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                                </div>
+                            )}
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="font-semibold text-sm leading-tight truncate">{item.name}</p>
+                                    {item.category && (
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                                            {item.category.name}
+                                        </Badge>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                    {item.supplier?.name ?? "—"}&ensp;·&ensp;{item.groupId}
+                                </p>
+                                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                        {format(Number(item.purchasePrice))} / {item.purchaseUnit}
+                                    </span>
+                                    <span className="text-xs font-semibold text-primary tabular-nums">
+                                        {format(effCost, 4)} / {item.recipeUnit}
+                                    </span>
+                                    {Number(item.yieldPercent) < 100 && (
+                                        <span className="text-[10px] text-yellow-600 font-medium">
+                                            yield {Number(item.yieldPercent)}%
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex flex-col gap-0.5 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-9 w-9"
+                                    onClick={() => openEdit(item)}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive"
+                                    onClick={() => { setDeleteTarget(item); setDeleteDialogOpen(true); }}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* ─── Desktop table ─────────────────────────────────────────────── */}
+            <div className="hidden sm:block border rounded-lg overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -441,13 +514,45 @@ export default function IngredientsPage() {
                         )}
                     </TableBody>
                 </Table>
-            </div>
+            </div>{/* end desktop table */}
+
+            {/* ─── Mobile FAB ── visible only on small screens ──────────────── */}
+            <button
+                type="button"
+                onClick={openAdd}
+                aria-label="Add Ingredient"
+                className="sm:hidden fixed bottom-6 right-5 z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+            >
+                <Plus className="h-6 w-6" />
+            </button>
 
             {/* ─── Add / Edit Dialog ─────────────────────────────────────────── */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col p-0 gap-0">
+                {/*
+                  Mobile  → bottom sheet (slides up, full width, rounded top corners)
+                  Desktop → centred modal (sm:max-w-2xl)
+                */}
+                <DialogContent className={[
+                    "flex flex-col p-0 gap-0 max-h-[92dvh]",
+                    // mobile: anchor to bottom, full width
+                    "top-auto bottom-0 left-0 right-0 translate-x-0 translate-y-0",
+                    "w-full max-w-none rounded-t-2xl rounded-b-none",
+                    "data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom",
+                    // desktop: centred modal
+                    "sm:bottom-auto sm:left-[50%] sm:top-[50%]",
+                    "sm:translate-x-[-50%] sm:translate-y-[-50%]",
+                    "sm:max-w-2xl sm:rounded-xl",
+                    "sm:data-[state=open]:slide-in-from-bottom-0 sm:data-[state=open]:zoom-in-95",
+                    "sm:data-[state=closed]:zoom-out-95 sm:data-[state=closed]:slide-out-to-bottom-0",
+                ].join(" ")}>
+
+                    {/* Drag handle — mobile only */}
+                    <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+                        <div className="h-1 w-10 rounded-full bg-muted-foreground/25" />
+                    </div>
+
                     {/* Fixed header */}
-                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+                    <DialogHeader className="px-5 pt-3 sm:pt-5 pb-3 border-b shrink-0">
                         <DialogTitle>{editTarget ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle>
                         <DialogDescription>
                             {editTarget ? `Editing ${editTarget.name}` : "Add a raw material with pricing and unit conversion."}

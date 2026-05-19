@@ -73,7 +73,8 @@ function fcLabel(pct: number) {
 function RecipeBuilderInner() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const editId = searchParams.get("id");
+    const editId = searchParams.get("id");   // from URL (may be null before hydration)
+    const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null); // stable copy
     const { format, symbol, currency } = useCurrency();
     const rate = CURRENCIES[currency].rateFromTHB;
     // show: render a value already in display currency (no THB→CAD conversion)
@@ -120,6 +121,7 @@ function RecipeBuilderInner() {
             setEquipment(eqs);
 
             if (editId) {
+                setSavedRecipeId(editId);   // persist so handleSave is never fooled by stale searchParams
                 try {
                     const recipe = await recipesApi.get(editId);
                     setRecipeName(recipe.name);
@@ -277,14 +279,16 @@ function RecipeBuilderInner() {
                 imageUrl: imageUrl.trim() || undefined,
                 ingredients: rows,
             };
-            if (editId) {
-                await recipesApi.update(editId, payload);
-                await recipesApi.setIngredients(editId, rows);
-                // Stay on the editor — flash a "Saved ✓" confirmation
+            if (savedRecipeId) {
+                // Editing an existing recipe — stay on this page
+                await recipesApi.update(savedRecipeId, payload);
+                await recipesApi.setIngredients(savedRecipeId, rows);
                 setSavedFlash(true);
                 setTimeout(() => setSavedFlash(false), 2500);
             } else {
-                await recipesApi.create(payload);
+                // Brand-new recipe — go back to the list after creating
+                const created = await recipesApi.create(payload);
+                setSavedRecipeId(created.id);   // if user stays, subsequent saves will update
                 router.push("/recipes");
             }
         } catch (err) {
@@ -810,7 +814,7 @@ body{
                             {saving
                                 ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                                 : <Save className="mr-1.5 h-4 w-4" />}
-                            {savedFlash ? "Saved ✓" : editId ? "Update" : "Save"}
+                            {savedFlash ? "Saved ✓" : savedRecipeId ? "Update" : "Save"}
                         </Button>
                     </div>
                 </div>

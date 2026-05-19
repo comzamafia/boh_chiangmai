@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +41,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 deliveryPrice:      body.deliveryPrice ?? null,
                 imageUrl:           body.imageUrl,
                 isMainSauce:        body.isMainSauce,
+                isSubRecipe:        body.isSubRecipe ?? false,
                 instructions:       body.instructions,
             },
             include: { ingredients: { include: { ingredient: true } } },
@@ -48,9 +50,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             session, action: "UPDATE", targetTable: "Recipe",
             targetId: id, targetName: recipe.name,
             oldValues: { name: old?.name, category: old?.category, sellingPrice: old?.sellingPrice },
-            newValues: { name: recipe.name, category: recipe.category, sellingPrice: recipe.sellingPrice },
+            newValues: { name: recipe.name, category: recipe.category, sellingPrice: recipe.sellingPrice, isSubRecipe: recipe.isSubRecipe },
             request,
         });
+        // Keep the linked Ingredient in sync whenever recipe name / costs / yield change
+        if (recipe.isSubRecipe) syncSubRecipe(id);
         return NextResponse.json(recipe);
     } catch {
         return NextResponse.json({ error: "Failed to update recipe" }, { status: 500 });

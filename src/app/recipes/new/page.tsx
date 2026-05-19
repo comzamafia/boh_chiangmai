@@ -104,6 +104,7 @@ function RecipeBuilderInner() {
     const [energyCost, setEnergyCost] = useState("5");
     const [diningPrice, setDiningPrice] = useState("");
     const [deliveryPrice, setDeliveryPrice] = useState("");
+    const [isSubRecipe, setIsSubRecipe] = useState(false);
 
     // Image upload state
     const [uploading, setUploading] = useState(false);
@@ -132,6 +133,7 @@ function RecipeBuilderInner() {
                     setEnergyCost(String(recipe.energyCostPerBatch));
                     setDiningPrice(recipe.sellingPrice != null ? String(recipe.sellingPrice) : "");
                     setDeliveryPrice(recipe.deliveryPrice != null ? String(recipe.deliveryPrice) : "");
+                    setIsSubRecipe(recipe.isSubRecipe ?? false);
                     if (recipe.ingredients.length > 0) {
                         setIngredientRows(recipe.ingredients.map((r, idx) => ({
                             id: idx + 1,
@@ -269,6 +271,7 @@ function RecipeBuilderInner() {
                 sellingPrice: parseFloat(diningPrice) > 0 ? parseFloat(diningPrice) : null,
                 deliveryPrice: parseFloat(deliveryPrice) > 0 ? parseFloat(deliveryPrice) : null,
                 isMainSauce: category === "Sauce Base",
+                isSubRecipe,
                 instructions,
                 imageUrl: imageUrl.trim() || undefined,
                 ingredients: rows,
@@ -729,6 +732,44 @@ body{
                         </div>
                     </div>
                 )}
+
+                {/* ── Sub Recipe toggle ─────────────────────────────────────── */}
+                <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setIsSubRecipe(v => !v)}
+                    onKeyDown={e => (e.key === "Enter" || e.key === " ") && setIsSubRecipe(v => !v)}
+                    className={[
+                        "rounded-lg border p-3 cursor-pointer transition-colors select-none",
+                        isSubRecipe
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-dashed hover:border-primary/30 hover:bg-muted/40",
+                    ].join(" ")}
+                >
+                    <div className="flex items-start gap-2.5">
+                        <Checkbox
+                            id="isSubRecipe"
+                            checked={isSubRecipe}
+                            onCheckedChange={v => setIsSubRecipe(!!v)}
+                            onClick={e => e.stopPropagation()}
+                            className="mt-0.5 shrink-0"
+                        />
+                        <div>
+                            <p className="text-sm font-medium leading-none">Sub Recipe</p>
+                            <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                                Adds this recipe to the Ingredients list as a prepared component
+                                (supplier: <em>Chiang Mai Sub Recipe</em>). Cost includes labor &amp; energy.
+                                Use it inside other recipes to accurately nest costs.
+                            </p>
+                            {isSubRecipe && (
+                                <p className="text-xs text-primary font-medium mt-1.5">
+                                    ✓ Will sync as: <span className="font-semibold">{recipeName || "this recipe"}</span>
+                                    {" "}@ {format(totalCostPerYield, 4)} / {yieldUnit || "unit"}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </CardContent>
         </Card>
     );

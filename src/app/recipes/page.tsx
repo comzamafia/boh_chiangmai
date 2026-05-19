@@ -258,8 +258,12 @@ export default function RecipesPage() {
                                     </Badge>
                                 )}
 
-                                {/* Top-right: Main Sauce */}
-                                {recipe.isMainSauce && (
+                                {/* Top-right: Main Sauce or Sub Recipe */}
+                                {recipe.isSubRecipe ? (
+                                    <Badge className="absolute top-2 right-2 bg-violet-600 hover:bg-violet-700 text-xs shadow">
+                                        Sub Recipe
+                                    </Badge>
+                                ) : recipe.isMainSauce && (
                                     <Badge className="absolute top-2 right-2 bg-amber-500 hover:bg-amber-600 text-xs shadow">
                                         Main Sauce
                                     </Badge>

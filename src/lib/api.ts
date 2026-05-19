@@ -223,6 +223,8 @@ export interface Recipe {
     deliveryPrice?: number | null;
     imageUrl?: string;
     isMainSauce: boolean;
+    isSubRecipe?: boolean;   // default false on server
+    linkedIngredientId?: string | null;
     instructions?: string;
     createdAt?: string;
     updatedAt?: string;

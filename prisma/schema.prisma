@@ -101,6 +101,8 @@ model Recipe {
   deliveryPrice      Decimal?  @db.Decimal(10, 2)
   imageUrl           String?
   isMainSauce        Boolean   @default(false)
+  isSubRecipe        Boolean   @default(false)
+  linkedIngredientId String?   // ID of the auto-created Ingredient (set when isSubRecipe = true)
   instructions       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

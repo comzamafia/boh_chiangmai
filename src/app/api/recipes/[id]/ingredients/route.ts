@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
 
 // GET /api/recipes/[id]/ingredients
@@ -37,6 +38,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             where: { recipeId: id },
             include: { ingredient: true },
         });
+
+        // Re-sync sub-recipe ingredient cost now that ingredient list changed
+        const recipe = await prisma.recipe.findUnique({
+            where: { id },
+            select: { isSubRecipe: true },
+        });
+        if (recipe?.isSubRecipe) syncSubRecipe(id);
+
         return NextResponse.json(updated);
     } catch {
         return NextResponse.json({ error: "Failed to update recipe ingredients" }, { status: 500 });

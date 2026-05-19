@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
                 deliveryPrice:      body.deliveryPrice ?? null,
                 imageUrl:           body.imageUrl,
                 isMainSauce:        body.isMainSauce ?? false,
+                isSubRecipe:        body.isSubRecipe ?? false,
                 instructions:       body.instructions,
                 ingredients: body.ingredients?.length
                     ? {
@@ -58,9 +60,11 @@ export async function POST(request: Request) {
         logAudit({
             session, action: "CREATE", targetTable: "Recipe",
             targetId: recipe.id, targetName: recipe.name,
-            newValues: { name: recipe.name, category: recipe.category },
+            newValues: { name: recipe.name, category: recipe.category, isSubRecipe: recipe.isSubRecipe },
             request,
         });
+        // If flagged as Sub Recipe, auto-create the linked Ingredient (fire-and-forget)
+        if (recipe.isSubRecipe) syncSubRecipe(recipe.id);
         return NextResponse.json(recipe, { status: 201 });
     } catch {
         return NextResponse.json({ error: "Failed to create recipe" }, { status: 500 });

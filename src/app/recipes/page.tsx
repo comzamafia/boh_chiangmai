@@ -49,6 +49,7 @@ export default function RecipesPage() {
     const [catFilter, setCatFilter] = useState("all");
     const [deleteTarget, setDeleteTarget] = useState<RecipeWithIngredients | null>(null);
     const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+    const [canManageCategories, setCanManageCategories] = useState(false);
 
     const [manageOpen, setManageOpen] = useState(false);
     const [newCatName, setNewCatName] = useState("");
@@ -65,6 +66,13 @@ export default function RecipesPage() {
 
     useEffect(() => {
         recipesApi.list().then(setRecipes).finally(() => setLoading(false));
+        // Check if current user can manage recipe categories
+        fetch("/api/me")
+            .then(r => r.json())
+            .then(me => setCanManageCategories(
+                Array.isArray(me.permissions) && me.permissions.includes("recipes-manage-categories")
+            ))
+            .catch(() => {});
     }, []);
 
     const filtered = recipes.filter(r => {
@@ -156,9 +164,11 @@ export default function RecipesPage() {
                     <Link href="/import-recipes">
                         <Button variant="outline">Import Recipes</Button>
                     </Link>
-                    <Button variant="outline" onClick={() => { setManageOpen(true); setNewCatName(""); setNewCatError(""); setCatDeleteError(null); setRenaming(null); }}>
-                        <Settings2 className="mr-2 h-4 w-4" /> Manage Categories
-                    </Button>
+                    {canManageCategories && (
+                        <Button variant="outline" onClick={() => { setManageOpen(true); setNewCatName(""); setNewCatError(""); setCatDeleteError(null); setRenaming(null); }}>
+                            <Settings2 className="mr-2 h-4 w-4" /> Manage Categories
+                        </Button>
+                    )}
                     <Link href="/recipes/new">
                         <Button><Plus className="mr-2 h-4 w-4" /> Create Recipe</Button>
                     </Link>
@@ -193,13 +203,15 @@ export default function RecipesPage() {
                                 >
                                     {cat.name}
                                 </Button>
-                                <button
-                                    onClick={e => { e.stopPropagation(); handleQuickRemove(cat); }}
-                                    className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground items-center justify-center hidden group-hover/cat:flex shadow"
-                                    title="Remove category"
-                                >
-                                    <X className="h-2.5 w-2.5" />
-                                </button>
+                                {canManageCategories && (
+                                    <button
+                                        onClick={e => { e.stopPropagation(); handleQuickRemove(cat); }}
+                                        className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground items-center justify-center hidden group-hover/cat:flex shadow"
+                                        title="Remove category"
+                                    >
+                                        <X className="h-2.5 w-2.5" />
+                                    </button>
+                                )}
                             </div>
                         ))
                     )}

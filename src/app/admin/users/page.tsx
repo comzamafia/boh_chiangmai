@@ -58,6 +58,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     production: "Production Planning",
     admin: "Admin Panel (Users)",
     "admin-audit": "Audit Log",
+    "recipes-manage-categories": "Manage Recipe Categories",
 };
 
 interface UserRow {

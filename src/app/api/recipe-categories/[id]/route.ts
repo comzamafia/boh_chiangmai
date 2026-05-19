@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { getPermittedSlugs } from "@/lib/permissions";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const slugs = getPermittedSlugs(session.role, session.permissions);
+    if (!slugs.includes("recipes-manage-categories"))
+        return NextResponse.json({ error: "Forbidden — you don't have permission to manage recipe categories." }, { status: 403 });
 
     const { id } = await params;
     try {
@@ -41,6 +45,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const slugs = getPermittedSlugs(session.role, session.permissions);
+    if (!slugs.includes("recipes-manage-categories"))
+        return NextResponse.json({ error: "Forbidden — you don't have permission to manage recipe categories." }, { status: 403 });
 
     const { id } = await params;
     try {

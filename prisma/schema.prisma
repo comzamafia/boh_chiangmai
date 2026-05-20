@@ -18,8 +18,9 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  categoryPermissions UserCategoryPermission[]
-  auditLogs           AuditLog[]
+  categoryPermissions       UserCategoryPermission[]
+  recipeCategoryPermissions UserRecipeCategoryPermission[]
+  auditLogs                 AuditLog[]
 
   @@map("users")
 }
@@ -84,7 +85,21 @@ model RecipeCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  userPermissions UserRecipeCategoryPermission[]
+
   @@map("recipe_categories")
+}
+
+model UserRecipeCategoryPermission {
+  id         String         @id @default(cuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   RecipeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  assignedAt DateTime       @default(now())
+
+  @@unique([userId, categoryId])
+  @@map("user_recipe_category_permissions")
 }
 
 model Recipe {

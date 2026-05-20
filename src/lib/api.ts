@@ -130,6 +130,17 @@ export const categoryPermissionsApi = {
         }),
 };
 
+// ─── Recipe Category Permissions ─────────────────────────────────────────────
+export const recipeCategoryPermissionsApi = {
+    listForUser: (userId: string) =>
+        apiFetch<UserRecipeCategoryPermission[]>(`/users/${userId}/recipe-category-permissions`),
+    setForUser: (userId: string, categoryIds: string[]) =>
+        apiFetch<UserRecipeCategoryPermission[]>(`/users/${userId}/recipe-category-permissions`, {
+            method: "PUT",
+            body: JSON.stringify({ categoryIds }),
+        }),
+};
+
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 export const auditApi = {
     list: (params?: {
@@ -375,6 +386,20 @@ export interface UserCategoryPermission {
     categoryId: string;
     category:   IngredientCategory;
     canEdit:    boolean;
+    assignedAt: string;
+}
+
+export interface RecipeCategory {
+    id:        string;
+    name:      string;
+    sortOrder: number;
+}
+
+export interface UserRecipeCategoryPermission {
+    id:         string;
+    userId:     string;
+    categoryId: string;
+    category:   RecipeCategory;
     assignedAt: string;
 }
 

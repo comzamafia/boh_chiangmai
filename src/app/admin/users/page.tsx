@@ -27,12 +27,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Users, Plus, Pencil, Trash2, MoreHorizontal,
-    ShieldCheck, Loader2, AlertCircle, Key, Tags
+    ShieldCheck, Loader2, AlertCircle, Key, Tags, BookOpen
 } from "lucide-react";
 import { ALL_SLUGS, ROLE_DEFAULTS, ROLE_LABELS, type Role, type NavSlug } from "@/lib/permissions";
 import {
     ingredientCategoriesApi, categoryPermissionsApi,
+    recipeCategoryPermissionsApi,
     type IngredientCategory, type UserCategoryPermission,
+    type RecipeCategory, type UserRecipeCategoryPermission,
 } from "@/lib/api";
 
 const SLUG_LABELS: Record<NavSlug, string> = {
@@ -95,11 +97,17 @@ export default function AdminUsersPage() {
     const [apiError, setApiError] = useState("");
     const [useCustomPermissions, setUseCustomPermissions] = useState(false);
 
-    // Category permissions state
+    // Ingredient category permissions state
     const [categories, setCategories] = useState<IngredientCategory[]>([]);
     const [catPerms, setCatPerms] = useState<Map<string, boolean>>(new Map()); // categoryId → canEdit
     const [catPermsSaving, setCatPermsSaving] = useState(false);
     const [catPermsLoaded, setCatPermsLoaded] = useState(false);
+
+    // Recipe category permissions state
+    const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
+    const [recipeCatPerms, setRecipeCatPerms] = useState<Set<string>>(new Set()); // set of categoryIds
+    const [recipeCatPermsSaving, setRecipeCatPermsSaving] = useState(false);
+    const [recipeCatPermsLoaded, setRecipeCatPermsLoaded] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -113,9 +121,10 @@ export default function AdminUsersPage() {
     // Load categories once
     useEffect(() => {
         ingredientCategoriesApi.list().then(setCategories).catch(() => {});
+        fetch("/api/recipe-categories").then(r => r.ok ? r.json() : []).then(setRecipeCategories).catch(() => {});
     }, []);
 
-    // Load category permissions when editing a user
+    // Load ingredient category permissions when editing a user
     const loadCatPerms = useCallback(async (userId: string) => {
         setCatPermsLoaded(false);
         try {
@@ -129,6 +138,18 @@ export default function AdminUsersPage() {
         setCatPermsLoaded(true);
     }, []);
 
+    // Load recipe category permissions when editing a user
+    const loadRecipeCatPerms = useCallback(async (userId: string) => {
+        setRecipeCatPermsLoaded(false);
+        try {
+            const perms: UserRecipeCategoryPermission[] = await recipeCategoryPermissionsApi.listForUser(userId);
+            setRecipeCatPerms(new Set(perms.map(p => p.categoryId)));
+        } catch {
+            setRecipeCatPerms(new Set());
+        }
+        setRecipeCatPermsLoaded(true);
+    }, []);
+
     const openCreate = () => {
         setEditingId(null);
         setForm(emptyForm);
@@ -136,6 +157,8 @@ export default function AdminUsersPage() {
         setApiError("");
         setCatPerms(new Map());
         setCatPermsLoaded(true);
+        setRecipeCatPerms(new Set());
+        setRecipeCatPermsLoaded(true);
         setDialogTab("details");
         setDialogOpen(true);
     };
@@ -153,9 +176,11 @@ export default function AdminUsersPage() {
         setUseCustomPermissions(user.permissions.length > 0);
         setApiError("");
         setCatPermsLoaded(false);
+        setRecipeCatPermsLoaded(false);
         setDialogTab("details");
         setDialogOpen(true);
         loadCatPerms(user.id);
+        loadRecipeCatPerms(user.id);
     };
 
     const togglePermission = (slug: NavSlug) => {
@@ -206,6 +231,17 @@ export default function AdminUsersPage() {
             // silent — show nothing for now
         }
         setCatPermsSaving(false);
+    };
+
+    const handleSaveRecipeCatPerms = async () => {
+        if (!editingId) return;
+        setRecipeCatPermsSaving(true);
+        try {
+            await recipeCategoryPermissionsApi.setForUser(editingId, Array.from(recipeCatPerms));
+        } catch {
+            // silent
+        }
+        setRecipeCatPermsSaving(false);
     };
 
     const handleDelete = async () => {
@@ -354,7 +390,12 @@ export default function AdminUsersPage() {
                             <TabsTrigger value="details">Details & Permissions</TabsTrigger>
                             {editingId && (
                                 <TabsTrigger value="category-perms" className="flex items-center gap-1.5">
-                                    <Tags className="h-3.5 w-3.5" /> Category Access
+                                    <Tags className="h-3.5 w-3.5" /> Ingredient Categories
+                                </TabsTrigger>
+                            )}
+                            {editingId && (
+                                <TabsTrigger value="recipe-cat-perms" className="flex items-center gap-1.5">
+                                    <BookOpen className="h-3.5 w-3.5" /> Recipe Categories
                                 </TabsTrigger>
                             )}
                         </TabsList>
@@ -467,7 +508,7 @@ export default function AdminUsersPage() {
                             )}
                         </TabsContent>
 
-                        {/* ── Tab: Category Permissions ── */}
+                        {/* ── Tab: Ingredient Category Permissions ── */}
                         {editingId && (
                             <TabsContent value="category-perms" className="flex-1 overflow-y-auto px-5 py-4 mt-0 space-y-4">
                                 <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
@@ -517,15 +558,84 @@ export default function AdminUsersPage() {
                                 )}
                             </TabsContent>
                         )}
+
+                        {/* ── Tab: Recipe Category Permissions ── */}
+                        {editingId && (
+                            <TabsContent value="recipe-cat-perms" className="flex-1 overflow-y-auto px-5 py-4 mt-0 space-y-4">
+                                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+                                    <strong>Note:</strong> Admin and Manager roles always see all recipe categories. Restrictions only apply to Chef, Staff, and Analyst roles. If no categories are selected, the user sees all recipes.
+                                </div>
+
+                                {!recipeCatPermsLoaded ? (
+                                    <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+                                ) : recipeCategories.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                                        <p className="font-medium">No recipe categories yet</p>
+                                        <p className="text-sm">Create recipe categories from the Recipes page first.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground px-1 pb-1">
+                                            <span>{recipeCatPerms.size === 0 ? "No restriction — user sees all categories" : `${recipeCatPerms.size} of ${recipeCategories.length} categories allowed`}</span>
+                                            {recipeCatPerms.size > 0 && (
+                                                <button
+                                                    className="text-primary hover:underline"
+                                                    onClick={() => setRecipeCatPerms(new Set())}
+                                                >
+                                                    Clear all (allow all)
+                                                </button>
+                                            )}
+                                        </div>
+                                        {recipeCategories.map(cat => {
+                                            const allowed = recipeCatPerms.has(cat.id);
+                                            return (
+                                                <div
+                                                    key={cat.id}
+                                                    className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors cursor-pointer ${allowed ? "bg-primary/5 border-primary/20" : "bg-muted/20"}`}
+                                                    onClick={() => setRecipeCatPerms(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(cat.id)) next.delete(cat.id);
+                                                        else next.add(cat.id);
+                                                        return next;
+                                                    })}
+                                                >
+                                                    <Switch
+                                                        checked={allowed}
+                                                        onCheckedChange={() => setRecipeCatPerms(prev => {
+                                                            const next = new Set(prev);
+                                                            if (next.has(cat.id)) next.delete(cat.id);
+                                                            else next.add(cat.id);
+                                                            return next;
+                                                        })}
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-medium text-sm truncate">{cat.name}</p>
+                                                    </div>
+                                                    {allowed && (
+                                                        <span className="text-xs text-primary shrink-0">Can view</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </TabsContent>
+                        )}
                     </Tabs>
 
                     {/* Footer */}
                     <div className="px-5 py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                        <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving || catPermsSaving}>Cancel</Button>
+                        <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving || catPermsSaving || recipeCatPermsSaving}>Cancel</Button>
                         {dialogTab === "category-perms" && editingId ? (
                             <Button onClick={handleSaveCatPerms} disabled={catPermsSaving || !catPermsLoaded}>
                                 {catPermsSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Save Category Access
+                                Save Ingredient Access
+                            </Button>
+                        ) : dialogTab === "recipe-cat-perms" && editingId ? (
+                            <Button onClick={handleSaveRecipeCatPerms} disabled={recipeCatPermsSaving || !recipeCatPermsLoaded}>
+                                {recipeCatPermsSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Save Recipe Access
                             </Button>
                         ) : (
                             <Button onClick={handleSave} disabled={saving}>

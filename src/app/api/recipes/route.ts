@@ -9,8 +9,34 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const category = searchParams.get("category");
 
+        // ── Row-level recipe category filtering ────────────────────────────
+        // Admin & Manager always see all. Other roles are restricted to their
+        // assigned recipe categories (if any are configured; none = see all).
+        const session = await getSession();
+        let allowedCategories: string[] | null = null;
+
+        if (session && !["admin", "manager"].includes(session.role)) {
+            const perms = await prisma.userRecipeCategoryPermission.findMany({
+                where: { userId: session.userId },
+                include: { category: { select: { name: true } } },
+            });
+            if (perms.length > 0) {
+                allowedCategories = perms.map(p => p.category.name);
+            }
+        }
+
+        const where: { category?: string | { in: string[] } } = {};
+        if (category) {
+            // Explicit filter from query param — respect category restriction too
+            where.category = allowedCategories
+                ? (allowedCategories.includes(category) ? category : "__no_match__")
+                : category;
+        } else if (allowedCategories) {
+            where.category = { in: allowedCategories };
+        }
+
         const recipes = await prisma.recipe.findMany({
-            where: category ? { category } : undefined,
+            where,
             include: {
                 ingredients: {
                     include: { ingredient: true },

@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How to Create a New Recipe — Chiang Mai BOH Guide</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --primary: #b45309;
+      --primary-light: #fef3c7;
+      --primary-dark: #92400e;
+      --accent: #d97706;
+      --green: #16a34a;
+      --green-light: #dcfce7;
+      --blue: #2563eb;
+      --blue-light: #dbeafe;
+      --purple: #7c3aed;
+      --purple-light: #ede9fe;
+      --red: #dc2626;
+      --red-light: #fee2e2;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-500: #6b7280;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #fff;
+      color: var(--gray-800);
+      line-height: 1.6;
+    }
+
+    /* ── COVER PAGE ── */
+    .cover {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #1c0a00 0%, #451a03 40%, #78350f 70%, #b45309 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 40px;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+
+    .cover-logo {
+      width: 90px;
+      height: 90px;
+      background: rgba(255,255,255,0.12);
+      border: 2px solid rgba(255,255,255,0.25);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      margin-bottom: 36px;
+      backdrop-filter: blur(10px);
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: rgba(251,191,36,0.2);
+      border: 1px solid rgba(251,191,36,0.4);
+      color: #fcd34d;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding: 6px 18px;
+      border-radius: 99px;
+      margin-bottom: 24px;
+    }
+
+    .cover h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(36px, 6vw, 58px);
+      color: #fff;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      max-width: 700px;
+    }
+
+    .cover h1 span { color: #fcd34d; }
+
+    .cover-subtitle {
+      font-size: 17px;
+      color: rgba(255,255,255,0.7);
+      max-width: 500px;
+      margin-bottom: 50px;
+    }
+
+    .cover-steps-preview {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 620px;
+    }
+
+    .cover-step-pill {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 14px;
+      border-radius: 99px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cover-step-num {
+      background: var(--accent);
+      color: #fff;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cover-footer {
+      position: absolute;
+      bottom: 30px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* ── TOC PAGE ── */
+    .toc-page {
+      padding: 70px 80px;
+      min-height: 100vh;
+      page-break-after: always;
+    }
+
+    .page-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .toc-page h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 38px;
+      color: var(--gray-900);
+      margin-bottom: 8px;
+    }
+
+    .toc-divider {
+      width: 60px;
+      height: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+      margin-bottom: 48px;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 20px;
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      background: var(--gray-50);
+      transition: border-color 0.2s;
+    }
+
+    .toc-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .toc-text h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 3px;
+    }
+
+    .toc-text p {
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    .toc-emoji { font-size: 20px; }
+
+    /* ── STEP PAGES ── */
+    .step-page {
+      padding: 60px 70px;
+      min-height: 100vh;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+      margin-bottom: 36px;
+    }
+
+    .step-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .step-num-large {
+      width: 60px;
+      height: 60px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      color: #fff;
+      font-size: 26px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(180,83,9,0.3);
+    }
+
+    .step-label-small {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--primary);
+    }
+
+    .step-title-block h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 30px;
+      color: var(--gray-900);
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .step-title-block p {
+      font-size: 14px;
+      color: var(--gray-500);
+      max-width: 580px;
+    }
+
+    /* ── SCREEN MOCK ── */
+    .screen-mock {
+      background: #fff;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.10);
+      margin-bottom: 28px;
+      flex-shrink: 0;
+    }
+
+    .screen-mock-bar {
+      background: var(--gray-100);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-red { background: #fc5c65; }
+    .dot-yellow { background: #fed330; }
+    .dot-green { background: #26de81; }
+
+    .address-bar {
+      flex: 1;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--gray-500);
+      margin: 0 10px;
+      font-family: monospace;
+    }
+
+    .screen-body {
+      display: flex;
+      min-height: 340px;
+    }
+
+    /* Sidebar */
+    .mock-sidebar {
+      width: 200px;
+      background: #1c1917;
+      padding: 16px 12px;
+      flex-shrink: 0;
+    }
+
+    .mock-sidebar-logo {
+      font-family: 'Playfair Display', serif;
+      color: #fcd34d;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 12px;
+    }
+
+    .mock-nav-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2px;
+      cursor: pointer;
+    }
+
+    .mock-nav-item.active {
+      background: rgba(180,83,9,0.25);
+      color: #fcd34d;
+      font-weight: 600;
+    }
+
+    .mock-nav-item.highlight {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* Main content area */
+    .mock-main {
+      flex: 1;
+      padding: 20px 24px;
+      background: #fafaf9;
+      overflow: hidden;
+    }
+
+    /* UI elements */
+    .mock-page-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      color: var(--gray-900);
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .mock-subtitle { font-size: 11px; color: var(--gray-500); margin-bottom: 16px; }
+
+    .mock-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .mock-btn-primary { background: var(--primary); color: #fff; }
+    .mock-btn-outline { background: #fff; color: var(--gray-700); border: 1px solid var(--gray-300); }
+    .mock-btn-green { background: var(--green); color: #fff; }
+
+    .mock-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    /* Recipe Cards */
+    .mock-recipe-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .mock-recipe-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 10px;
+    }
+
+    .mock-card-img {
+      height: 60px;
+      background: linear-gradient(135deg, #fed7aa, #fbbf24);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .mock-card-body { padding: 8px 10px; }
+    .mock-card-name { font-weight: 600; color: var(--gray-800); font-size: 11px; margin-bottom: 3px; }
+    .mock-card-sub { color: var(--gray-500); font-size: 10px; }
+
+    .mock-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    .badge-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-blue { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .badge-green { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+    .badge-orange { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+
+    /* Form styles */
+    .mock-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .mock-form-full { grid-column: span 2; }
+
+    .mock-field label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: 4px;
+    }
+
+    .mock-input {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--gray-800);
+      background: #fff;
+    }
+
+    .mock-input.filled {
+      border-color: var(--primary);
+      background: #fffbeb;
+    }
+
+    .mock-input.active { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+
+    .mock-select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--gray-800);
+      background: #fff;
+      appearance: none;
+    }
+
+    /* Two-column layout for form steps */
+    .step-content-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+      flex: 1;
+    }
+
+    .step-notes {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .note-card {
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 12.5px;
+    }
+
+    .note-card h4 {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .note-card p, .note-card li {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--gray-700);
+    }
+
+    .note-card ul { padding-left: 16px; }
+    .note-card li { margin-bottom: 4px; }
+
+    .note-info { background: var(--blue-light); border: 1px solid #bfdbfe; }
+    .note-info h4 { color: #1e40af; }
+
+    .note-tip { background: var(--green-light); border: 1px solid #bbf7d0; }
+    .note-tip h4 { color: #166534; }
+
+    .note-warn { background: #fef3c7; border: 1px solid #fde68a; }
+    .note-warn h4 { color: #92400e; }
+
+    .note-purple { background: var(--purple-light); border: 1px solid #ddd6fe; }
+    .note-purple h4 { color: #5b21b6; }
+
+    /* Instructions list */
+    .instructions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .instruction-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .instr-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .instr-text {
+      font-size: 13px;
+      color: var(--gray-700);
+      line-height: 1.5;
+    }
+
+    .instr-text strong { color: var(--gray-900); }
+
+    /* Field highlight */
+    .field-highlight {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+
+    .field-highlight h4 { font-size: 12px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
+    .field-highlight p { font-size: 11.5px; color: var(--gray-600); }
+
+    /* Annotated screen */
+    .annotation {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 12px;
+      background: rgba(180,83,9,0.06);
+      border: 1px solid rgba(180,83,9,0.15);
+      border-radius: 8px;
+      margin-top: 6px;
+      font-size: 11.5px;
+      color: var(--gray-700);
+    }
+
+    .annotation-icon {
+      color: var(--primary);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Large layout for wide screens */
+    .wide-screen-body {
+      display: flex;
+      gap: 0;
+      min-height: 380px;
+    }
+
+    .wide-mock-sidebar {
+      width: 180px;
+      background: #1c1917;
+      padding: 14px 10px;
+      flex-shrink: 0;
+    }
+
+    .wide-mock-main {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      background: #f5f5f4;
+    }
+
+    .form-panel {
+      flex: 1;
+      padding: 18px;
+      background: #fafaf9;
+      overflow: hidden;
+    }
+
+    .cost-panel {
+      width: 200px;
+      background: #fff;
+      border-left: 1px solid var(--gray-200);
+      padding: 16px 14px;
+      flex-shrink: 0;
+    }
+
+    .cost-panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gray-700);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      padding: 4px 0;
+      color: var(--gray-600);
+    }
+
+    .cost-row.total {
+      font-weight: 700;
+      color: var(--gray-900);
+      border-top: 1px solid var(--gray-200);
+      margin-top: 6px;
+      padding-top: 8px;
+      font-size: 11px;
+    }
+
+    .cost-fc {
+      background: var(--green-light);
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .cost-fc-pct { font-size: 18px; font-weight: 800; color: var(--green); }
+    .cost-fc-label { font-size: 9px; color: var(--gray-500); }
+
+    /* ingredient picker mock */
+    .ing-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 7px;
+      margin-bottom: 6px;
+      font-size: 10px;
+    }
+
+    .ing-emoji { font-size: 14px; }
+    .ing-name { flex: 1; color: var(--gray-800); font-weight: 500; }
+    .ing-qty { color: var(--gray-500); }
+    .ing-cost { color: var(--primary); font-weight: 600; }
+    .ing-del { color: var(--gray-400); font-size: 12px; cursor: pointer; }
+
+    .add-ing-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border: 1.5px dashed var(--gray-300);
+      border-radius: 7px;
+      font-size: 10px;
+      color: var(--gray-500);
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    /* sub recipe mock */
+    .subrec-box {
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 10px;
+      margin-top: 8px;
+    }
+
+    .subrec-box .title { font-weight: 700; color: #5b21b6; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+
+    /* Page numbers */
+    .page-num {
+      text-align: right;
+      font-size: 10px;
+      color: var(--gray-400);
+      margin-top: auto;
+      padding-top: 16px;
+    }
+
+    /* Summary page */
+    .summary-page {
+      padding: 60px 70px;
+      min-height: 100vh;
+      page-break-after: always;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 36px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      padding: 20px;
+      background: var(--gray-50);
+    }
+
+    .summary-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .summary-card ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .summary-card li {
+      font-size: 12.5px;
+      color: var(--gray-700);
+      padding: 5px 0;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .summary-card li:last-child { border-bottom: none; }
+    .check { color: var(--green); font-weight: 700; flex-shrink: 0; }
+
+    /* Tips page */
+    .tips-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 36px;
+    }
+
+    .tip-card {
+      border-radius: 14px;
+      padding: 20px;
+      border: 1px solid transparent;
+    }
+
+    .tip-card .tip-icon { font-size: 28px; margin-bottom: 12px; }
+    .tip-card h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .tip-card p { font-size: 12px; line-height: 1.55; }
+
+    .tip-amber { background: #fffbeb; border-color: #fde68a; }
+    .tip-amber h3 { color: #92400e; }
+    .tip-amber p { color: #78350f; }
+
+    .tip-blue { background: var(--blue-light); border-color: #bfdbfe; }
+    .tip-blue h3 { color: #1e40af; }
+    .tip-blue p { color: #1e3a8a; }
+
+    .tip-green { background: var(--green-light); border-color: #bbf7d0; }
+    .tip-green h3 { color: #166534; }
+    .tip-green p { color: #14532d; }
+
+    .tip-purple { background: var(--purple-light); border-color: #ddd6fe; }
+    .tip-purple h3 { color: #5b21b6; }
+    .tip-purple p { color: #4c1d95; }
+
+    .tip-red { background: var(--red-light); border-color: #fecaca; }
+    .tip-red h3 { color: #991b1b; }
+    .tip-red p { color: #7f1d1d; }
+
+    .tip-gray { background: var(--gray-100); border-color: var(--gray-200); }
+    .tip-gray h3 { color: var(--gray-800); }
+    .tip-gray p { color: var(--gray-700); }
+
+    /* Final page */
+    .final-page {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #1c0a00 0%, #451a03 40%, #78350f 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 80px 40px;
+    }
+
+    .final-page h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 44px;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+
+    .final-page p { color: rgba(255,255,255,0.65); font-size: 16px; max-width: 460px; margin-bottom: 40px; }
+
+    .final-url {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fcd34d;
+      padding: 12px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-family: monospace;
+      letter-spacing: 1px;
+    }
+
+    /* Print overrides */
+    @media print {
+      .cover, .toc-page, .step-page, .summary-page, .final-page { page-break-after: always; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    /* Separator */
+    .sep { height: 1px; background: var(--gray-200); margin: 24px 0; }
+
+    /* Keyword highlight */
+    kbd {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--gray-800);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    .cursor-blink {
+      display: inline-block;
+      width: 2px;
+      height: 12px;
+      background: var(--blue);
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     COVER PAGE
+════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-logo">🍜</div>
+  <div class="cover-badge">New User Guide · V2</div>
+  <h1>How to Create a <span>New Recipe</span></h1>
+  <p class="cover-subtitle">Step-by-step guide for adding recipes to the Chiang Mai Back-of-House system — from basic info to live food cost calculation.</p>
+
+  <div class="cover-steps-preview">
+    <div class="cover-step-pill"><span class="cover-step-num">1</span> Navigate to Recipes</div>
+    <div class="cover-step-pill"><span class="cover-step-num">2</span> Open New Recipe Form</div>
+    <div class="cover-step-pill"><span class="cover-step-num">3</span> Fill Basic Info</div>
+    <div class="cover-step-pill"><span class="cover-step-num">4</span> Set Yield & Pricing</div>
+    <div class="cover-step-pill"><span class="cover-step-num">5</span> Add Ingredients</div>
+    <div class="cover-step-pill"><span class="cover-step-num">6</span> Set Cost Parameters</div>
+    <div class="cover-step-pill"><span class="cover-step-num">7</span> Review Live Cost</div>
+    <div class="cover-step-pill"><span class="cover-step-num">8</span> Save Recipe</div>
+  </div>
+
+  <div class="cover-footer">Chiang Mai BOH System · boh-chiangmai.vercel.app · 2026</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     TABLE OF CONTENTS
+════════════════════════════════════ -->
+<div class="toc-page">
+  <div class="page-label">Contents</div>
+  <h2>What You'll Learn</h2>
+  <div class="toc-divider"></div>
+
+  <div class="toc-grid">
+    <div class="toc-item">
+      <div class="toc-num">1</div>
+      <div class="toc-text">
+        <h3>Navigate to Recipes</h3>
+        <p>Find the Recipes section in the sidebar and understand the main page layout</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">2</div>
+      <div class="toc-text">
+        <h3>Open the New Recipe Form</h3>
+        <p>Click "+ New Recipe" to open the editor and understand its two-panel layout</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">3</div>
+      <div class="toc-text">
+        <h3>Enter Basic Information</h3>
+        <p>Fill in recipe name, select a category, add an image URL, and write cooking instructions</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">4</div>
+      <div class="toc-text">
+        <h3>Set Yield & Selling Price</h3>
+        <p>Define how much the recipe produces and set dine-in / delivery prices</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">5</div>
+      <div class="toc-text">
+        <h3>Add Ingredients</h3>
+        <p>Search and add ingredients from inventory, set quantities in recipe units</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">6</div>
+      <div class="toc-text">
+        <h3>Set Labor & Energy Cost</h3>
+        <p>Configure prep/cook time and cost parameters for accurate food cost %</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">7</div>
+      <div class="toc-text">
+        <h3>Review Live Cost Summary</h3>
+        <p>Read the real-time breakdown: ingredients + labor + energy = total food cost %</p>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">8</div>
+      <div class="toc-text">
+        <h3>Save & Done</h3>
+        <p>Save the recipe, duplicate it for variations, or mark it as a Sub Recipe</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:40px; padding:20px; background:var(--primary-light); border:1px solid #fde68a; border-radius:14px;">
+    <p style="font-size:13px; color:var(--primary-dark);">
+      <strong>📌 Before you start:</strong> Make sure your ingredients are already added in the <strong>Ingredients</strong> section. If an ingredient is not in the system yet, add it there first — you will not be able to add it to a recipe otherwise.
+    </p>
+  </div>
+
+  <div class="page-num">Table of Contents</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 1 — Navigate to Recipes
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">1</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Navigate to the Recipes Page</h2>
+      <p>Log in and click <strong>Recipes</strong> in the left sidebar. You'll see all existing recipes displayed as cards grouped by category.</p>
+    </div>
+  </div>
+
+  <!-- Screen Mock: Recipes Page -->
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes</div>
+    </div>
+    <div class="screen-body">
+      <!-- Sidebar -->
+      <div class="mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item">🏠 Dashboard</div>
+        <div class="mock-nav-item">📊 Daily Sales</div>
+        <div class="mock-nav-item highlight">📖 Recipes</div>
+        <div class="mock-nav-item">🥩 Ingredients</div>
+        <div class="mock-nav-item">🔧 Equipment</div>
+        <div class="mock-nav-item">🏭 Suppliers</div>
+        <div class="mock-nav-item">📦 Inventory</div>
+        <div class="mock-nav-item">💰 Purchases</div>
+        <div class="mock-nav-item">📈 Analysis</div>
+      </div>
+      <!-- Main area -->
+      <div class="mock-main">
+        <div class="mock-toolbar">
+          <div>
+            <div class="mock-page-title">Recipes</div>
+            <div class="mock-subtitle">18 recipes · 4 categories</div>
+          </div>
+          <div class="mock-btn mock-btn-primary">＋ New Recipe</div>
+        </div>
+
+        <!-- Category filter pills -->
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+          <div class="mock-badge badge-amber" style="padding:4px 12px;font-size:10px;">All</div>
+          <div class="mock-badge" style="padding:4px 12px;font-size:10px;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;">Main Dishes</div>
+          <div class="mock-badge" style="padding:4px 12px;font-size:10px;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;">Noodles</div>
+          <div class="mock-badge" style="padding:4px 12px;font-size:10px;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;">Sauces</div>
+          <div class="mock-badge" style="padding:4px 12px;font-size:10px;background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;">Beverages</div>
+        </div>
+
+        <!-- Recipe cards -->
+        <div class="mock-recipe-grid">
+          <div class="mock-recipe-card">
+            <div class="mock-card-img">🍝</div>
+            <div class="mock-card-body">
+              <div class="mock-card-name">Pad Thai Classic</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                <div class="mock-badge badge-blue">Noodles</div>
+                <div style="color:var(--green);font-weight:700;font-size:10px;">FC 28%</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-recipe-card">
+            <div class="mock-card-img">🥘</div>
+            <div class="mock-card-body">
+              <div class="mock-card-name">Green Curry Chicken</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                <div class="mock-badge badge-orange">Main Dishes</div>
+                <div style="color:var(--green);font-weight:700;font-size:10px;">FC 31%</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-recipe-card">
+            <div class="mock-card-img">🫙</div>
+            <div class="mock-card-body">
+              <div class="mock-card-name">Nam Prik Pao</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                <div class="mock-badge badge-amber">Sauces</div>
+                <div style="font-size:10px;color:var(--purple);font-weight:600;">Main Sauce</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div class="instructions">
+      <div class="instruction-item">
+        <div class="instr-num">A</div>
+        <div class="instr-text">Log in at <strong>boh-chiangmai.vercel.app</strong> with your email and password.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">B</div>
+        <div class="instr-text">In the left sidebar, click <strong>📖 Recipes</strong>. (If you don't see it, your role may not have access — ask your admin.)</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">C</div>
+        <div class="instr-text">You will see all existing recipes as cards. Use the <strong>category filter pills</strong> at the top to browse by type.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">D</div>
+        <div class="instr-text">Each card shows the <strong>Food Cost %</strong> in green. Below 35% is ideal; above 40% needs review.</div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-info">
+        <h4>ℹ️ What is Food Cost %?</h4>
+        <p>Food Cost % = Total cost ÷ Selling price × 100. The system calculates this <strong>automatically</strong> once you fill in ingredients and price.</p>
+      </div>
+      <div class="note-card note-warn">
+        <h4>⚠️ Permission Required</h4>
+        <p>Only users with the <strong>Recipes (Create/Edit)</strong> permission can add new recipes. Contact your Admin if the "+ New Recipe" button is missing.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-num">Step 1 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 2 — Open the New Recipe Form
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">2</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Open the New Recipe Form</h2>
+      <p>Click the <strong>"+ New Recipe"</strong> button (top right). You'll be taken to the recipe editor — a two-panel layout with the form on the left and a live cost summary on the right.</p>
+    </div>
+  </div>
+
+  <!-- Screen mock: New recipe editor layout overview -->
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item">🏠 Dashboard</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+        <div class="mock-nav-item">🥩 Ingredients</div>
+        <div class="mock-nav-item">📦 Inventory</div>
+      </div>
+      <div class="wide-mock-main">
+        <!-- Form panel -->
+        <div class="form-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div>
+              <div style="font-size:7px;color:var(--gray-500);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;">← Back to Recipes</div>
+              <div style="font-size:15px;font-weight:700;color:var(--gray-900);">New Recipe</div>
+            </div>
+            <div class="mock-btn mock-btn-primary" style="font-size:10px;padding:6px 12px;">💾 Save Recipe</div>
+          </div>
+
+          <!-- Section tabs indicator -->
+          <div style="display:flex;gap:3px;margin-bottom:12px;">
+            <div style="padding:4px 10px;background:var(--primary);color:#fff;border-radius:6px;font-size:9px;font-weight:600;">Basic Info</div>
+            <div style="padding:4px 10px;background:var(--gray-100);color:var(--gray-600);border-radius:6px;font-size:9px;">Yield & Price</div>
+            <div style="padding:4px 10px;background:var(--gray-100);color:var(--gray-600);border-radius:6px;font-size:9px;">Ingredients</div>
+            <div style="padding:4px 10px;background:var(--gray-100);color:var(--gray-600);border-radius:6px;font-size:9px;">Instructions</div>
+          </div>
+
+          <!-- Empty form fields -->
+          <div class="mock-form">
+            <div class="mock-field">
+              <label>Recipe Name *</label>
+              <div class="mock-input active" style="color:var(--gray-400);">Enter recipe name…<span class="cursor-blink"></span></div>
+            </div>
+            <div class="mock-field">
+              <label>Category *</label>
+              <div class="mock-input" style="color:var(--gray-400);">Select category ▼</div>
+            </div>
+            <div class="mock-field mock-form-full">
+              <label>Image URL (optional)</label>
+              <div class="mock-input" style="color:var(--gray-400);">https://…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost panel -->
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Live Cost Summary</div>
+          <div class="cost-row"><span>Ingredient cost</span><span style="color:var(--gray-400);">฿ —</span></div>
+          <div class="cost-row"><span>Labor cost</span><span style="color:var(--gray-400);">฿ —</span></div>
+          <div class="cost-row"><span>Energy cost</span><span style="color:var(--gray-400);">฿ —</span></div>
+          <div class="cost-row total"><span>Total cost / batch</span><span>฿ —</span></div>
+          <div class="cost-fc" style="background:var(--gray-100);border-color:var(--gray-200);">
+            <div class="cost-fc-pct" style="color:var(--gray-400);">— %</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+          <div style="margin-top:10px;font-size:9px;color:var(--gray-400);text-align:center;">Add ingredients &amp; selling price<br>to see live calculation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div class="instructions">
+      <div class="instruction-item">
+        <div class="instr-num">A</div>
+        <div class="instr-text">Click <strong>"+ New Recipe"</strong> button (top-right of the Recipes page).</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">B</div>
+        <div class="instr-text">You are taken to <strong>/recipes/new</strong> — the recipe editor page.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">C</div>
+        <div class="instr-text"><strong>Left panel</strong> = the form you fill in (name, ingredients, costs, etc.)</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">D</div>
+        <div class="instr-text"><strong>Right panel</strong> = Live Cost Summary that updates in real-time as you type.</div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-tip">
+        <h4>✅ Two-Panel Design</h4>
+        <p>You <strong>do not need to save</strong> to see the cost calculation. It updates live as you add ingredients and prices — perfect for testing different recipes.</p>
+      </div>
+      <div class="note-card note-info">
+        <h4>ℹ️ Editing an Existing Recipe?</h4>
+        <p>Click the <strong>✏️ Edit</strong> button on any recipe card to open the same form pre-filled with existing data.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 2 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 3 — Fill Basic Information
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">3</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Enter Basic Information</h2>
+      <p>Fill in the recipe name, select a category, and optionally add an image URL. These fields appear at the top of the form.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+        <div class="mock-nav-item">🥩 Ingredients</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <div style="font-size:14px;font-weight:700;color:var(--gray-900);margin-bottom:16px;">New Recipe — Basic Info</div>
+
+          <div class="mock-form">
+            <div class="mock-field">
+              <label>Recipe Name *</label>
+              <div class="mock-input filled">Pad Thai Shrimp</div>
+            </div>
+            <div class="mock-field">
+              <label>Category *</label>
+              <div class="mock-input filled" style="color:var(--gray-800);">Noodles ▼</div>
+            </div>
+            <div class="mock-field mock-form-full">
+              <label>Image URL (optional)</label>
+              <div class="mock-input filled" style="font-size:9px;color:var(--gray-600);">https://images.unsplash.com/photo-1569050467…</div>
+            </div>
+            <div class="mock-field mock-form-full">
+              <label>Instructions / Notes (optional)</label>
+              <div class="mock-input filled" style="height:52px;padding-top:6px;font-size:10px;color:var(--gray-700);">1. Soak noodles 30 min. 2. Heat wok on high flame. 3. Stir fry garlic…</div>
+            </div>
+          </div>
+
+          <!-- Checkbox row -->
+          <div style="display:flex;gap:16px;margin-top:12px;padding:10px 12px;background:var(--gray-100);border-radius:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;">
+              <div style="width:14px;height:14px;border:1.5px solid var(--gray-300);border-radius:3px;"></div>
+              Main Sauce
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;">
+              <div style="width:14px;height:14px;border:1.5px solid var(--gray-300);border-radius:3px;"></div>
+              Sub Recipe
+            </label>
+          </div>
+        </div>
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Live Cost Summary</div>
+          <div style="font-size:9px;color:var(--gray-400);text-align:center;margin-top:20px;">Add ingredients to see<br>live calculation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div>
+      <div class="field-highlight">
+        <h4>📌 Recipe Name</h4>
+        <p>Use a clear, unique name. Include the protein if it's a variation (e.g. "Pad Thai Chicken", "Pad Thai Shrimp"). This name appears on reports and cost analysis.</p>
+      </div>
+      <div class="field-highlight">
+        <h4>📌 Category</h4>
+        <p>Select from the dropdown (e.g. Noodles, Main Dishes, Sauces, Beverages). Categories are managed by admin. If your category is missing, ask admin to add it.</p>
+      </div>
+      <div class="field-highlight">
+        <h4>📌 Image URL</h4>
+        <p>Paste a link to a photo (from Google Images, Unsplash, etc.). Right-click any image → <kbd>Copy image address</kbd>. Leave blank if no photo available.</p>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-info">
+        <h4>ℹ️ Main Sauce checkbox</h4>
+        <p>Check this if the recipe is a <strong>base sauce</strong> used across multiple dishes (e.g. Nam Prik Pao). It gets a special gold badge on the recipe card.</p>
+      </div>
+      <div class="note-card note-purple">
+        <h4>⬡ Sub Recipe checkbox</h4>
+        <p>Check this if the recipe is used <em>as an ingredient</em> in other recipes (e.g. a homemade curry paste). The system will <strong>automatically add it to the Ingredients list</strong> with the full calculated cost per unit.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 3 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 4 — Yield & Selling Price
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">4</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Set Yield Amount &amp; Selling Price</h2>
+      <p>Define how many portions (or grams/ml) this recipe produces per batch, and set the dine-in and delivery selling prices.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+        <div class="mock-nav-item">🥩 Ingredients</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Yield &amp; Pricing</div>
+          <div class="mock-form">
+            <div class="mock-field">
+              <label>Yield Amount *</label>
+              <div class="mock-input filled">1</div>
+            </div>
+            <div class="mock-field">
+              <label>Yield Unit *</label>
+              <div class="mock-input filled">portion ▼</div>
+            </div>
+            <div class="mock-field">
+              <label>Selling Price (Dine-in) ฿</label>
+              <div class="mock-input filled">120</div>
+            </div>
+            <div class="mock-field">
+              <label>Delivery Price ฿</label>
+              <div class="mock-input filled">135</div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div style="height:1px;background:var(--gray-200);margin:14px 0;"></div>
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Time</div>
+          <div class="mock-form">
+            <div class="mock-field">
+              <label>Prep Time (min)</label>
+              <div class="mock-input filled">10</div>
+            </div>
+            <div class="mock-field">
+              <label>Cook Time (min)</label>
+              <div class="mock-input filled">8</div>
+            </div>
+          </div>
+        </div>
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Live Cost Summary</div>
+          <div class="cost-row"><span>Ingredient cost</span><span style="color:var(--gray-400);">฿ —</span></div>
+          <div class="cost-row"><span>Labor cost</span><span>฿ 12.10</span></div>
+          <div class="cost-row"><span>Energy cost</span><span>฿ 2.00</span></div>
+          <div class="cost-row total"><span>Total / portion</span><span>฿ —</span></div>
+          <div class="cost-fc" style="background:var(--gray-100);border-color:var(--gray-200);">
+            <div class="cost-fc-pct" style="color:var(--gray-400);">— %</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+          <div style="margin-top:12px;padding:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:9px;color:#92400e;">
+            <strong>Selling price set:</strong><br>฿120 dine-in<br>฿135 delivery
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div>
+      <div class="field-highlight">
+        <h4>📌 Yield Amount + Unit</h4>
+        <p><strong>Amount:</strong> How many this recipe makes (usually <strong>1</strong> for single-portion dishes, or the batch size for sauces e.g. <strong>500</strong>).<br><strong>Unit:</strong> portion, g, ml, kg, L, piece, etc.</p>
+      </div>
+      <div class="field-highlight">
+        <h4>📌 Selling Price (Dine-in)</h4>
+        <p>The menu price customers pay when eating in. This is the main price used to calculate Food Cost %. Required for FC% to show.</p>
+      </div>
+      <div class="field-highlight">
+        <h4>📌 Delivery Price</h4>
+        <p>Optional. If your delivery price is different (e.g. GrabFood, LINE MAN), enter it here. The system calculates FC% for both separately.</p>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-tip">
+        <h4>✅ Example: Pad Thai (1 portion)</h4>
+        <ul>
+          <li>Yield: <strong>1 portion</strong></li>
+          <li>Selling price: <strong>฿120</strong> (dine-in)</li>
+          <li>Delivery price: <strong>฿135</strong></li>
+          <li>Prep time: <strong>10 min</strong></li>
+          <li>Cook time: <strong>8 min</strong></li>
+        </ul>
+      </div>
+      <div class="note-card note-warn">
+        <h4>⚠️ Example: Sauce / Batch Recipe</h4>
+        <ul>
+          <li>Yield: <strong>500 g</strong> (whole batch)</li>
+          <li>Selling price: typically <strong>leave blank</strong> — set it as a Sub Recipe instead so other dishes can use it</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 4 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 5 — Add Ingredients
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">5</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Add Ingredients</h2>
+      <p>This is the most important step. Search for each ingredient by name, set the quantity in recipe units, and the system calculates the cost automatically.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">Ingredients</div>
+
+          <!-- Ingredient rows -->
+          <div class="ing-row">
+            <div class="ing-emoji">🍝</div>
+            <div class="ing-name">Sen Lek Noodles (dry)</div>
+            <div class="ing-qty" style="width:60px;text-align:right;">80 g</div>
+            <div class="ing-cost">฿ 3.20</div>
+            <div class="ing-del">✕</div>
+          </div>
+          <div class="ing-row">
+            <div class="ing-emoji">🍤</div>
+            <div class="ing-name">Shrimp (medium)</div>
+            <div class="ing-qty" style="width:60px;text-align:right;">100 g</div>
+            <div class="ing-cost">฿ 22.00</div>
+            <div class="ing-del">✕</div>
+          </div>
+          <div class="ing-row">
+            <div class="ing-emoji">🥚</div>
+            <div class="ing-name">Egg</div>
+            <div class="ing-qty" style="width:60px;text-align:right;">1 piece</div>
+            <div class="ing-cost">฿ 3.50</div>
+            <div class="ing-del">✕</div>
+          </div>
+          <div class="ing-row">
+            <div class="ing-emoji">🫙</div>
+            <div class="ing-name">Tamarind Paste</div>
+            <div class="ing-qty" style="width:60px;text-align:right;">20 ml</div>
+            <div class="ing-cost">฿ 1.40</div>
+            <div class="ing-del">✕</div>
+          </div>
+          <div class="ing-row">
+            <div class="ing-emoji">🌿</div>
+            <div class="ing-name">Bean Sprouts</div>
+            <div class="ing-qty" style="width:60px;text-align:right;">30 g</div>
+            <div class="ing-cost">฿ 0.90</div>
+            <div class="ing-del">✕</div>
+          </div>
+          <div class="ing-row" style="border:1.5px dashed #bfdbfe;background:#eff6ff;">
+            <div style="flex:1;font-size:10px;color:#2563eb;">🔍 Search ingredient… (click to open picker)</div>
+            <div style="font-size:10px;color:#93c5fd;">+ Add</div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+            <div style="font-size:10px;color:var(--gray-500);">Total ingredient cost: <strong style="color:var(--primary);">฿ 31.00</strong></div>
+          </div>
+        </div>
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Live Cost Summary</div>
+          <div class="cost-row"><span>Ingredient cost</span><span style="color:var(--primary);font-weight:600;">฿ 31.00</span></div>
+          <div class="cost-row"><span>Labor cost</span><span>฿ 12.10</span></div>
+          <div class="cost-row"><span>Energy cost</span><span>฿ 2.00</span></div>
+          <div class="cost-row total"><span>Total / portion</span><span>฿ 45.10</span></div>
+          <div class="cost-fc">
+            <div class="cost-fc-pct">37.6%</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+          <div style="margin-top:8px;font-size:9px;color:var(--gray-500);">Selling ฿120 · 5 ingredients</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div>
+      <div class="instructions">
+        <div class="instruction-item">
+          <div class="instr-num">A</div>
+          <div class="instr-text">Click the <strong>blue "+ Add ingredient" row</strong> to open the ingredient picker popup.</div>
+        </div>
+        <div class="instruction-item">
+          <div class="instr-num">B</div>
+          <div class="instr-text"><strong>Type to search</strong> — ingredients are grouped by category (Protein, Produce, Sauce, etc.). Select the correct one.</div>
+        </div>
+        <div class="instruction-item">
+          <div class="instr-num">C</div>
+          <div class="instr-text">After selecting, <strong>enter the quantity</strong> in the recipe unit shown (g, ml, piece). The cost updates instantly.</div>
+        </div>
+        <div class="instruction-item">
+          <div class="instr-num">D</div>
+          <div class="instr-text">Repeat for all ingredients. Remove any row with the <strong>✕ button</strong> on the right.</div>
+        </div>
+        <div class="instruction-item">
+          <div class="instr-num">E</div>
+          <div class="instr-text">Watch the <strong>right panel</strong> — ingredient cost and total FC% update in real-time.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-warn">
+        <h4>⚠️ Ingredient Not Found?</h4>
+        <p>If you can't find an ingredient, it hasn't been added to the system yet. Go to <strong>🥩 Ingredients</strong> in the sidebar and add it there first, then come back to this recipe.</p>
+      </div>
+      <div class="note-card note-tip">
+        <h4>✅ Unit must match the recipe</h4>
+        <p>Each ingredient shows its <strong>recipe unit</strong> (e.g. "g", "ml", "piece"). Enter the quantity in that same unit — do not convert yourself, the system handles the conversion from purchase unit automatically.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 5 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 6 — Labor & Energy Cost
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">6</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Set Labor &amp; Energy Cost</h2>
+      <p>The right sidebar panel lets you configure labor rate and energy cost. These are added on top of ingredient cost to get your <strong>true</strong> food cost percentage.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Cost Parameters</div>
+
+          <div class="mock-form">
+            <div class="mock-field">
+              <label>Prep Time (min) *</label>
+              <div class="mock-input filled">10</div>
+            </div>
+            <div class="mock-field">
+              <label>Cook Time (min) *</label>
+              <div class="mock-input filled">8</div>
+            </div>
+            <div class="mock-field">
+              <label>Labor Cost / Hour (฿) *</label>
+              <div class="mock-input filled">50</div>
+            </div>
+            <div class="mock-field">
+              <label>Energy Cost / Batch (฿) *</label>
+              <div class="mock-input filled">2</div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;padding:12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;">
+            <div style="font-size:10px;font-weight:700;color:#5b21b6;margin-bottom:8px;">⬡ Sub Recipe Option</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:10px;">
+              <div style="width:14px;height:14px;border:1.5px solid #7c3aed;border-radius:3px;background:#7c3aed;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;">✓</div>
+              <span style="color:#374151;">Mark as Sub Recipe — auto-add to Ingredients list</span>
+            </div>
+            <div style="margin-top:6px;padding:6px 8px;background:rgba(124,58,237,0.08);border-radius:6px;font-size:9px;color:#5b21b6;">
+              ✓ Will sync as: <strong>Pad Thai Sauce @ ฿45.10 / portion</strong>
+            </div>
+          </div>
+        </div>
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Cost Breakdown</div>
+          <div class="cost-row"><span>Ingredient cost</span><span style="color:var(--primary);font-weight:600;">฿ 31.00</span></div>
+          <div class="cost-row" style="font-size:9px;color:var(--gray-400);padding-left:10px;padding-top:1px;">50 ÷ 60 × 18 min</div>
+          <div class="cost-row"><span>Labor cost</span><span>฿ 15.00</span></div>
+          <div class="cost-row" style="font-size:9px;color:var(--gray-400);padding-left:10px;padding-top:1px;">fixed per batch</div>
+          <div class="cost-row"><span>Energy cost</span><span>฿ 2.00</span></div>
+          <div class="cost-row total"><span>Total / portion</span><span>฿ 48.00</span></div>
+          <div class="cost-fc">
+            <div class="cost-fc-pct">40.0%</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+          <div style="margin-top:8px;padding:6px;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;text-align:center;font-size:9px;color:#92400e;">⚠️ FC% is high<br>Consider reducing ingredients<br>or increasing price</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div>
+      <div class="field-highlight">
+        <h4>📌 Labor Cost / Hour (฿)</h4>
+        <p>The hourly wage of the cook making this dish. Default is <strong>฿50/hr</strong>. The system auto-calculates: <code>(prep + cook time) ÷ 60 × hourly rate</code></p>
+      </div>
+      <div class="field-highlight">
+        <h4>📌 Energy Cost / Batch (฿)</h4>
+        <p>Gas + electricity cost to cook one batch. Default is <strong>฿2</strong>. Adjust for dishes that use more fuel (deep fry, long simmer, etc.)</p>
+      </div>
+      <div class="annotation">
+        <div class="annotation-icon">🧮</div>
+        <div><strong>Labor formula:</strong> (PrepTime + CookTime) ÷ 60 × LaborCostPerHour<br>
+        Example: (10 + 8) ÷ 60 × ฿50 = <strong>฿15.00</strong></div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-tip">
+        <h4>✅ FC% Color Guide</h4>
+        <ul>
+          <li>🟢 <strong>Under 30%</strong> — Excellent margin</li>
+          <li>🟡 <strong>30–35%</strong> — Good, within target</li>
+          <li>🟠 <strong>35–40%</strong> — Acceptable but review</li>
+          <li>🔴 <strong>Above 40%</strong> — Too high, adjust price or reduce cost</li>
+        </ul>
+      </div>
+      <div class="note-card note-info">
+        <h4>ℹ️ Defaults are system-wide</h4>
+        <p>The default labor rate (฿50/hr) and energy cost (฿2) are set per recipe — you can adjust each recipe independently to reflect actual complexity.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 6 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 7 — Review Live Cost Summary
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">7</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Review the Live Cost Summary</h2>
+      <p>Before saving, check the right panel for the full cost breakdown. Verify your Food Cost % is within the acceptable range for your business.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new · ready to save</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <!-- Ingredient summary -->
+          <div style="font-size:11px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📋 Ingredients Summary (5 items)</div>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+            <div class="ing-row" style="background:#f9fafb;">
+              <div class="ing-emoji">🍝</div><div class="ing-name">Sen Lek Noodles</div><div class="ing-qty">80 g</div><div class="ing-cost">฿ 3.20</div>
+            </div>
+            <div class="ing-row" style="background:#f9fafb;">
+              <div class="ing-emoji">🍤</div><div class="ing-name">Shrimp (medium)</div><div class="ing-qty">100 g</div><div class="ing-cost">฿ 22.00</div>
+            </div>
+            <div class="ing-row" style="background:#f9fafb;">
+              <div class="ing-emoji">🥚</div><div class="ing-name">Egg</div><div class="ing-qty">1 piece</div><div class="ing-cost">฿ 3.50</div>
+            </div>
+            <div class="ing-row" style="background:#f9fafb;">
+              <div class="ing-emoji">🫙</div><div class="ing-name">Tamarind Paste</div><div class="ing-qty">20 ml</div><div class="ing-cost">฿ 1.40</div>
+            </div>
+            <div class="ing-row" style="background:#f9fafb;">
+              <div class="ing-emoji">🌿</div><div class="ing-name">Bean Sprouts</div><div class="ing-qty">30 g</div><div class="ing-cost">฿ 0.90</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:11px;color:var(--gray-500);">Everything looks good? Save now.</div>
+            <div class="mock-btn mock-btn-primary" style="font-size:11px;">💾 Save Recipe</div>
+          </div>
+        </div>
+        <div class="cost-panel" style="background:linear-gradient(180deg,#fff 0%,#fafaf9 100%);">
+          <div class="cost-panel-title" style="color:var(--gray-900);font-size:12px;">📊 Final Cost Summary</div>
+
+          <div style="margin-bottom:10px;padding:8px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;">
+            <div style="font-size:9px;color:#5b21b6;font-weight:600;margin-bottom:3px;">Pad Thai Shrimp · 1 portion</div>
+            <div style="font-size:9px;color:#374151;">Category: Noodles</div>
+          </div>
+
+          <div class="cost-row"><span>5 ingredients</span><span style="color:var(--primary);font-weight:600;">฿ 31.00</span></div>
+          <div class="cost-row"><span>Labor (18 min)</span><span>฿ 15.00</span></div>
+          <div class="cost-row"><span>Energy</span><span>฿ 2.00</span></div>
+          <div class="cost-row total"><span>Total / portion</span><span>฿ 48.00</span></div>
+
+          <div style="height:8px;"></div>
+
+          <div class="cost-row" style="font-size:10px;"><span>Selling price</span><span style="color:var(--green);font-weight:600;">฿ 120</span></div>
+          <div class="cost-row" style="font-size:10px;"><span>Gross profit</span><span style="color:var(--green);font-weight:600;">฿ 72</span></div>
+
+          <div class="cost-fc" style="margin-top:10px;">
+            <div class="cost-fc-pct" style="color:var(--green);">40.0%</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+
+          <div style="display:flex;gap:4px;margin-top:8px;">
+            <div style="flex:1;background:var(--green-light);border:1px solid #bbf7d0;border-radius:5px;padding:5px;text-align:center;">
+              <div style="font-size:10px;font-weight:700;color:var(--green);">฿72</div>
+              <div style="font-size:8px;color:var(--gray-500);">Profit</div>
+            </div>
+            <div style="flex:1;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:5px;text-align:center;">
+              <div style="font-size:10px;font-weight:700;color:#92400e;">60%</div>
+              <div style="font-size:8px;color:var(--gray-500);">Margin</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div class="instructions">
+      <div class="instruction-item">
+        <div class="instr-num">A</div>
+        <div class="instr-text">Check <strong>Ingredient Cost</strong> — does the total seem right for these quantities?</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">B</div>
+        <div class="instr-text">Check <strong>Labor cost</strong> = auto-calculated from time × hourly rate.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">C</div>
+        <div class="instr-text">Check <strong>Food Cost %</strong> — aim for under 35% for most dishes. For premium ingredients (seafood, imported goods) up to 40% may be acceptable.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">D</div>
+        <div class="instr-text">If FC% is too high: reduce quantities, substitute an ingredient, or increase the selling price.</div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-tip">
+        <h4>✅ Pro Tip: Duplicate for Variations</h4>
+        <p>After saving, use the <strong>⎘ Copy</strong> button on the recipe card to quickly create variations (e.g. "Pad Thai Chicken", "Pad Thai Tofu") and compare their FC% side by side.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 7 of 8</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     STEP 8 — Save Recipe
+════════════════════════════════════ -->
+<div class="step-page">
+  <div class="step-header">
+    <div class="step-badge">
+      <div class="step-num-large">8</div>
+      <div class="step-label-small">Step</div>
+    </div>
+    <div class="step-title-block">
+      <h2>Save the Recipe</h2>
+      <p>Click <strong>"💾 Save Recipe"</strong>. The button will turn green and show "Saved ✓" — you stay on the same page so you can keep editing. The recipe is now live in the system.</p>
+    </div>
+  </div>
+
+  <div class="screen-mock">
+    <div class="screen-mock-bar">
+      <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
+      <div class="address-bar">boh-chiangmai.vercel.app/recipes/new · ✓ saved</div>
+    </div>
+    <div class="wide-screen-body">
+      <div class="wide-mock-sidebar">
+        <div class="mock-sidebar-logo">🍜 Chiang Mai</div>
+        <div class="mock-nav-item active">📖 Recipes</div>
+      </div>
+      <div class="wide-mock-main">
+        <div class="form-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div>
+              <div style="font-size:7px;color:var(--gray-500);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;">← Back to Recipes</div>
+              <div style="font-size:15px;font-weight:700;color:var(--gray-900);">Pad Thai Shrimp <span style="font-size:10px;font-weight:400;color:var(--gray-500);">· Noodles</span></div>
+            </div>
+            <!-- Saved button state -->
+            <div class="mock-btn mock-btn-green" style="font-size:11px;">✓ Saved</div>
+          </div>
+
+          <!-- Success notification -->
+          <div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+            <div style="font-size:20px;">✅</div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#166534;">Recipe saved successfully!</div>
+              <div style="font-size:11px;color:#15803d;">Pad Thai Shrimp has been added to the Noodles category.</div>
+            </div>
+          </div>
+
+          <!-- What you can do next -->
+          <div style="font-size:11px;font-weight:600;color:var(--gray-700);margin-bottom:10px;">What next?</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div style="padding:10px;border:1px solid var(--gray-200);border-radius:8px;font-size:10px;color:var(--gray-700);">
+              <div style="font-size:14px;margin-bottom:4px;">⎘</div>
+              <div style="font-weight:600;margin-bottom:2px;">Duplicate recipe</div>
+              <div style="color:var(--gray-500);">Create a variation (e.g. beef instead of shrimp)</div>
+            </div>
+            <div style="padding:10px;border:1px solid var(--gray-200);border-radius:8px;font-size:10px;color:var(--gray-700);">
+              <div style="font-size:14px;margin-bottom:4px;">📊</div>
+              <div style="font-weight:600;margin-bottom:2px;">View Cost Analysis</div>
+              <div style="color:var(--gray-500);">Compare all recipes by FC% in Analysis page</div>
+            </div>
+            <div style="padding:10px;border:1px solid var(--gray-200);border-radius:8px;font-size:10px;color:var(--gray-700);">
+              <div style="font-size:14px;margin-bottom:4px;">📦</div>
+              <div style="font-weight:600;margin-bottom:2px;">Log inventory usage</div>
+              <div style="color:var(--gray-500);">Track stock deductions when cooking this recipe</div>
+            </div>
+            <div style="padding:10px;border:1px solid var(--gray-200);border-radius:8px;font-size:10px;color:var(--gray-700);">
+              <div style="font-size:14px;margin-bottom:4px;">📖</div>
+              <div style="font-weight:600;margin-bottom:2px;">Back to Recipes</div>
+              <div style="color:var(--gray-500);">See the new recipe card with FC% badge</div>
+            </div>
+          </div>
+        </div>
+        <div class="cost-panel">
+          <div class="cost-panel-title">📊 Final Cost</div>
+          <div class="cost-row"><span>Ingredients</span><span style="color:var(--primary);font-weight:600;">฿ 31.00</span></div>
+          <div class="cost-row"><span>Labor</span><span>฿ 15.00</span></div>
+          <div class="cost-row"><span>Energy</span><span>฿ 2.00</span></div>
+          <div class="cost-row total"><span>Total / portion</span><span>฿ 48.00</span></div>
+          <div class="cost-fc">
+            <div class="cost-fc-pct" style="color:var(--green);">40.0%</div>
+            <div class="cost-fc-label">Food Cost %</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-content-cols">
+    <div class="instructions">
+      <div class="instruction-item">
+        <div class="instr-num">A</div>
+        <div class="instr-text">Click <strong>"💾 Save Recipe"</strong> at the top right of the page.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">B</div>
+        <div class="instr-text">The button turns <strong>green</strong> and shows "✓ Saved" — you stay on the same page.</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">C</div>
+        <div class="instr-text">Continue editing if needed — each save updates the existing record (no duplicates).</div>
+      </div>
+      <div class="instruction-item">
+        <div class="instr-num">D</div>
+        <div class="instr-text">Click <strong>"← Back to Recipes"</strong> to return and see your new recipe card in the list.</div>
+      </div>
+    </div>
+    <div class="step-notes">
+      <div class="note-card note-tip">
+        <h4>✅ Recipe is now in the system!</h4>
+        <ul>
+          <li>Visible in the Recipes page under its category</li>
+          <li>Available in Cost Analysis reports</li>
+          <li>Can be used in Batch Planning</li>
+          <li>Can be sold via Daily Sales entry</li>
+          <li>If "Sub Recipe", now available as an ingredient</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Step 8 of 8 — Complete!</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     QUICK REFERENCE SUMMARY
+════════════════════════════════════ -->
+<div class="summary-page">
+  <div class="page-label">Quick Reference</div>
+  <h2 style="font-family:'Playfair Display',serif;font-size:34px;color:var(--gray-900);margin-bottom:8px;">Complete Checklist</h2>
+  <div class="toc-divider"></div>
+  <p style="font-size:14px;color:var(--gray-500);margin-bottom:0;">Use this checklist every time you add a new recipe to make sure nothing is missed.</p>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <h3>📋 Basic Info</h3>
+      <ul>
+        <li><span class="check">✓</span> Recipe name is clear and unique</li>
+        <li><span class="check">✓</span> Category is selected from dropdown</li>
+        <li><span class="check">✓</span> Image URL added (if available)</li>
+        <li><span class="check">✓</span> Cooking instructions written (optional)</li>
+        <li><span class="check">✓</span> "Main Sauce" checked if applicable</li>
+        <li><span class="check">✓</span> "Sub Recipe" checked if used in other recipes</li>
+      </ul>
+    </div>
+    <div class="summary-card">
+      <h3>⚖️ Yield &amp; Pricing</h3>
+      <ul>
+        <li><span class="check">✓</span> Yield amount entered (e.g. 1)</li>
+        <li><span class="check">✓</span> Yield unit selected (portion / g / ml)</li>
+        <li><span class="check">✓</span> Selling price (dine-in) entered in ฿</li>
+        <li><span class="check">✓</span> Delivery price entered (if different)</li>
+        <li><span class="check">✓</span> Prep time entered in minutes</li>
+        <li><span class="check">✓</span> Cook time entered in minutes</li>
+      </ul>
+    </div>
+    <div class="summary-card">
+      <h3>🥩 Ingredients</h3>
+      <ul>
+        <li><span class="check">✓</span> All ingredients are in the Ingredients list</li>
+        <li><span class="check">✓</span> Each ingredient added via picker (not typed manually)</li>
+        <li><span class="check">✓</span> Quantities match the recipe unit shown</li>
+        <li><span class="check">✓</span> No ingredients accidentally duplicated</li>
+        <li><span class="check">✓</span> Ingredient cost in right panel looks correct</li>
+      </ul>
+    </div>
+    <div class="summary-card">
+      <h3>💰 Cost Parameters</h3>
+      <ul>
+        <li><span class="check">✓</span> Labor cost/hr set to actual wage rate</li>
+        <li><span class="check">✓</span> Energy cost/batch adjusted for dish type</li>
+        <li><span class="check">✓</span> FC% is below 35% (ideally)</li>
+        <li><span class="check">✓</span> If FC% &gt; 40%, review ingredients or price</li>
+        <li><span class="check">✓</span> Recipe saved (button shows "✓ Saved")</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Field reference table -->
+  <div style="margin-top:28px;">
+    <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">Field Reference</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:var(--gray-100);">
+          <th style="text-align:left;padding:8px 12px;color:var(--gray-700);font-weight:700;border-bottom:1px solid var(--gray-200);">Field</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--gray-700);font-weight:700;border-bottom:1px solid var(--gray-200);">Required?</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--gray-700);font-weight:700;border-bottom:1px solid var(--gray-200);">Example Value</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--gray-700);font-weight:700;border-bottom:1px solid var(--gray-200);">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--gray-200);">
+          <td style="padding:8px 12px;font-weight:600;">Recipe Name</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">Pad Thai Shrimp</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Include protein for variations</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+          <td style="padding:8px 12px;font-weight:600;">Category</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">Noodles</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Admin manages available categories</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);">
+          <td style="padding:8px 12px;font-weight:600;">Yield Amount</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">1</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Usually 1 for single-portion dishes</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+          <td style="padding:8px 12px;font-weight:600;">Yield Unit</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">portion</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">portion, g, ml, kg, piece, L</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);">
+          <td style="padding:8px 12px;font-weight:600;">Selling Price</td>
+          <td style="padding:8px 12px;"><span style="color:#d97706;font-weight:700;">Rec.</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">฿120</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Needed for FC% calculation</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+          <td style="padding:8px 12px;font-weight:600;">Prep + Cook Time</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">10 + 8 min</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Used for labor cost calculation</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--gray-200);">
+          <td style="padding:8px 12px;font-weight:600;">Labor Cost/hr</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">฿50</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Defaults to ฿50, adjust per staff wage</td>
+        </tr>
+        <tr style="background:var(--gray-50);">
+          <td style="padding:8px 12px;font-weight:600;">Energy Cost</td>
+          <td style="padding:8px 12px;"><span style="color:var(--red);font-weight:700;">Yes</span></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">฿2</td>
+          <td style="padding:8px 12px;color:var(--gray-500);">Defaults to ฿2, adjust for heavy cooking</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="page-num">Quick Reference</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     TIPS & BEST PRACTICES
+════════════════════════════════════ -->
+<div class="summary-page">
+  <div class="page-label">Best Practices</div>
+  <h2 style="font-family:'Playfair Display',serif;font-size:34px;color:var(--gray-900);margin-bottom:8px;">Tips for New Users</h2>
+  <div class="toc-divider"></div>
+
+  <div class="tips-grid">
+    <div class="tip-card tip-amber">
+      <div class="tip-icon">🍽️</div>
+      <h3>Name recipes consistently</h3>
+      <p>Use the format "<strong>[Dish] [Protein]</strong>" for easy comparison. Example: "Pad Thai Chicken", "Pad Thai Shrimp", "Pad Thai Tofu" — all visible together in reports.</p>
+    </div>
+    <div class="tip-card tip-blue">
+      <div class="tip-icon">⎘</div>
+      <h3>Use Duplicate for Variations</h3>
+      <p>Never type a full recipe twice. Click the <strong>⎘ copy button</strong> on any recipe card to duplicate it, then just swap out the protein ingredient and recalculate FC%.</p>
+    </div>
+    <div class="tip-card tip-green">
+      <div class="tip-icon">📊</div>
+      <h3>Check Analysis after saving</h3>
+      <p>Go to <strong>📈 Analysis → Recipe Costs</strong> to see all recipes ranked by Food Cost %. This shows you which dishes are most and least profitable at a glance.</p>
+    </div>
+    <div class="tip-card tip-purple">
+      <div class="tip-icon">⬡</div>
+      <h3>Sub Recipe for sauces</h3>
+      <p>If you have a base sauce (e.g. Massaman curry paste), mark it as a <strong>Sub Recipe</strong>. It becomes available as an ingredient in other recipes with the exact cost included.</p>
+    </div>
+    <div class="tip-card tip-red">
+      <div class="tip-icon">⚠️</div>
+      <h3>FC% above 40%?</h3>
+      <p>Options: (1) Reduce portion size, (2) Substitute a cheaper ingredient, (3) Increase selling price, (4) Check if ingredient prices are outdated in the Ingredients page.</p>
+    </div>
+    <div class="tip-card tip-gray">
+      <div class="tip-icon">🔒</div>
+      <h3>Can't see all recipes?</h3>
+      <p>Your Admin may have restricted your account to specific Recipe Categories. This is normal — you only see what's relevant to your department. Ask Admin to adjust access.</p>
+    </div>
+  </div>
+
+  <div style="margin-top:28px;padding:20px 24px;background:var(--primary-light);border:1px solid #fde68a;border-radius:14px;display:flex;gap:16px;align-items:flex-start;">
+    <div style="font-size:28px;flex-shrink:0;">🏆</div>
+    <div>
+      <p style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;">Target Food Cost Benchmarks</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <div style="padding:8px 14px;background:#fff;border-radius:8px;border:1px solid #fde68a;font-size:12px;">
+          <span style="color:var(--green);font-weight:800;">Under 28%</span> — Beverages &amp; Desserts
+        </div>
+        <div style="padding:8px 14px;background:#fff;border-radius:8px;border:1px solid #fde68a;font-size:12px;">
+          <span style="color:var(--green);font-weight:800;">28–33%</span> — Noodles &amp; Rice dishes
+        </div>
+        <div style="padding:8px 14px;background:#fff;border-radius:8px;border:1px solid #fde68a;font-size:12px;">
+          <span style="color:#d97706;font-weight:800;">33–38%</span> — Meat &amp; Seafood mains
+        </div>
+        <div style="padding:8px 14px;background:#fff;border-radius:8px;border:1px solid #fde68a;font-size:12px;">
+          <span style="color:var(--red);font-weight:800;">Above 40%</span> — Review &amp; adjust
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">Tips &amp; Best Practices</div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     FINAL PAGE
+════════════════════════════════════ -->
+<div class="final-page">
+  <div style="font-size:56px;margin-bottom:20px;">✅</div>
+  <h2>You're ready to go!</h2>
+  <p>You now know how to create recipes, calculate food cost, and manage the kitchen's cost data. Log in and start building your recipe library.</p>
+  <div class="final-url">boh-chiangmai.vercel.app</div>
+  <div style="margin-top:40px;color:rgba(255,255,255,0.35);font-size:12px;">
+    Chiang Mai BOH System · Back of House Management · 2026<br>
+    For support, contact your system administrator.
+  </div>
+</div>
+
+</body>
+</html>

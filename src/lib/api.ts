@@ -265,6 +265,7 @@ export interface Ingredient {
     storageArea?: StorageArea | null;
     averageCostPerBaseUnit?: number | null;
     ingredientSuppliers?: IngredientSupplier[];
+    inventoryItem?: { currentStock: number; parMin: number } | null;
     imageUrl?: string | null;
     createdAt?: string;
     updatedAt?: string;

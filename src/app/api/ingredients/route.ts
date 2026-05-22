@@ -34,6 +34,7 @@ export async function GET(request: Request) {
                     include: { supplier: { select: { id: true, name: true } } },
                     orderBy: [{ isPreferred: "desc" }, { createdAt: "asc" }],
                 },
+                inventoryItem:      { select: { currentStock: true, parMin: true } },
             },
             orderBy: { name: "asc" },
         });

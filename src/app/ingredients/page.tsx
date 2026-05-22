@@ -96,7 +96,7 @@ import {
     Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info, Warehouse, Star, X as XIcon } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info, Warehouse, Star, X as XIcon, PackageCheck, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
@@ -176,6 +176,28 @@ export default function IngredientsPage() {
     // ─── Derived cost values ───────────────────────────────────────────────────
     const ingEffCost = (item: Ingredient) =>
         effectiveCost(Number(item.purchasePrice), Number(item.conversionRate), Number(item.yieldPercent));
+
+    /** Cost per recipe unit (no yield adjustment) — for stock value calculation
+     *  Stock is already received as usable quantity so we use raw cost/recipe-unit */
+    const ingRawCostPerRU = (item: Ingredient) =>
+        Number(item.conversionRate) > 0
+            ? Number(item.purchasePrice) / Number(item.conversionRate)
+            : 0;
+
+    /** Total value of current stock = currentStock (recipe units) × cost per recipe unit */
+    const ingStockValue = (item: Ingredient): number => {
+        const stock = Number(item.inventoryItem?.currentStock ?? 0);
+        return stock * ingRawCostPerRU(item);
+    };
+
+    /** Total portfolio value across all ingredients with inventory */
+    const totalStockValue = ingredients.reduce((s, i) => s + ingStockValue(i), 0);
+    const trackedCount = ingredients.filter(i => i.inventoryItem != null).length;
+    const lowStockCount = ingredients.filter(i => {
+        const stock = Number(i.inventoryItem?.currentStock ?? 0);
+        const parMin = Number(i.inventoryItem?.parMin ?? 0);
+        return i.inventoryItem != null && stock < parMin;
+    }).length;
 
     // ─── Form helpers ──────────────────────────────────────────────────────────
     const purchaseUnits = GROUP_UNITS[form.groupId] ?? [];
@@ -355,22 +377,41 @@ export default function IngredientsPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {/* Total count */}
                 <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
-                    <ShoppingCart className="h-7 w-7 text-primary opacity-70" />
+                    <ShoppingCart className="h-6 w-6 text-primary opacity-70" />
                     <div>
                         <p className="text-xl font-bold text-primary">{ingredients.length}</p>
-                        <p className="text-xs text-muted-foreground">Total</p>
+                        <p className="text-xs text-muted-foreground">Ingredients</p>
                     </div>
                 </div>
+                {/* Group filters */}
                 {(["Weight", "Volume", "Count"] as const).map(g => (
                     <div key={g}
-                        className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors"
+                        className={`rounded-xl border bg-card px-4 py-3 cursor-pointer hover:border-primary/50 transition-colors ${groupFilter === g ? "border-primary bg-primary/5" : ""}`}
                         onClick={() => setGroupFilter(groupFilter === g ? "all" : g)}>
                         <p className="text-xl font-bold">{ingredients.filter(i => i.groupId === g).length}</p>
                         <p className="text-xs text-muted-foreground">{g} {groupFilter === g ? "✓" : ""}</p>
                     </div>
                 ))}
+                {/* Total stock value */}
+                <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3 lg:col-span-1">
+                    <PackageCheck className="h-6 w-6 text-emerald-600 opacity-80 shrink-0" />
+                    <div className="min-w-0">
+                        <p className="text-lg font-bold text-emerald-700 tabular-nums truncate">{format(totalStockValue)}</p>
+                        <p className="text-xs text-muted-foreground">Stock Value</p>
+                        <p className="text-[10px] text-muted-foreground">{trackedCount} tracked</p>
+                    </div>
+                </div>
+                {/* Low stock alert */}
+                <div className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${lowStockCount > 0 ? "border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900" : "bg-card"}`}>
+                    <TrendingDown className={`h-6 w-6 shrink-0 ${lowStockCount > 0 ? "text-red-500" : "text-muted-foreground opacity-50"}`} />
+                    <div>
+                        <p className={`text-xl font-bold ${lowStockCount > 0 ? "text-red-600" : "text-muted-foreground"}`}>{lowStockCount}</p>
+                        <p className="text-xs text-muted-foreground">Low Stock</p>
+                    </div>
+                </div>
             </div>
 
             {/* Search / filter */}
@@ -454,6 +495,23 @@ export default function IngredientsPage() {
                                         </span>
                                     )}
                                 </div>
+                                {/* Stock row */}
+                                {item.inventoryItem != null && (() => {
+                                    const stock = Number(item.inventoryItem!.currentStock);
+                                    const parMin = Number(item.inventoryItem!.parMin);
+                                    const val = ingStockValue(item);
+                                    const isLow = stock < parMin;
+                                    return (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className={`text-xs tabular-nums font-medium ${isLow ? "text-red-600" : "text-foreground"}`}>
+                                                {stock % 1 === 0 ? stock : stock.toFixed(2)} {item.recipeUnit}
+                                                {isLow && <span className="ml-1 text-[10px] text-red-500">⚠ low</span>}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground">·</span>
+                                            <span className="text-xs text-emerald-700 font-semibold tabular-nums">{format(val)}</span>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {/* Actions */}
@@ -497,6 +555,22 @@ export default function IngredientsPage() {
                                 <span className="flex items-center gap-1">
                                     Eff. Cost
                                     <span title="Cost per usable recipe unit after yield loss. Formula: (Purchase Price ÷ Conversion Rate) ÷ (Yield% ÷ 100)" className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </span>
+                                </span>
+                            </TableHead>
+                            <TableHead className="hidden md:table-cell">
+                                <span className="flex items-center gap-1">
+                                    In Stock
+                                    <span title="Current stock level (recipe units). Red = below minimum par level." className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </span>
+                                </span>
+                            </TableHead>
+                            <TableHead className="hidden md:table-cell">
+                                <span className="flex items-center gap-1">
+                                    Stock Value
+                                    <span title="Total cost value of current stock = In Stock × (Purchase Price ÷ Conversion Rate)" className="cursor-help">
                                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
                                 </span>
@@ -572,6 +646,39 @@ export default function IngredientsPage() {
                                             )}
                                         </div>
                                     </TableCell>
+                                    {/* ── In Stock ── */}
+                                    <TableCell className="hidden md:table-cell tabular-nums text-sm">
+                                        {item.inventoryItem != null ? (() => {
+                                            const stock = Number(item.inventoryItem!.currentStock);
+                                            const parMin = Number(item.inventoryItem!.parMin);
+                                            const isLow = stock < parMin;
+                                            return (
+                                                <div className="space-y-0.5">
+                                                    <span className={`font-medium ${isLow ? "text-red-600" : "text-foreground"}`}>
+                                                        {stock % 1 === 0 ? stock.toLocaleString() : stock.toFixed(2)} {item.recipeUnit}
+                                                    </span>
+                                                    {isLow && (
+                                                        <p className="text-[10px] text-red-500 font-medium">⚠ Below par ({parMin.toFixed(0)} {item.recipeUnit})</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })() : (
+                                            <span className="text-muted-foreground text-xs">—</span>
+                                        )}
+                                    </TableCell>
+                                    {/* ── Stock Value ── */}
+                                    <TableCell className="hidden md:table-cell tabular-nums text-sm">
+                                        {item.inventoryItem != null ? (() => {
+                                            const val = ingStockValue(item);
+                                            return (
+                                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                                    {format(val)}
+                                                </span>
+                                            );
+                                        })() : (
+                                            <span className="text-muted-foreground text-xs">—</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
                                             <Edit className="h-4 w-4" />
@@ -586,7 +693,7 @@ export default function IngredientsPage() {
                         })}
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                                     No ingredients found.
                                 </TableCell>
                             </TableRow>

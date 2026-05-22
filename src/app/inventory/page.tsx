@@ -29,6 +29,7 @@ import {
     AlertCircle, PackagePlus, Warehouse, History, Search,
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
     CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
+    DollarSign,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -66,6 +67,15 @@ const WASTE_REASONS = ["Spoiled", "Overcooked", "Staff Meal", "Dropped", "Over-p
 const PIE_COLORS = ["#b8860b", "#e07b39", "#4a9e6b", "#6366f1", "#f43f5e", "#94a3b8"];
 
 function today() { return new Date().toISOString().split("T")[0]; }
+
+/** Cost value of current stock for one inventory item.
+ *  currentStock is in recipe units; purchasePrice / conversionRate = cost per recipe unit (THB). */
+function itemStockValue(item: InventoryItem): number {
+    const stock = Number(item.currentStock);
+    const price = Number(item.ingredient.purchasePrice);
+    const conv  = Number(item.ingredient.conversionRate);
+    return conv > 0 ? stock * (price / conv) : 0;
+}
 
 // ─── Status Badge ──────────────────────────────────────────────────────────────
 
@@ -357,12 +367,22 @@ export default function InventoryPage() {
             )}
 
             {/* ── Stat Cards ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
                     <Warehouse className="h-7 w-7 text-primary opacity-70 shrink-0" />
                     <div>
                         <p className="text-2xl font-bold text-primary">{items.length}</p>
                         <p className="text-xs text-muted-foreground">Tracked Items</p>
+                    </div>
+                </div>
+                {/* Total stock value */}
+                <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 px-4 py-3 flex items-center gap-3 sm:col-span-2 lg:col-span-1">
+                    <DollarSign className="h-7 w-7 text-emerald-600 opacity-80 shrink-0" />
+                    <div className="min-w-0">
+                        <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums truncate">
+                            {format(items.reduce((s, i) => s + itemStockValue(i), 0))}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Stock Value</p>
                     </div>
                 </div>
                 <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
@@ -419,6 +439,7 @@ export default function InventoryPage() {
                                 {storageAreas.map(area => {
                                     const areaItems = items.filter(i => (i.ingredient as Ingredient & { storageAreaId?: string | null }).storageAreaId === area.id);
                                     const criticalCount = areaItems.filter(i => stockStatus(i) === "critical").length;
+                                    const areaValue = areaItems.reduce((s, i) => s + itemStockValue(i), 0);
                                     return (
                                         <button key={area.id}
                                             onClick={() => setSelectedAreaId(area.id)}
@@ -441,6 +462,11 @@ export default function InventoryPage() {
                                             )}
                                             <p className="text-2xl font-bold text-primary">{areaItems.length}</p>
                                             <p className="text-xs text-muted-foreground">ingredients</p>
+                                            {areaValue > 0 && (
+                                                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                                                    {format(areaValue)}
+                                                </p>
+                                            )}
                                         </button>
                                     );
                                 })}
@@ -495,6 +521,7 @@ export default function InventoryPage() {
                                     <TableHead>Ingredient</TableHead>
                                     <TableHead className="hidden sm:table-cell">Unit</TableHead>
                                     <TableHead className="text-right">Current Stock</TableHead>
+                                    <TableHead className="text-right text-emerald-700 dark:text-emerald-400">Stock Value</TableHead>
                                     <TableHead className="hidden md:table-cell">Level</TableHead>
                                     <TableHead className="hidden lg:table-cell text-right">PAR Min / ROP / Max</TableHead>
                                     <TableHead>Status</TableHead>
@@ -524,6 +551,11 @@ export default function InventoryPage() {
                                             <TableCell className="text-right tabular-nums font-semibold">
                                                 {Number(item.currentStock).toFixed(1)}
                                             </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                                    {format(itemStockValue(item))}
+                                                </span>
+                                            </TableCell>
                                             <TableCell className="hidden md:table-cell">
                                                 <StockBar item={item} />
                                             </TableCell>
@@ -541,7 +573,7 @@ export default function InventoryPage() {
                                 })}
                                 {filteredItems.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                                             {items.length === 0 ? 'No ingredients tracked yet. Click "Track Ingredient" to begin.' : "No results match your search."}
                                         </TableCell>
                                     </TableRow>

@@ -227,7 +227,10 @@ export const salesApi = {
         apiFetch<SalesEntry>("/sales", { method: "POST", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/sales/${id}`, { method: "DELETE" }),
     summary: (date?: string) => apiFetch<SalesSummary>(`/sales/summary${date ? `?date=${date}` : ""}`),
-    trend: (days = 7) => apiFetch<SalesTrend[]>(`/sales/trend?days=${days}`),
+    trend: (days = 7, endDate?: string) =>
+        apiFetch<{ trend: SalesTrend[]; latestDate: string | null }>(
+            `/sales/trend?days=${days}${endDate ? `&endDate=${endDate}` : ""}`
+        ),
 };
 
 // ─── Shared Types (match Prisma output) ─────────────────────────────────────

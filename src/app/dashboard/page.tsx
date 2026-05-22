@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
     LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -11,13 +11,19 @@ import { useCurrency } from "@/components/currency-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
     TrendingUp, TrendingDown, DollarSign, ShoppingBag,
     ChefHat, AlertTriangle, Plus, BarChart2, Utensils,
-    Loader2, ArrowRight,
+    Loader2, ArrowRight, CalendarDays, PieChart, RefreshCw,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Get today's date in the user's LOCAL timezone as YYYY-MM-DD */
+function localToday(): string {
+    return new Date().toLocaleDateString("en-CA"); // "en-CA" always returns YYYY-MM-DD
+}
 
 function calcCostPerYield(recipe: RecipeWithIngredients): number {
     const ing = recipe.ingredients.reduce((s, row) => {
@@ -29,8 +35,14 @@ function calcCostPerYield(recipe: RecipeWithIngredients): number {
 }
 
 function formatDate(d: string) {
-    const dt = new Date(d + "T00:00:00");
+    const dt = new Date(d + "T12:00:00");
     return `${dt.getDate()}/${dt.getMonth() + 1}`;
+}
+
+function formatFull(d: string) {
+    return new Date(d + "T12:00:00").toLocaleDateString("en-CA", {
+        weekday: "short", year: "numeric", month: "short", day: "numeric",
+    });
 }
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
@@ -87,45 +99,90 @@ function RevenueTooltip({ active, payload, label, format }: {
 
 export default function DashboardPage() {
     const { format } = useCurrency();
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const today = localToday();
 
-    const [todaySummary, setTodaySummary] = useState<SalesSummary | null>(null);
-    const [yesterdaySummary, setYesterdaySummary] = useState<SalesSummary | null>(null);
+    const [selectedDate, setSelectedDate] = useState(today);
+    const [prevDate, setPrevDate] = useState(() => {
+        const d = new Date(today + "T12:00:00");
+        d.setDate(d.getDate() - 1);
+        return d.toLocaleDateString("en-CA");
+    });
+
+    const [summary, setSummary] = useState<SalesSummary | null>(null);
+    const [prevSummary, setPrevSummary] = useState<SalesSummary | null>(null);
     const [trend, setTrend] = useState<SalesTrend[]>([]);
+    const [latestDate, setLatestDate] = useState<string | null>(null);
     const [recipes, setRecipes] = useState<RecipeWithIngredients[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const load = useCallback(async (date: string, showSpinner = false) => {
+        if (showSpinner) setRefreshing(true);
+        const prevD = new Date(date + "T12:00:00");
+        prevD.setDate(prevD.getDate() - 1);
+        const prev = prevD.toLocaleDateString("en-CA");
+        setPrevDate(prev);
+
+        try {
+            const [s, ps, trendResp, recs] = await Promise.all([
+                salesApi.summary(date),
+                salesApi.summary(prev),
+                salesApi.trend(7, date),
+                recipesApi.list(),
+            ]);
+            setSummary(s);
+            setPrevSummary(ps);
+            setTrend(trendResp.trend);
+            setLatestDate(trendResp.latestDate);
+            setRecipes(recs);
+
+            // Smart fallback: if selected date has no data but a more recent date does,
+            // auto-switch once (only when user hasn't manually changed the date)
+            if (date === today && s.itemsSold === 0 && trendResp.latestDate && trendResp.latestDate !== today) {
+                // don't auto-switch — just show the banner so user can choose
+            }
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [today]);
 
     useEffect(() => {
-        Promise.all([
-            salesApi.summary(today),
-            salesApi.summary(yesterday),
-            salesApi.trend(7),
-            recipesApi.list(),
-        ]).then(([ts, ys, tr, recs]) => {
-            setTodaySummary(ts);
-            setYesterdaySummary(ys);
-            setTrend(tr);
-            setRecipes(recs);
-        }).finally(() => setLoading(false));
-    }, [today, yesterday]);
+        setLoading(true);
+        load(selectedDate);
+    }, [selectedDate, load]);
 
-    // Recipes with no selling price set
+    // When user picks a new date from input
+    function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) {
+            setSelectedDate(e.target.value);
+        }
+    }
+
+    function jumpToLatest() {
+        if (latestDate) setSelectedDate(latestDate);
+    }
+
+    function jumpToToday() {
+        setSelectedDate(today);
+    }
+
+    const isToday = selectedDate === today;
+    const noDataToday = isToday && (summary?.itemsSold ?? 0) === 0;
+    const hasLatest = latestDate && latestDate !== selectedDate;
+
     const missingPrice = recipes.filter(r => !r.isMainSauce && r.sellingPrice == null);
+    const revenueDiff = summary && prevSummary
+        ? summary.totalRevenue - prevSummary.totalRevenue : null;
 
-    // Revenue vs yesterday
-    const revenueDiff = todaySummary && yesterdaySummary
-        ? todaySummary.totalRevenue - yesterdaySummary.totalRevenue : null;
-
-    // FC status
-    const fcColor = !todaySummary || todaySummary.totalRevenue === 0 ? "text-muted-foreground"
-        : todaySummary.foodCostPct <= 30 ? "text-green-600"
-        : todaySummary.foodCostPct <= 40 ? "text-yellow-600"
+    const fcColor = !summary || summary.totalRevenue === 0 ? "text-muted-foreground"
+        : summary.foodCostPct <= 30 ? "text-green-600"
+        : summary.foodCostPct <= 40 ? "text-yellow-600"
         : "text-red-600";
 
-    const gpColor = !todaySummary || todaySummary.totalRevenue === 0 ? "text-muted-foreground"
-        : todaySummary.grossProfitPct >= 60 ? "text-green-600"
-        : todaySummary.grossProfitPct >= 50 ? "text-yellow-600"
+    const gpColor = !summary || summary.totalRevenue === 0 ? "text-muted-foreground"
+        : summary.grossProfitPct >= 60 ? "text-green-600"
+        : summary.grossProfitPct >= 50 ? "text-yellow-600"
         : "text-red-600";
 
     const totalRecipes = recipes.length;
@@ -144,48 +201,110 @@ export default function DashboardPage() {
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
-            <div className="flex flex-wrap justify-between items-center gap-3">
+            <div className="flex flex-wrap justify-between items-start gap-3">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Dashboard</h2>
                     <p className="text-muted-foreground">
-                        {new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                        {isToday
+                            ? new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+                            : formatFull(selectedDate)}
                     </p>
                 </div>
-                <Link href="/daily-sales">
-                    <Button><Plus className="mr-2 h-4 w-4" /> Record Sales</Button>
-                </Link>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Date picker */}
+                    <div className="flex items-center gap-1.5 border rounded-md px-2 py-1 bg-background">
+                        <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Input
+                            type="date"
+                            value={selectedDate}
+                            max={today}
+                            onChange={handleDateChange}
+                            className="border-0 p-0 h-auto text-sm w-36 focus-visible:ring-0 bg-transparent"
+                        />
+                    </div>
+                    {!isToday && (
+                        <Button variant="outline" size="sm" onClick={jumpToToday} className="text-xs">
+                            Today
+                        </Button>
+                    )}
+                    <Button
+                        variant="ghost" size="sm"
+                        onClick={() => load(selectedDate, true)}
+                        disabled={refreshing}
+                        className="text-xs"
+                    >
+                        <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refreshing ? "animate-spin" : ""}`} />
+                        Refresh
+                    </Button>
+                    <Link href="/daily-sales">
+                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Record Sales</Button>
+                    </Link>
+                </div>
             </div>
+
+            {/* Smart Fallback Banner */}
+            {noDataToday && hasLatest && (
+                <div className="flex items-center justify-between gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                        <span className="text-amber-700 dark:text-amber-300">
+                            No sales recorded for today. Latest data available: <strong>{formatFull(latestDate!)}</strong>
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button variant="outline" size="sm" className="text-xs border-amber-300" onClick={jumpToLatest}>
+                            View {latestDate}
+                        </Button>
+                        <Link href="/analysis/pmix">
+                            <Button size="sm" className="text-xs bg-amber-600 hover:bg-amber-700">
+                                <PieChart className="h-3.5 w-3.5 mr-1" /> PMIX Sync
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            )}
+
+            {/* Non-today indicator */}
+            {!isToday && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-md">
+                    <CalendarDays className="h-4 w-4" />
+                    Showing data for <strong className="text-foreground ml-1">{formatFull(selectedDate)}</strong>
+                    <Button variant="link" size="sm" className="text-xs h-auto p-0 ml-2" onClick={jumpToToday}>
+                        ← Back to today
+                    </Button>
+                </div>
+            )}
 
             {/* KPI Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
-                    title="Today's Revenue"
-                    value={todaySummary ? format(todaySummary.totalRevenue) : "–"}
+                    title={isToday ? "Today's Revenue" : "Revenue"}
+                    value={summary ? format(summary.totalRevenue) : "–"}
                     sub={revenueDiff != null
-                        ? `${revenueDiff >= 0 ? "+" : ""}${format(revenueDiff)} vs yesterday`
-                        : "No data for yesterday"}
+                        ? `${revenueDiff >= 0 ? "+" : ""}${format(revenueDiff)} vs prev day`
+                        : "No data for previous day"}
                     icon={DollarSign}
                     trend={revenueDiff != null ? (revenueDiff >= 0 ? "up" : "down") : undefined}
                 />
                 <KpiCard
                     title="Food Cost %"
-                    value={todaySummary?.totalRevenue ? `${todaySummary.foodCostPct.toFixed(1)}%` : "–"}
-                    sub={todaySummary?.totalRevenue
-                        ? (todaySummary.foodCostPct <= 30 ? "✓ Excellent" : todaySummary.foodCostPct <= 40 ? "⚠ Acceptable" : "⚠ Too High!")
+                    value={summary?.totalRevenue ? `${summary.foodCostPct.toFixed(1)}%` : "–"}
+                    sub={summary?.totalRevenue
+                        ? (summary.foodCostPct <= 30 ? "✓ Excellent" : summary.foodCostPct <= 40 ? "⚠ Acceptable" : "⚠ Too High!")
                         : "No sales yet"}
                     icon={TrendingUp}
                     color={fcColor}
                 />
                 <KpiCard
-                    title="Today's Gross Profit"
-                    value={todaySummary?.totalRevenue ? format(todaySummary.grossProfit) : "–"}
-                    sub={todaySummary?.totalRevenue ? `${todaySummary.grossProfitPct.toFixed(1)}% margin` : undefined}
+                    title="Gross Profit"
+                    value={summary?.totalRevenue ? format(summary.grossProfit) : "–"}
+                    sub={summary?.totalRevenue ? `${summary.grossProfitPct.toFixed(1)}% margin` : undefined}
                     icon={TrendingUp}
                     color={gpColor}
                 />
                 <KpiCard
                     title="Items Sold"
-                    value={todaySummary ? `${todaySummary.itemsSold}` : "0"}
+                    value={summary ? `${summary.itemsSold}` : "0"}
                     sub={`${totalRecipes} recipes · avg cost ${format(avgCost)}/serving`}
                     icon={ShoppingBag}
                 />
@@ -197,12 +316,31 @@ export default function DashboardPage() {
                 <Card className="lg:col-span-3">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base">Revenue — Last 7 Days</CardTitle>
-                        <CardDescription>Revenue vs Cost</CardDescription>
+                        <CardDescription>
+                            Revenue vs Cost
+                            {latestDate && latestDate !== today && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                    Latest: {latestDate}
+                                </Badge>
+                            )}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {trend.every(t => t.revenue === 0) ? (
-                            <div className="h-44 flex items-center justify-center text-sm text-muted-foreground">
-                                No sales data yet — <Link href="/daily-sales" className="text-primary ml-1 underline">Record Sales</Link>
+                            <div className="h-44 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                                <p>No sales data in the last 7 days</p>
+                                <div className="flex gap-2">
+                                    <Link href="/daily-sales">
+                                        <Button variant="outline" size="sm" className="text-xs">
+                                            <Plus className="h-3 w-3 mr-1" /> Record Sales
+                                        </Button>
+                                    </Link>
+                                    <Link href="/analysis/pmix">
+                                        <Button size="sm" className="text-xs">
+                                            <PieChart className="h-3 w-3 mr-1" /> Sync from PMIX
+                                        </Button>
+                                    </Link>
+                                </div>
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height={180}>
@@ -224,23 +362,23 @@ export default function DashboardPage() {
                 {/* Top 5 Menus */}
                 <Card className="lg:col-span-2">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Top 5 Menus Today</CardTitle>
-                        <CardDescription>Sorted by Revenue</CardDescription>
+                        <CardTitle className="text-base">Top 5 Menus</CardTitle>
+                        <CardDescription>Sorted by Revenue · {isToday ? "Today" : selectedDate}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {!todaySummary?.topMenus?.length ? (
+                        {!summary?.topMenus?.length ? (
                             <div className="h-44 flex items-center justify-center text-sm text-muted-foreground text-center">
-                                No sales today
+                                No sales {isToday ? "today" : "for this date"}
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={todaySummary.topMenus} layout="vertical" margin={{ left: 0, right: 16 }}>
+                                <BarChart data={summary.topMenus} layout="vertical" margin={{ left: 0, right: 16 }}>
                                     <XAxis type="number" tick={{ fontSize: 10 }}
                                         tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)} />
                                     <YAxis type="category" dataKey="recipeName" tick={{ fontSize: 10 }} width={90} />
                                     <Tooltip formatter={(v: number | undefined) => v != null ? format(v) : ""} />
                                     <Bar dataKey="revenue" name="Revenue" radius={[0, 4, 4, 0]}>
-                                        {todaySummary.topMenus.map((_, i) => (
+                                        {summary.topMenus.map((_, i) => (
                                             <Cell key={i} fill={`hsl(var(--primary) / ${1 - i * 0.15})`} />
                                         ))}
                                     </Bar>
@@ -288,9 +426,9 @@ export default function DashboardPage() {
                                 </Link>
                             </>
                         )}
-                        {todaySummary && todaySummary.foodCostPct > 40 && todaySummary.totalRevenue > 0 && (
+                        {summary && summary.foodCostPct > 40 && summary.totalRevenue > 0 && (
                             <div className="p-2 bg-red-50 dark:bg-red-950/30 rounded text-xs text-red-600 border border-red-200 dark:border-red-900 mt-2">
-                                ⚠️ Today's Food Cost {todaySummary.foodCostPct.toFixed(1)}% exceeds 40% — review portion sizes or ingredient costs
+                                ⚠️ Food Cost {summary.foodCostPct.toFixed(1)}% exceeds 40% — review portion sizes or ingredient costs
                             </div>
                         )}
                     </CardContent>
@@ -305,11 +443,11 @@ export default function DashboardPage() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {[
                                 { href: "/daily-sales", icon: ShoppingBag, label: "Record Sales", desc: "Daily Sales" },
+                                { href: "/analysis/pmix", icon: PieChart, label: "PMIX Dashboard", desc: "Sync POS data" },
                                 { href: "/recipes", icon: Utensils, label: "Recipes", desc: `${totalRecipes} recipes` },
                                 { href: "/recipes/new", icon: ChefHat, label: "New Recipe", desc: "Add a recipe" },
                                 { href: "/analysis", icon: BarChart2, label: "Cost Analysis", desc: "Per-recipe cost" },
                                 { href: "/production-planning", icon: TrendingUp, label: "Production", desc: "Production plan" },
-                                { href: "/sales-simulation", icon: TrendingUp, label: "Sales Sim", desc: "Profit simulation" },
                             ].map((item, i) => (
                                 <Link key={i} href={item.href}>
                                     <div className="p-3 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer group">

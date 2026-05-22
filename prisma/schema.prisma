@@ -37,32 +37,38 @@ model Supplier {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  ingredients     Ingredient[]
-  purchaseHistory PurchaseHistory[]
+  ingredients         Ingredient[]
+  purchaseHistory     PurchaseHistory[]
+  ingredientSuppliers IngredientSupplier[]
 
   @@map("suppliers")
 }
 
 model Ingredient {
-  id             String              @id @default(cuid())
-  name           String
-  supplierId     String
-  supplier       Supplier            @relation(fields: [supplierId], references: [id])
-  purchaseUnit   String
-  purchasePrice  Decimal             @db.Decimal(10, 2)
-  recipeUnit     String
-  yieldPercent   Decimal             @db.Decimal(5, 2)
-  conversionRate Decimal             @db.Decimal(10, 4)
-  groupId        String              // "Weight" | "Volume" | "Count" (unit measurement type)
-  categoryId     String?             // FK to IngredientCategory (food category)
-  category       IngredientCategory? @relation(fields: [categoryId], references: [id])
-  imageUrl       String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id                     String              @id @default(cuid())
+  name                   String
+  sku                    String?             @unique // e.g. "SEA-WGT-TGRSHR"
+  supplierId             String
+  supplier               Supplier            @relation(fields: [supplierId], references: [id])
+  purchaseUnit           String
+  purchasePrice          Decimal             @db.Decimal(10, 2)
+  recipeUnit             String
+  yieldPercent           Decimal             @db.Decimal(5, 2)
+  conversionRate         Decimal             @db.Decimal(10, 4)
+  groupId                String              // "Weight" | "Volume" | "Count" (unit measurement type)
+  categoryId             String?             // FK to IngredientCategory (food category)
+  category               IngredientCategory? @relation(fields: [categoryId], references: [id])
+  storageAreaId          String?             // V3: physical storage location
+  storageArea            StorageArea?        @relation(fields: [storageAreaId], references: [id])
+  averageCostPerBaseUnit Decimal?            @db.Decimal(10, 6) // V3: MAC — THB per recipe unit
+  imageUrl               String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
-  recipeItems   RecipeIngredient[]
-  inventoryItem InventoryItem?
-  inventoryTxns InventoryTransaction[]
+  recipeItems         RecipeIngredient[]
+  inventoryItem       InventoryItem?
+  inventoryTxns       InventoryTransaction[]
+  ingredientSuppliers IngredientSupplier[]
 
   @@map("ingredients")
 }
@@ -247,6 +253,40 @@ model InventoryTransaction {
   @@index([type])
   @@index([date])
   @@map("inventory_transactions")
+}
+
+// ─── V3: SKU, Storage Areas, Multi-Supplier & MAC Engine ─────────────────────
+
+model StorageArea {
+  id          String       @id @default(cuid())
+  name        String       @unique // "Dry Store", "Walk-in Fridge", "Bar Cabinet"
+  temperature String?      // "Ambient" | "Chilled (2-5°C)" | "Frozen (-18°C)"
+  isActive    Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  ingredients Ingredient[]
+
+  @@map("storage_areas")
+}
+
+model IngredientSupplier {
+  id             String     @id @default(cuid())
+  ingredientId   String
+  ingredient     Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchasePrice  Decimal    @db.Decimal(10, 2) // price per purchaseUnit
+  purchaseUnit   String     // "kg", "L", "pack"
+  conversionRate Decimal    @db.Decimal(10, 4) // 1 purchaseUnit = N recipeUnits
+  isPreferred    Boolean    @default(false)
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([ingredientId, supplierId])
+  @@map("ingredient_suppliers")
 }
 
 // ─── V2: RBAC & Audit Trail ───────────────────────────────────────────────────

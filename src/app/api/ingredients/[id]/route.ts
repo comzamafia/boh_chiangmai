@@ -9,8 +9,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         const ingredient = await prisma.ingredient.findUnique({
             where: { id },
             include: {
-                supplier: { select: { id: true, name: true } },
-                category: true,
+                supplier:           { select: { id: true, name: true } },
+                category:           true,
+                storageArea:        true,
+                ingredientSuppliers: {
+                    include: { supplier: { select: { id: true, name: true } } },
+                    orderBy: [{ isPreferred: "desc" }, { createdAt: "asc" }],
+                },
             },
         });
         if (!ingredient) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -46,6 +51,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             where: { id },
             data: {
                 name:           body.name,
+                ...(body.sku !== undefined ? { sku: body.sku?.trim() || null } : {}),
                 supplierId:     body.supplierId,
                 purchaseUnit:   body.purchaseUnit,
                 purchasePrice:  body.purchasePrice,
@@ -54,18 +60,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 conversionRate: body.conversionRate,
                 groupId:        body.groupId,
                 categoryId:     body.categoryId ?? null,
+                storageAreaId:  body.storageAreaId !== undefined ? (body.storageAreaId || null) : undefined,
                 imageUrl:       body.imageUrl ?? null,
             },
             include: {
-                supplier: { select: { id: true, name: true } },
-                category: true,
+                supplier:           { select: { id: true, name: true } },
+                category:           true,
+                storageArea:        true,
+                ingredientSuppliers: {
+                    include: { supplier: { select: { id: true, name: true } } },
+                    orderBy: [{ isPreferred: "desc" }, { createdAt: "asc" }],
+                },
             },
         });
         logAudit({
             session, action: "UPDATE", targetTable: "Ingredient",
             targetId: id, targetName: ingredient.name,
-            oldValues: { name: old?.name, purchasePrice: old?.purchasePrice, categoryId: old?.categoryId },
-            newValues: { name: ingredient.name, purchasePrice: ingredient.purchasePrice, categoryId: ingredient.categoryId },
+            oldValues: { name: old?.name, purchasePrice: old?.purchasePrice, categoryId: old?.categoryId, storageAreaId: old?.storageAreaId },
+            newValues: { name: ingredient.name, purchasePrice: ingredient.purchasePrice, categoryId: ingredient.categoryId, storageAreaId: ingredient.storageAreaId, sku: ingredient.sku },
             request,
         });
         return NextResponse.json(ingredient);

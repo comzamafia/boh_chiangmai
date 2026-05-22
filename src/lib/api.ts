@@ -104,6 +104,7 @@ export const inventoryApi = {
     receive: (data: {
         ingredientId: string; purchaseQty: number; purchasePrice: number;
         date: string; note?: string; supplierId?: string;
+        ingredientSupplierId?: string; // V3: select from linked suppliers
     }) => apiFetch<ReceiveGoodsResult>("/inventory/receive", { method: "POST", body: JSON.stringify(data) }),
 
     alerts: () => apiFetch<InventoryAlert[]>("/inventory/alerts"),
@@ -139,6 +140,34 @@ export const recipeCategoryPermissionsApi = {
             method: "PUT",
             body: JSON.stringify({ categoryIds }),
         }),
+};
+
+// ─── Storage Areas ───────────────────────────────────────────────────────────
+export const storageAreasApi = {
+    list: () => apiFetch<StorageArea[]>("/storage-areas"),
+    create: (data: { name: string; temperature?: string; isActive?: boolean; sortOrder?: number }) =>
+        apiFetch<StorageArea>("/storage-areas", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<Pick<StorageArea, "name" | "temperature" | "isActive" | "sortOrder">>) =>
+        apiFetch<StorageArea>(`/storage-areas/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/storage-areas/${id}`, { method: "DELETE" }),
+};
+
+// ─── Ingredient Suppliers ─────────────────────────────────────────────────────
+export const ingredientSuppliersApi = {
+    listForIngredient: (ingredientId: string) =>
+        apiFetch<IngredientSupplier[]>(`/ingredient-suppliers?ingredientId=${ingredientId}`),
+    create: (data: {
+        ingredientId: string;
+        supplierId: string;
+        purchasePrice: number;
+        purchaseUnit: string;
+        conversionRate: number;
+        isPreferred?: boolean;
+        notes?: string;
+    }) => apiFetch<IngredientSupplier>("/ingredient-suppliers", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<Pick<IngredientSupplier, "purchasePrice" | "purchaseUnit" | "conversionRate" | "isPreferred" | "notes">>) =>
+        apiFetch<IngredientSupplier>(`/ingredient-suppliers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/ingredient-suppliers/${id}`, { method: "DELETE" }),
 };
 
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
@@ -196,6 +225,7 @@ export interface Supplier {
 export interface Ingredient {
     id: string;
     name: string;
+    sku?: string | null;
     supplierId: string;
     supplier?: { id: string; name: string };
     purchaseUnit: string;
@@ -206,6 +236,10 @@ export interface Ingredient {
     groupId: "Weight" | "Volume" | "Count";
     categoryId?: string | null;
     category?: IngredientCategory | null;
+    storageAreaId?: string | null;
+    storageArea?: StorageArea | null;
+    averageCostPerBaseUnit?: number | null;
+    ingredientSuppliers?: IngredientSupplier[];
     imageUrl?: string | null;
     createdAt?: string;
     updatedAt?: string;
@@ -417,4 +451,29 @@ export interface AuditLog {
     newValues?:  Record<string, unknown> | null;
     ipAddress?:  string | null;
     createdAt:   string;
+}
+
+export interface StorageArea {
+    id:          string;
+    name:        string;
+    temperature?: string | null;
+    isActive:    boolean;
+    sortOrder:   number;
+    createdAt?:  string;
+    updatedAt?:  string;
+    _count?: { ingredients: number };
+}
+
+export interface IngredientSupplier {
+    id:             string;
+    ingredientId:   string;
+    supplierId:     string;
+    supplier?:      { id: string; name: string };
+    purchasePrice:  number;
+    purchaseUnit:   string;
+    conversionRate: number;
+    isPreferred:    boolean;
+    notes?:         string | null;
+    createdAt?:     string;
+    updatedAt?:     string;
 }

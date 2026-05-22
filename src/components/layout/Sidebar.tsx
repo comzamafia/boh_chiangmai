@@ -6,7 +6,7 @@ import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText, TrendingUp,
     Calculator, Scale, PieChart, Calendar, ClipboardList,
-    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText,
+    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
@@ -41,8 +41,9 @@ const navItems: NavItem[] = [
     { name: "Batch Calc",     href: "/batch-calculation",  icon: Calculator,    slug: "batch-calculation",group: "insights" },
     { name: "Batch Scaling",  href: "/batch-scaling",      icon: Scale,         slug: "batch-scaling",    group: "insights" },
     { name: "Sales Sim",      href: "/sales-simulation",   icon: PieChart,      slug: "sales-simulation", group: "insights" },
-    { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",            group: "admin" },
-    { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",      group: "admin" },
+    { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",                    group: "admin" },
+    { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",              group: "admin" },
+    { name: "Storage Areas",  href: "/settings/storage-areas", icon: Warehouse, slug: "settings-storage-areas",   group: "admin" },
 ];
 
 const GROUP_LABELS: Record<string, string> = {

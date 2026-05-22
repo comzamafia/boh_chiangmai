@@ -30,6 +30,7 @@ export const ALL_SLUGS = [
     "admin",
     "admin-audit",
     "recipes-manage-categories",
+    "settings-storage-areas",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -94,6 +95,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     admin: "/admin",
     "admin-audit": "/admin/audit-log",
     "recipes-manage-categories": "/recipes",   // same page — controls in-page UI only
+    "settings-storage-areas": "/settings/storage-areas",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

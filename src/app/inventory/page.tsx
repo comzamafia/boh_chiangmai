@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-    inventoryApi, ingredientsApi, suppliersApi,
+    inventoryApi, ingredientsApi, suppliersApi, storageAreasApi, ingredientSuppliersApi,
     InventoryItem, InventoryTransaction, InventoryAlert,
-    Ingredient, Supplier,
+    Ingredient, Supplier, StorageArea, IngredientSupplier,
 } from "@/lib/api";
 import { useCurrency } from "@/components/currency-context";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import {
 import {
     AlertCircle, PackagePlus, Warehouse, History, Search,
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
-    CheckCircle2, TrendingDown, BarChart2,
+    CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -110,12 +110,20 @@ export default function InventoryPage() {
     const [suppliers,   setSuppliers]   = useState<Supplier[]>([]);
     const [alerts,      setAlerts]      = useState<InventoryAlert[]>([]);
     const [txns,        setTxns]        = useState<InventoryTransaction[]>([]);
+    const [storageAreas, setStorageAreas] = useState<StorageArea[]>([]);
     const [loading,     setLoading]     = useState(true);
     const [saving,      setSaving]      = useState(false);
 
     // Search / filter
     const [search,      setSearch]      = useState("");
     const [activeTab,   setActiveTab]   = useState("stock");
+
+    // Storage area drill-down (null = show area cards, id = show ingredients in area, "unassigned" = show unassigned)
+    const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+
+    // Receive goods — linked suppliers for selected ingredient
+    const [rcvIngSuppliers, setRcvIngSuppliers]   = useState<IngredientSupplier[]>([]);
+    const [rcvSupplierId,   setRcvSupplierId]     = useState<string>("");
 
     // Add to tracking dialog
     const [addOpen,     setAddOpen]     = useState(false);
@@ -142,18 +150,20 @@ export default function InventoryPage() {
     // Load data
     const loadData = useCallback(async () => {
         try {
-            const [inv, ingr, sup, alrt, t] = await Promise.all([
+            const [inv, ingr, sup, alrt, t, areas] = await Promise.all([
                 inventoryApi.list(),
                 ingredientsApi.list(),
                 suppliersApi.list(),
                 inventoryApi.alerts(),
                 inventoryApi.transactions({ limit: 300 }),
+                storageAreasApi.list(),
             ]);
             setItems(inv);
             setAllIngr(ingr);
             setSuppliers(sup);
             setAlerts(alrt);
             setTxns(t);
+            setStorageAreas(areas.filter((a: StorageArea) => a.isActive));
         } finally {
             setLoading(false);
         }
@@ -225,19 +235,39 @@ export default function InventoryPage() {
         setSaving(true);
         try {
             const result = await inventoryApi.receive({
-                ingredientId:  rcvForm.ingredientId,
-                purchaseQty:   Number(rcvForm.purchaseQty),
-                purchasePrice: Number(rcvForm.purchasePrice),
-                date:          rcvForm.date,
-                note:          rcvForm.note || undefined,
+                ingredientId:        rcvForm.ingredientId,
+                purchaseQty:         Number(rcvForm.purchaseQty),
+                purchasePrice:       Number(rcvForm.purchasePrice),
+                date:                rcvForm.date,
+                note:                rcvForm.note || undefined,
+                ingredientSupplierId: rcvSupplierId || undefined,
             });
             setRcvResult({ stockAdded: result.stockAdded, priceAlert: result.priceAlert, priceChangePct: result.priceChangePct });
             setItems(prev => prev.map(i => i.ingredientId === rcvForm.ingredientId ? result.inventoryItem : i));
             await loadData(); // refresh alerts + txns
             setRcvForm({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
+            setRcvSupplierId("");
+            setRcvIngSuppliers([]);
             setTimeout(() => setRcvResult(null), 6000);
         } catch (e) { console.error(e); } finally { setSaving(false); }
     }
+
+    // Load suppliers when receive ingredient changes
+    const handleRcvIngredientChange = useCallback(async (ingredientId: string) => {
+        setRcvForm(f => ({ ...f, ingredientId }));
+        setRcvSupplierId("");
+        if (ingredientId) {
+            try {
+                const links = await ingredientSuppliersApi.listForIngredient(ingredientId);
+                setRcvIngSuppliers(links);
+                // Auto-select preferred supplier
+                const preferred = links.find(l => l.isPreferred);
+                if (preferred) setRcvSupplierId(preferred.id);
+            } catch { setRcvIngSuppliers([]); }
+        } else {
+            setRcvIngSuppliers([]);
+        }
+    }, []);
 
     async function handleWaste() {
         if (!wasteForm.inventoryItemId || !wasteForm.qty || !wasteForm.date) return;
@@ -380,6 +410,79 @@ export default function InventoryPage() {
 
                 {/* ══ STOCK LEVELS ═══════════════════════════════════════════════ */}
                 <TabsContent value="stock" className="space-y-4 mt-4">
+
+                    {/* Level 1: Area Cards (when no area is selected AND storage areas exist) */}
+                    {selectedAreaId === null && storageAreas.length > 0 ? (
+                        <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">Select a storage area to view its inventory, or search all below.</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                {storageAreas.map(area => {
+                                    const areaItems = items.filter(i => (i.ingredient as Ingredient & { storageAreaId?: string | null }).storageAreaId === area.id);
+                                    const criticalCount = areaItems.filter(i => stockStatus(i) === "critical").length;
+                                    return (
+                                        <button key={area.id}
+                                            onClick={() => setSelectedAreaId(area.id)}
+                                            className="rounded-xl border bg-card p-4 text-left hover:border-primary/50 hover:shadow-sm transition-all space-y-2">
+                                            <div className="flex items-start justify-between gap-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Warehouse className="h-4 w-4 text-amber-600 shrink-0" />
+                                                    <span className="font-semibold text-sm leading-tight">{area.name}</span>
+                                                </div>
+                                                {criticalCount > 0 && (
+                                                    <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px] px-1.5 shrink-0">
+                                                        {criticalCount} ⚠
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {area.temperature && (
+                                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                    <Thermometer className="h-3 w-3" />{area.temperature}
+                                                </div>
+                                            )}
+                                            <p className="text-2xl font-bold text-primary">{areaItems.length}</p>
+                                            <p className="text-xs text-muted-foreground">ingredients</p>
+                                        </button>
+                                    );
+                                })}
+                                {/* Unassigned card */}
+                                {(() => {
+                                    const assignedAreaIds = new Set(storageAreas.map(a => a.id));
+                                    const unassigned = items.filter(i => {
+                                        const areaId = (i.ingredient as Ingredient & { storageAreaId?: string | null }).storageAreaId;
+                                        return !areaId || !assignedAreaIds.has(areaId);
+                                    });
+                                    return unassigned.length > 0 ? (
+                                        <button onClick={() => setSelectedAreaId("unassigned")}
+                                            className="rounded-xl border bg-card p-4 text-left hover:border-primary/50 hover:shadow-sm transition-all space-y-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <Warehouse className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                <span className="font-semibold text-sm">Unassigned</span>
+                                            </div>
+                                            <p className="text-2xl font-bold">{unassigned.length}</p>
+                                            <p className="text-xs text-muted-foreground">no area set</p>
+                                        </button>
+                                    ) : null;
+                                })()}
+                            </div>
+                            <div className="border-t pt-4">
+                                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">All Ingredients</p>
+                            </div>
+                        </div>
+                    ) : selectedAreaId !== null ? (
+                        /* Level 2 breadcrumb */
+                        <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="sm" className="gap-1" onClick={() => setSelectedAreaId(null)}>
+                                <ChevronLeft className="h-4 w-4" /> Storage Areas
+                            </Button>
+                            <span className="text-muted-foreground">/</span>
+                            <span className="font-medium text-sm">
+                                {selectedAreaId === "unassigned"
+                                    ? "Unassigned"
+                                    : storageAreas.find(a => a.id === selectedAreaId)?.name ?? selectedAreaId}
+                            </span>
+                        </div>
+                    ) : null}
+
                     <div className="relative max-w-sm">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input placeholder="Search ingredient..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} />
@@ -399,7 +502,17 @@ export default function InventoryPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredItems.map(item => {
+                                {filteredItems
+                                    .filter(item => {
+                                        if (selectedAreaId === null) return true;
+                                        const areaId = (item.ingredient as Ingredient & { storageAreaId?: string | null }).storageAreaId;
+                                        if (selectedAreaId === "unassigned") {
+                                            const assignedAreaIds = new Set(storageAreas.map(a => a.id));
+                                            return !areaId || !assignedAreaIds.has(areaId);
+                                        }
+                                        return areaId === selectedAreaId;
+                                    })
+                                    .map(item => {
                                     const status = stockStatus(item);
                                     return (
                                         <TableRow key={item.id} className={status === "critical" ? "bg-destructive/5" : status === "low" ? "bg-yellow-500/5" : ""}>
@@ -466,7 +579,7 @@ export default function InventoryPage() {
 
                                 <div className="space-y-1.5">
                                     <Label>Ingredient <span className="text-destructive">*</span></Label>
-                                    <Select value={rcvForm.ingredientId} onValueChange={v => setRcvForm(f => ({ ...f, ingredientId: v }))}>
+                                    <Select value={rcvForm.ingredientId} onValueChange={handleRcvIngredientChange}>
                                         <SelectTrigger><SelectValue placeholder="Select tracked ingredient..." /></SelectTrigger>
                                         <SelectContent>
                                             {items.map(i => (
@@ -478,10 +591,41 @@ export default function InventoryPage() {
                                     </Select>
                                 </div>
 
+                                {/* Supplier Select (V3: multi-supplier) */}
+                                {rcvIngredient && rcvIngSuppliers.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <Label>Supplier</Label>
+                                        <Select value={rcvSupplierId} onValueChange={v => {
+                                            setRcvSupplierId(v);
+                                            const link = rcvIngSuppliers.find(l => l.id === v);
+                                            if (link) {
+                                                setRcvForm(f => ({ ...f, purchasePrice: "" }));
+                                            }
+                                        }}>
+                                            <SelectTrigger><SelectValue placeholder="Select supplier…" /></SelectTrigger>
+                                            <SelectContent>
+                                                {rcvIngSuppliers.map(link => (
+                                                    <SelectItem key={link.id} value={link.id}>
+                                                        {link.supplier?.name ?? "—"}
+                                                        {link.isPreferred && " ★"}
+                                                        {" — "}{link.purchaseUnit} @ ฿{Number(link.purchasePrice).toFixed(2)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
                                 {rcvIngredient && (
                                     <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs text-muted-foreground space-y-0.5">
                                         <p><strong>Purchase unit:</strong> {rcvIngredient.purchaseUnit} → <strong>Recipe unit:</strong> {rcvIngredient.recipeUnit}</p>
                                         <p><strong>Conversion rate:</strong> {Number(rcvIngredient.conversionRate)} · <strong>Yield:</strong> {Number(rcvIngredient.yieldPercent)}%</p>
+                                        {(() => {
+                                            const avgCost = Number((rcvIngredient as Ingredient & { averageCostPerBaseUnit?: number | null }).averageCostPerBaseUnit ?? 0);
+                                            return avgCost > 0 ? (
+                                                <p><strong>MAC:</strong> ฿{avgCost.toFixed(4)} / {rcvIngredient.recipeUnit}</p>
+                                            ) : null;
+                                        })()}
                                     </div>
                                 )}
 

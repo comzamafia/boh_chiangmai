@@ -10,7 +10,10 @@ import { NextResponse } from "next/server";
  *  2. Creates an "In" InventoryTransaction
  *  3. Updates InventoryItem.currentStock
  *  4. Updates Ingredient.purchasePrice with the new unit price
- *  5. Returns priceAlert flag if new price is >10% above previous price
+ *  5. Calculates Moving Average Cost (MAC) and updates Ingredient.averageCostPerBaseUnit
+ *  6. Returns priceAlert flag if new price is >10% above previous price
+ *
+ * V3: Supports ingredientSupplierId to pull purchase details from a linked supplier.
  */
 export async function POST(request: Request) {
     try {
@@ -20,11 +23,12 @@ export async function POST(request: Request) {
         const body = await request.json();
         const {
             ingredientId,
-            purchaseQty,   // in purchase unit
-            purchasePrice, // total price for the batch
+            purchaseQty,           // in purchase unit
+            purchasePrice,         // total price for the batch
             date,
             note,
-            supplierId,    // optional: override supplier for this receipt
+            supplierId,            // optional: override primary supplier
+            ingredientSupplierId,  // V3: select from linked IngredientSupplier records
         } = body;
 
         if (!ingredientId || purchaseQty == null || purchasePrice == null || !date) {
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
             );
         }
 
-        // Load ingredient + inventory item
+        // Load ingredient + inventory item + current MAC
         const ingredient = await prisma.ingredient.findUnique({
             where: { id: ingredientId },
             include: { inventoryItem: true },
@@ -46,9 +50,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Ingredient is not being tracked in inventory. Add it to tracking first." }, { status: 400 });
         }
 
-        const convRate     = Number(ingredient.conversionRate);
-        const yieldPct     = Number(ingredient.yieldPercent) / 100;
-        const stockAdded   = Number(purchaseQty) * convRate * yieldPct;
+        // If an ingredientSupplierId is given, validate it belongs to this ingredient
+        if (ingredientSupplierId) {
+            const link = await prisma.ingredientSupplier.findUnique({ where: { id: ingredientSupplierId } });
+            if (!link || link.ingredientId !== ingredientId) {
+                return NextResponse.json({ error: "Invalid ingredientSupplierId for this ingredient" }, { status: 400 });
+            }
+        }
+
+        const convRate   = Number(ingredient.conversionRate);
+        const yieldPct   = Number(ingredient.yieldPercent) / 100;
+        const stockAdded = Number(purchaseQty) * convRate * yieldPct;
+
         const newUnitPrice = Number(purchaseQty) > 0
             ? Number(purchasePrice) / Number(purchaseQty)
             : 0;
@@ -56,7 +69,21 @@ export async function POST(request: Request) {
         const priceChange = oldPrice > 0 ? (newUnitPrice - oldPrice) / oldPrice : 0;
         const priceAlert  = priceChange > 0.10; // >10% increase
 
-        const invItem = ingredient.inventoryItem;
+        // ── MAC Calculation ────────────────────────────────────────────────────
+        // Formula: newAvgCost = (currentStock × currentAvgCost + totalPaid) / (currentStock + stockAdded)
+        // All quantities in base (recipe) units.
+        const invItem        = ingredient.inventoryItem;
+        const currentStock   = Number(invItem.currentStock);
+        const currentAvgCost = Number(ingredient.averageCostPerBaseUnit ?? 0);
+        const totalPaid      = Number(purchasePrice);
+
+        let newAvgCost: number;
+        if (currentStock <= 0 || currentAvgCost === 0) {
+            // First receive or zero stock — set directly from this receipt
+            newAvgCost = stockAdded > 0 ? totalPaid / stockAdded : 0;
+        } else {
+            newAvgCost = (currentStock * currentAvgCost + totalPaid) / (currentStock + stockAdded);
+        }
 
         await prisma.$transaction([
             // 1. Create In transaction
@@ -67,7 +94,7 @@ export async function POST(request: Request) {
                     type:        "In",
                     qty:         stockAdded,
                     unit:        ingredient.recipeUnit,
-                    costPerUnit: stockAdded > 0 ? Number(purchasePrice) / stockAdded : 0,
+                    costPerUnit: stockAdded > 0 ? totalPaid / stockAdded : 0,
                     note:        note ?? null,
                     date,
                 },
@@ -77,11 +104,12 @@ export async function POST(request: Request) {
                 where: { id: invItem.id },
                 data:  { currentStock: { increment: stockAdded } },
             }),
-            // 3. Update ingredient purchase price
+            // 3. Update ingredient: purchase price + MAC + optional supplier
             prisma.ingredient.update({
                 where: { id: ingredientId },
                 data:  {
-                    purchasePrice: Number(purchasePrice),
+                    purchasePrice:          Number(purchasePrice),
+                    averageCostPerBaseUnit: newAvgCost,
                     ...(supplierId ? { supplierId } : {}),
                 },
             }),
@@ -99,9 +127,10 @@ export async function POST(request: Request) {
             session, action: "RECEIVE", targetTable: "InventoryTransaction",
             targetId: invItem.id, targetName: ingredient.name,
             newValues: {
-                ingredientId, purchaseQty, purchasePrice, stockAdded,
-                date, supplierId, priceAlert,
+                ingredientId, purchaseQty, purchasePrice, stockAdded, date,
+                supplierId, ingredientSupplierId, priceAlert,
                 oldPurchasePrice: oldPrice, newUnitPrice,
+                oldAvgCost: currentAvgCost, newAvgCost,
             },
             request,
         });
@@ -111,6 +140,7 @@ export async function POST(request: Request) {
             stockAdded,
             priceAlert,
             priceChangePct: Math.round(priceChange * 100),
+            newAvgCost,
         }, { status: 201 });
     } catch {
         return NextResponse.json({ error: "Failed to process goods receipt" }, { status: 500 });

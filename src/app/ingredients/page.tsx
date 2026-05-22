@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { ingredientsApi, suppliersApi, ingredientCategoriesApi, Ingredient, Supplier, IngredientCategory } from "@/lib/api";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+    ingredientsApi, suppliersApi, ingredientCategoriesApi,
+    storageAreasApi, ingredientSuppliersApi,
+    Ingredient, Supplier, IngredientCategory, StorageArea, IngredientSupplier,
+} from "@/lib/api";
 
 // ─── Unit definitions per group ──────────────────────────────────────────────
 const GROUP_UNITS: Record<string, string[]> = {
@@ -92,12 +96,12 @@ import {
     Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, Info, Warehouse, Star, X as XIcon } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
 
-type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier" | "category">;
+type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier" | "category" | "storageArea" | "ingredientSuppliers">;
 
 function emptyForm(suppliers: Supplier[]): FormState {
     return {
@@ -105,7 +109,7 @@ function emptyForm(suppliers: Supplier[]): FormState {
         purchaseUnit: "kg", purchasePrice: 0,
         recipeUnit: "g", yieldPercent: 100,
         conversionRate: 1000, groupId: "Weight", imageUrl: "",
-        categoryId: null,
+        categoryId: null, sku: "", storageAreaId: null,
     };
 }
 
@@ -113,6 +117,7 @@ export default function IngredientsPage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [categories, setCategories] = useState<IngredientCategory[]>([]);
+    const [storageAreas, setStorageAreas] = useState<StorageArea[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -124,6 +129,13 @@ export default function IngredientsPage() {
     const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
     const [form, setForm] = useState<FormState>(emptyForm([]));
 
+    // ─── Multi-supplier panel state ───────────────────────────────────────────
+    const [ingSuppliers, setIngSuppliers]       = useState<IngredientSupplier[]>([]);
+    const [suppPanelOpen, setSuppPanelOpen]     = useState(false);
+    const [suppForm, setSuppForm]               = useState({ supplierId: "", purchasePrice: 0, purchaseUnit: "kg", conversionRate: 1, isPreferred: false, notes: "" });
+    const [suppSaving, setSuppSaving]           = useState(false);
+    const [suppError, setSuppError]             = useState<string | null>(null);
+
     const { format, symbol, currency } = useCurrency();
     // rate: 1 THB = X display-currency  (e.g. 0.037 for CAD)
     const rate = CURRENCIES[currency].rateFromTHB;
@@ -131,14 +143,22 @@ export default function IngredientsPage() {
     const show = (amt: number, dec = 2) => `${symbol}${amt.toFixed(dec)}`;
 
     useEffect(() => {
-        Promise.all([ingredientsApi.list(), suppliersApi.list(), ingredientCategoriesApi.list()])
-            .then(([ings, sups, cats]) => {
+        Promise.all([ingredientsApi.list(), suppliersApi.list(), ingredientCategoriesApi.list(), storageAreasApi.list()])
+            .then(([ings, sups, cats, areas]) => {
                 setIngredients(ings);
                 setSuppliers(sups);
                 setCategories(cats);
+                setStorageAreas(areas.filter((a: StorageArea) => a.isActive));
                 setForm(emptyForm(sups));
             })
             .finally(() => setLoading(false));
+    }, []);
+
+    const loadIngSuppliers = useCallback(async (ingredientId: string) => {
+        try {
+            const links = await ingredientSuppliersApi.listForIngredient(ingredientId);
+            setIngSuppliers(links);
+        } catch { setIngSuppliers([]); }
     }, []);
 
     const filtered = useMemo(() => ingredients.filter(i => {
@@ -202,12 +222,18 @@ export default function IngredientsPage() {
     // ─── Dialog open ───────────────────────────────────────────────────────────
     const openAdd = () => {
         setEditTarget(null);
+        setIngSuppliers([]);
+        setSuppPanelOpen(false);
+        setSuppError(null);
         setForm(emptyForm(suppliers));
         setDialogOpen(true);
     };
 
     const openEdit = (item: Ingredient) => {
         setEditTarget(item);
+        setIngSuppliers(item.ingredientSuppliers ?? []);
+        setSuppPanelOpen(false);
+        setSuppError(null);
         setForm({
             name: item.name, supplierId: item.supplierId,
             purchaseUnit: item.purchaseUnit,
@@ -217,8 +243,52 @@ export default function IngredientsPage() {
             conversionRate: Number(item.conversionRate),
             groupId: item.groupId, imageUrl: item.imageUrl ?? "",
             categoryId: item.categoryId ?? null,
+            sku: item.sku ?? "",
+            storageAreaId: item.storageAreaId ?? null,
         });
         setDialogOpen(true);
+    };
+
+    // ─── Supplier link handlers ───────────────────────────────────────────────
+    const handleAddIngSupplier = async () => {
+        if (!editTarget || !suppForm.supplierId || suppForm.purchasePrice <= 0) {
+            setSuppError("Supplier, price and unit are required"); return;
+        }
+        setSuppSaving(true); setSuppError(null);
+        try {
+            const link = await ingredientSuppliersApi.create({
+                ingredientId:  editTarget.id,
+                supplierId:    suppForm.supplierId,
+                purchasePrice: suppForm.purchasePrice / rate,  // store in THB
+                purchaseUnit:  suppForm.purchaseUnit,
+                conversionRate: suppForm.conversionRate,
+                isPreferred:   suppForm.isPreferred || ingSuppliers.length === 0,
+                notes:         suppForm.notes || undefined,
+            });
+            setIngSuppliers(prev => ingSuppliers.length === 0 ? [{ ...link, isPreferred: true }] : [...prev, link]);
+            setSuppPanelOpen(false);
+            setSuppForm({ supplierId: "", purchasePrice: 0, purchaseUnit: "kg", conversionRate: 1, isPreferred: false, notes: "" });
+        } catch (e: unknown) {
+            setSuppError(e instanceof Error ? e.message : "Failed to add supplier");
+        } finally { setSuppSaving(false); }
+    };
+
+    const handleDeleteIngSupplier = async (linkId: string) => {
+        try {
+            await ingredientSuppliersApi.delete(linkId);
+            setIngSuppliers(prev => prev.filter(s => s.id !== linkId));
+        } catch (e: unknown) {
+            setSuppError(e instanceof Error ? e.message : "Failed to remove supplier");
+        }
+    };
+
+    const handleSetPreferred = async (linkId: string) => {
+        try {
+            await ingredientSuppliersApi.update(linkId, { isPreferred: true });
+            if (editTarget) await loadIngSuppliers(editTarget.id);
+        } catch (e: unknown) {
+            setSuppError(e instanceof Error ? e.message : "Failed to set preferred");
+        }
     };
 
     // ─── Save / Delete ────────────────────────────────────────────────────────
@@ -227,7 +297,12 @@ export default function IngredientsPage() {
         setSaving(true);
         try {
             // form.purchasePrice is in display currency — convert back to THB for storage
-            const payload = { ...form, purchasePrice: form.purchasePrice / rate };
+            const payload = {
+                ...form,
+                purchasePrice: form.purchasePrice / rate,
+                sku: form.sku?.trim() || undefined,
+                storageAreaId: form.storageAreaId || undefined,
+            };
             if (editTarget) {
                 const updated = await ingredientsApi.update(editTarget.id, payload);
                 setIngredients(prev => prev.map(i => i.id === updated.id ? updated : i));
@@ -404,6 +479,7 @@ export default function IngredientsPage() {
                         <TableRow>
                             <TableHead className="w-14 hidden sm:table-cell">Image</TableHead>
                             <TableHead>Name</TableHead>
+                            <TableHead className="hidden xl:table-cell text-xs font-mono">SKU</TableHead>
                             <TableHead className="hidden sm:table-cell">Supplier</TableHead>
                             <TableHead className="hidden lg:table-cell">Category</TableHead>
                             <TableHead className="hidden md:table-cell">Group</TableHead>
@@ -454,6 +530,9 @@ export default function IngredientsPage() {
                                         <p className="sm:hidden text-xs text-muted-foreground mt-0.5">
                                             {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
                                         </p>
+                                    </TableCell>
+                                    <TableCell className="hidden xl:table-cell text-xs font-mono text-muted-foreground">
+                                        {item.sku ?? <span className="opacity-40">—</span>}
                                     </TableCell>
                                     <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                                         {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
@@ -507,7 +586,7 @@ export default function IngredientsPage() {
                         })}
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                                     No ingredients found.
                                 </TableCell>
                             </TableRow>
@@ -612,6 +691,36 @@ export default function IngredientsPage() {
                                     </Select>
                                 </div>
                             )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label>SKU <span className="text-xs text-muted-foreground">(optional — auto-generated if blank)</span></Label>
+                                    <Input
+                                        placeholder="e.g. SEA-WGT-TGRSHR"
+                                        className="font-mono text-sm"
+                                        value={form.sku ?? ""}
+                                        onChange={e => setForm(f => ({ ...f, sku: e.target.value }))}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label>
+                                        <span className="flex items-center gap-1">
+                                            <Warehouse className="h-3.5 w-3.5" />
+                                            Storage Area <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+                                        </span>
+                                    </Label>
+                                    <Select
+                                        value={form.storageAreaId ?? "__none__"}
+                                        onValueChange={v => setForm(f => ({ ...f, storageAreaId: v === "__none__" ? null : v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select area…" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__none__">— None —</SelectItem>
+                                            {storageAreas.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
 
                             <div className="space-y-1.5">
                                 <Label>Image URL <span className="text-xs text-muted-foreground">(optional)</span></Label>
@@ -732,6 +841,114 @@ export default function IngredientsPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* ── Section: Linked Suppliers (edit mode only) ── */}
+                        {editTarget && (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Linked Suppliers</p>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                                        onClick={() => { setSuppPanelOpen(p => !p); setSuppError(null); }}>
+                                        <Plus className="h-3 w-3" />
+                                        Add Supplier
+                                    </Button>
+                                </div>
+
+                                {suppError && (
+                                    <p className="text-xs text-destructive">{suppError}</p>
+                                )}
+
+                                {/* Add Supplier inline form */}
+                                {suppPanelOpen && (
+                                    <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                                        <p className="text-xs font-semibold text-muted-foreground">New Supplier Link</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1 col-span-2">
+                                                <Label className="text-xs">Supplier</Label>
+                                                <Select value={suppForm.supplierId}
+                                                    onValueChange={v => setSuppForm(f => ({ ...f, supplierId: v }))}>
+                                                    <SelectTrigger className="h-8 text-sm">
+                                                        <SelectValue placeholder="Select supplier…" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {suppliers
+                                                            .filter(s => !ingSuppliers.some(l => l.supplierId === s.id))
+                                                            .map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Purchase Unit</Label>
+                                                <Input className="h-8 text-sm" value={suppForm.purchaseUnit}
+                                                    onChange={e => setSuppForm(f => ({ ...f, purchaseUnit: e.target.value }))} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Price / unit ({symbol})</Label>
+                                                <Input type="number" min={0} step={0.01} className="h-8 text-sm"
+                                                    value={suppForm.purchasePrice}
+                                                    onChange={e => setSuppForm(f => ({ ...f, purchasePrice: parseFloat(e.target.value) || 0 }))} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Conversion Rate</Label>
+                                                <Input type="number" min={0.0001} step="any" className="h-8 text-sm"
+                                                    value={suppForm.conversionRate}
+                                                    onChange={e => setSuppForm(f => ({ ...f, conversionRate: parseFloat(e.target.value) || 1 }))} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Notes</Label>
+                                                <Input className="h-8 text-sm" placeholder="optional"
+                                                    value={suppForm.notes}
+                                                    onChange={e => setSuppForm(f => ({ ...f, notes: e.target.value }))} />
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2 pt-1">
+                                            <Button size="sm" variant="ghost" className="h-7 text-xs"
+                                                onClick={() => setSuppPanelOpen(false)}>Cancel</Button>
+                                            <Button size="sm" className="h-7 text-xs" onClick={handleAddIngSupplier}
+                                                disabled={suppSaving || !suppForm.supplierId}>
+                                                {suppSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                                Add Link
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Linked supplier list */}
+                                {ingSuppliers.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground italic">No supplier links yet. Add one to enable supplier selection in Receive Goods.</p>
+                                ) : (
+                                    <div className="space-y-1">
+                                        {ingSuppliers.map(link => (
+                                            <div key={link.id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm bg-card">
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="font-medium truncate">{link.supplier?.name ?? "—"}</span>
+                                                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                                                        {symbol}{(Number(link.purchasePrice) * rate).toFixed(2)} / {link.purchaseUnit}
+                                                        &ensp;·&ensp;1 {link.purchaseUnit} = {link.conversionRate} {form.recipeUnit}
+                                                    </span>
+                                                </div>
+                                                {link.isPreferred ? (
+                                                    <Badge variant="secondary" className="text-[10px] shrink-0 gap-0.5">
+                                                        <Star className="h-2.5 w-2.5 fill-current" /> Preferred
+                                                    </Badge>
+                                                ) : (
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
+                                                        title="Set as preferred"
+                                                        onClick={() => handleSetPreferred(link.id)}>
+                                                        <Star className="h-3 w-3" />
+                                                    </Button>
+                                                )}
+                                                <Button size="icon" variant="ghost"
+                                                    className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                                                    onClick={() => handleDeleteIngSupplier(link.id)}>
+                                                    <XIcon className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* ── Live Cost Preview ── */}
                         <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">

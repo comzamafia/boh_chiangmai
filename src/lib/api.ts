@@ -192,6 +192,20 @@ export const auditApi = {
     },
 };
 
+// ─── PMIX ─────────────────────────────────────────────────────────────────────
+export const pmixApi = {
+    listUploads: () => apiFetch<PmixUpload[]>("/pmix/uploads"),
+    deleteUpload: (id: string) => apiFetch<void>(`/pmix/uploads?id=${id}`, { method: "DELETE" }),
+    upload: (file: File, periodLabel?: string) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (periodLabel) fd.append("periodLabel", periodLabel);
+        return fetch("/api/pmix/upload", { method: "POST", body: fd })
+            .then(r => r.json()) as Promise<{ uploadId: string; totalItems: number; totalQty: number; totalSales: number }>;
+    },
+    analytics: (uploadId: string) => apiFetch<PmixAnalytics>(`/pmix/analytics?uploadId=${uploadId}`),
+};
+
 // ─── Analysis ────────────────────────────────────────────────────────────────
 export const analysisApi = {
     recipeCosts:  () => apiFetch<RecipeCostSummary[]>("/analysis/recipe-costs"),
@@ -476,4 +490,99 @@ export interface IngredientSupplier {
     notes?:         string | null;
     createdAt?:     string;
     updatedAt?:     string;
+}
+
+// ─── PMIX Types ───────────────────────────────────────────────────────────────
+export interface PmixUpload {
+    id:          string;
+    fileName:    string;
+    periodLabel: string | null;
+    totalItems:  number;
+    totalQty:    number;
+    totalSales:  number;
+    uploadedAt:  string;
+}
+
+export type BcgQuadrant = "Star" | "Plowhorse" | "Puzzle" | "Dog";
+
+export interface PmixBcgItem {
+    id:        string;
+    itemName:  string;
+    category:  string;
+    qtySold:   number;
+    netSales:  number;
+    unitPrice: number;
+    quadrant:  BcgQuadrant;
+    station:   string;
+}
+
+export interface PmixStationData {
+    station:  string;
+    totalQty: number;
+    items: {
+        name: string;
+        qty:  number;
+        modifiers: { group: string; modifier: string; qty: number }[];
+    }[];
+}
+
+export interface PmixPrepItem {
+    group:    string;
+    modifier: string;
+    qty:      number;
+    items:    string[];
+}
+
+export interface PmixQcItem {
+    id:             string;
+    itemName:       string;
+    category:       string;
+    qtySold:        number;
+    refundQty:      number;
+    refundAmount:   number;
+    discountAmount: number;
+    totalLoss:      number;
+    refundRate:     number;
+    alert:          boolean;
+}
+
+export interface PmixConsumptionItem {
+    ingredientId:   string;
+    ingredientName: string;
+    unit:           string;
+    totalQty:       number;
+    groupId:        string;
+}
+
+export interface PmixAnalytics {
+    uploadId:   string;
+    totalItems: number;
+    totalQty:   number;
+    totalSales: number;
+    axis1: {
+        items:   PmixBcgItem[];
+        summary: {
+            Star: number; Plowhorse: number; Puzzle: number; Dog: number;
+            avgQty: number; avgPrice: number;
+        };
+    };
+    axis2: {
+        stations: PmixStationData[];
+        prepList: PmixPrepItem[];
+    };
+    axis3: {
+        items:          PmixQcItem[];
+        donutData:      { name: string; value: number }[];
+        totalRefunds:   number;
+        totalDiscounts: number;
+        totalLoss:      number;
+        alerts:         PmixQcItem[];
+        top5Refunded:   PmixQcItem[];
+    };
+    axis4: {
+        consumption:   PmixConsumptionItem[];
+        linkedItems:   { itemName: string; category: string; qtySold: number; recipeId: string }[];
+        linkedCount:   number;
+        unlinkedCount: number;
+    };
 }

@@ -62,6 +62,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "admin-audit": "Audit Log",
     "recipes-manage-categories": "Manage Recipe Categories",
     "settings-storage-areas": "Settings: Storage Areas",
+    "pmix-dashboard": "PMIX Analytics Dashboard",
 };
 
 interface UserRow {

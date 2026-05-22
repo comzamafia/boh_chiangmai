@@ -31,6 +31,7 @@ export const ALL_SLUGS = [
     "admin-audit",
     "recipes-manage-categories",
     "settings-storage-areas",
+    "pmix-dashboard",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -42,7 +43,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
         "ingredients", "import-ingredients", "suppliers", "import-suppliers", "inventory",
         "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production", "admin-audit",
-        "recipes-manage-categories",
+        "recipes-manage-categories", "pmix-dashboard",
     ],
     chef: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
@@ -50,7 +51,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
     ],
     analyst: [
         "home", "dashboard", "daily-sales", "analysis", "batch-calculation",
-        "batch-scaling", "sales-simulation",
+        "batch-scaling", "sales-simulation", "pmix-dashboard",
     ],
     staff: [
         "home", "dashboard", "daily-sales", "recipes", "production",
@@ -96,6 +97,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "admin-audit": "/admin/audit-log",
     "recipes-manage-categories": "/recipes",   // same page — controls in-page UI only
     "settings-storage-areas": "/settings/storage-areas",
+    "pmix-dashboard": "/analysis/pmix",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

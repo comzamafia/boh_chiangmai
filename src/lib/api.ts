@@ -204,6 +204,14 @@ export const pmixApi = {
             .then(r => r.json()) as Promise<{ uploadId: string; totalItems: number; totalQty: number; totalSales: number }>;
     },
     analytics: (uploadId: string) => apiFetch<PmixAnalytics>(`/pmix/analytics?uploadId=${uploadId}`),
+    syncSales: (uploadId: string, date: string, replace: boolean) =>
+        apiFetch<{ synced: number; skipped: number; date: string; uploadId: string }>(
+            "/pmix/sync-sales", { method: "POST", body: JSON.stringify({ uploadId, date, replace }) }
+        ),
+    syncStatus: (uploadId: string) =>
+        apiFetch<{ uploadId: string; syncedDates: string[]; totalEntries: number }>(
+            `/pmix/sync-sales?uploadId=${uploadId}`
+        ),
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────

@@ -22,8 +22,12 @@ import {
     Dog, ChefHat, FlameKindling, Beaker, UtensilsCrossed, Beer,
     IceCream, RefreshCw, BarChart3, PieChart as PieIcon,
     ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight,
-    TrendingUp, ShoppingBag, Layers,
+    TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
+    ArrowRight, RotateCcw,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
     pmixApi, PmixUpload, PmixAnalytics, PmixBcgItem, BcgQuadrant,
 } from "@/lib/api";
@@ -282,7 +286,15 @@ export default function PmixDashboardPage() {
     const [stationFilter, setStationFilter] = useState<string>("All");
     const [drillItem,     setDrillItem]     = useState<PmixBcgItem | null>(null);
     const [mounted,       setMounted]       = useState(false);
-    const [showChart,     setShowChart]     = useState(false);  // desktop scatter toggle on mobile
+    const [showChart,     setShowChart]     = useState(false);
+
+    // Sync dialog state
+    const [syncOpen,      setSyncOpen]      = useState(false);
+    const [syncDate,      setSyncDate]      = useState(() => new Date().toISOString().slice(0, 10));
+    const [syncReplace,   setSyncReplace]   = useState(true);
+    const [syncing,       setSyncing]       = useState(false);
+    const [syncResult,    setSyncResult]    = useState<{ synced: number; date: string } | null>(null);
+    const [syncedDates,   setSyncedDates]   = useState<string[]>([]);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -313,6 +325,17 @@ export default function PmixDashboardPage() {
 
     useEffect(() => { if (selectedId) loadAnalytics(selectedId); }, [selectedId, loadAnalytics]);
 
+    // ── Load sync status ──
+    const loadSyncStatus = useCallback(async (id: string) => {
+        if (!id) return;
+        try {
+            const s = await pmixApi.syncStatus(id);
+            setSyncedDates(s.syncedDates);
+        } catch { setSyncedDates([]); }
+    }, []);
+
+    useEffect(() => { if (selectedId) loadSyncStatus(selectedId); }, [selectedId, loadSyncStatus]);
+
     // ── Handle file ──
     async function handleFile(file: File) {
         setUploading(true); setError(null);
@@ -324,6 +347,21 @@ export default function PmixDashboardPage() {
             setError(e instanceof Error ? e.message : "Upload failed");
         } finally {
             setUploading(false);
+        }
+    }
+
+    // ── Sync to Daily Sales ──
+    async function handleSync() {
+        if (!selectedId || !syncDate) return;
+        setSyncing(true); setError(null); setSyncResult(null);
+        try {
+            const r = await pmixApi.syncSales(selectedId, syncDate, syncReplace);
+            setSyncResult({ synced: r.synced, date: r.date });
+            await loadSyncStatus(selectedId);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Sync failed");
+        } finally {
+            setSyncing(false);
         }
     }
 
@@ -435,6 +473,15 @@ export default function PmixDashboardPage() {
                                 </Button>
                             </>
                         )}
+                        {analytics && selectedId && (
+                            <Button
+                                onClick={() => { setSyncResult(null); setSyncOpen(true); }}
+                                className="h-10 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none">
+                                <Zap className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Sync to Daily Sales</span>
+                                <span className="sm:hidden">Sync</span>
+                            </Button>
+                        )}
                     </div>
                 </div>
             )}
@@ -446,11 +493,23 @@ export default function PmixDashboardPage() {
             {analytics && !loading && (
                 <>
                     {/* ─ Report meta ─ */}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
                         <span className="font-medium text-foreground">{selectedUpload?.periodLabel ?? selectedUpload?.fileName}</span>
                         <span>·</span>
                         <span>Uploaded {fmtD(selectedUpload?.uploadedAt ?? "")}</span>
+                        {syncedDates.length > 0 && (
+                            <>
+                                <span>·</span>
+                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Synced to {syncedDates.map(d => {
+                                        const dt = new Date(d + "T00:00:00");
+                                        return dt.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+                                    }).join(", ")}
+                                </span>
+                            </>
+                        )}
                     </div>
 
                     {/* ─ KPI Row ─ */}
@@ -957,6 +1016,118 @@ export default function PmixDashboardPage() {
                     )}
                 </>
             )}
+
+            {/* ══════════════════════════════════════════════════════════
+                SYNC TO DAILY SALES DIALOG
+            ══════════════════════════════════════════════════════════ */}
+            <Dialog open={syncOpen} onOpenChange={open => { if (!open) { setSyncOpen(false); setSyncResult(null); } }}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-emerald-600" />
+                            Sync to Daily Sales
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {syncResult ? (
+                        /* ── Success state ── */
+                        <div className="space-y-4 py-2">
+                            <div className="flex flex-col items-center justify-center py-6 gap-3 text-center">
+                                <div className="p-4 rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                    <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                                </div>
+                                <div>
+                                    <p className="text-lg font-bold">Sync complete!</p>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        <strong>{syncResult.synced}</strong> items synced to Daily Sales for{" "}
+                                        <strong>{new Date(syncResult.date + "T00:00:00").toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}</strong>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setSyncOpen(false)}>
+                                    Close
+                                </Button>
+                                <Button className="flex-1 rounded-xl gap-2" asChild>
+                                    <a href={`/daily-sales?date=${syncResult.date}`}>
+                                        View Daily Sales <ArrowRight className="w-3.5 h-3.5" />
+                                    </a>
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* ── Form state ── */
+                        <div className="space-y-5 py-2">
+                            <p className="text-sm text-muted-foreground">
+                                All <strong>{analytics?.totalItems ?? 0} menu items</strong> from this PMIX report will be written
+                                into Daily Sales for the date you choose.
+                            </p>
+
+                            {/* Date picker */}
+                            <div className="space-y-1.5">
+                                <Label className="flex items-center gap-1.5 text-sm font-medium">
+                                    <CalendarDays className="w-3.5 h-3.5" /> Sales Date
+                                </Label>
+                                <Input
+                                    type="date"
+                                    value={syncDate}
+                                    onChange={e => setSyncDate(e.target.value)}
+                                    className="rounded-xl h-10"
+                                    max={new Date().toISOString().slice(0, 10)}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Choose the date this PMIX data represents
+                                </p>
+                            </div>
+
+                            {/* Replace toggle */}
+                            <div className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3">
+                                <div>
+                                    <p className="text-sm font-medium flex items-center gap-1.5">
+                                        <RotateCcw className="w-3.5 h-3.5 text-amber-500" /> Replace existing data
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Remove previously synced PMIX entries for this date before re-syncing
+                                    </p>
+                                </div>
+                                <Switch checked={syncReplace} onCheckedChange={setSyncReplace} />
+                            </div>
+
+                            {/* Already synced warning */}
+                            {syncedDates.includes(syncDate) && (
+                                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                    <span>
+                                        This report was already synced to <strong>{syncDate}</strong>.{" "}
+                                        {syncReplace ? "Existing PMIX entries will be replaced." : "New entries will be added on top."}
+                                    </span>
+                                </div>
+                            )}
+
+                            {error && (
+                                <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 pt-1">
+                                <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setSyncOpen(false)} disabled={syncing}>
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleSync}
+                                    disabled={syncing || !syncDate}
+                                    className="flex-1 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+                                    {syncing
+                                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing…</>
+                                        : <><Zap className="w-3.5 h-3.5" /> Sync Now</>
+                                    }
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* ══════════════════════════════════════════════════════════
                 DRILL-DOWN ITEM MODAL

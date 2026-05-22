@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { recipesApi, salesApi, RecipeWithIngredients, SalesEntry } from "@/lib/api";
 import { useCurrency } from "@/components/currency-context";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,10 @@ function KpiCard({ title, value, sub, color }: { title: string; value: string; s
 export default function DailySalesPage() {
     const { format } = useCurrency();
     const today = new Date().toISOString().slice(0, 10);
+    const searchParams = useSearchParams();
+    const urlDate = searchParams.get("date");
 
-    const [date, setDate] = useState(today);
+    const [date, setDate] = useState(urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : today);
     const [recipes, setRecipes] = useState<RecipeWithIngredients[]>([]);
     const [entries, setEntries] = useState<SalesEntry[]>([]);
     const [loadingEntries, setLoadingEntries] = useState(false);
@@ -120,6 +123,9 @@ export default function DailySalesPage() {
     const fcColor = foodCostPct === 0 ? "text-muted-foreground" : foodCostPct <= 30 ? "text-green-600" : foodCostPct <= 40 ? "text-yellow-600" : "text-red-600";
     const gpColor = grossProfitPct >= 60 ? "text-green-600" : grossProfitPct >= 50 ? "text-yellow-600" : "text-red-600";
 
+    const pmixEntries = entries.filter(e => e.notes?.startsWith("pmix:"));
+    const hasPmixData = pmixEntries.length > 0;
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
@@ -128,9 +134,16 @@ export default function DailySalesPage() {
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Daily Sales</h2>
                     <p className="text-muted-foreground">Record daily sales to track Revenue and Food Cost %</p>
                 </div>
-                <Link href="/dashboard">
-                    <Button variant="outline"><TrendingUp className="mr-2 h-4 w-4" /> Dashboard</Button>
-                </Link>
+                <div className="flex gap-2">
+                    <Link href="/analysis/pmix">
+                        <Button variant="outline" size="sm" className="gap-2">
+                            <ShoppingBag className="h-3.5 w-3.5" /> Sync from PMIX
+                        </Button>
+                    </Link>
+                    <Link href="/dashboard">
+                        <Button variant="outline"><TrendingUp className="mr-2 h-4 w-4" /> Dashboard</Button>
+                    </Link>
+                </div>
             </div>
 
             {/* Date Picker */}
@@ -145,6 +158,28 @@ export default function DailySalesPage() {
                 />
                 {date === today && <Badge variant="outline" className="text-xs">Today</Badge>}
             </div>
+
+            {/* PMIX banner */}
+            {hasPmixData && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-sm">
+                    <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 shrink-0">
+                        <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                            {pmixEntries.length} items auto-synced from PMIX
+                        </p>
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+                            This data was imported from a PMIX report. You can add manual entries below.
+                        </p>
+                    </div>
+                    <Link href="/analysis/pmix" className="shrink-0">
+                        <Button variant="outline" size="sm" className="h-8 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300">
+                            View Report
+                        </Button>
+                    </Link>
+                </div>
+            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -284,7 +319,14 @@ export default function DailySalesPage() {
                                     return (
                                         <div key={entry.id} className="flex items-center gap-3 py-3">
                                             <div className="flex-1 min-w-0">
-                                                <p className="font-medium text-sm truncate">{entry.recipeName}</p>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <p className="font-medium text-sm truncate">{entry.recipeName}</p>
+                                                    {entry.notes?.startsWith("pmix:") && (
+                                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shrink-0">
+                                                            PMIX
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-muted-foreground">
                                                     {entry.qty} × {format(Number(entry.unitPrice))}
                                                 </p>

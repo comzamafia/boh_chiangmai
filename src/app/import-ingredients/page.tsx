@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ingredientsApi, suppliersApi, Supplier } from "@/lib/api";
+import {
+  ingredientsApi, suppliersApi, ingredientCategoriesApi, storageAreasApi,
+  Supplier, IngredientCategory, StorageArea,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +22,10 @@ interface ParsedRow {
   yieldPercent: number;
   conversionRate: number;
   groupId: string;
+  category: string;
+  sku: string;
+  storageArea: string;
+  imageUrl: string;
   error?: string;
 }
 
@@ -34,8 +41,24 @@ function parseCSV(text: string): ParsedRow[] {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   if (lines.length < 2) return [];
   return lines.slice(1).map((line, i) => {
-    const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
-    const [name, supplierName, purchaseUnit, purchasePrice, recipeUnit, yieldPct, convRate, groupId] = cols;
+    // Handle quoted fields with commas inside
+    const cols: string[] = [];
+    let cur = "";
+    let inQuote = false;
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci];
+      if (ch === '"') { inQuote = !inQuote; continue; }
+      if (ch === "," && !inQuote) { cols.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    cols.push(cur.trim());
+
+    const [
+      name = "", supplierName = "", purchaseUnit = "", purchasePrice = "",
+      recipeUnit = "", yieldPct = "", convRate = "", groupId = "",
+      category = "", sku = "", storageArea = "", imageUrl = "",
+    ] = cols;
+
     const errors: string[] = [];
     if (!name) errors.push(`Row ${i + 2}: Name required`);
     if (isNaN(parseFloat(purchasePrice))) errors.push(`Row ${i + 2}: Invalid purchase price`);
@@ -43,15 +66,20 @@ function parseCSV(text: string): ParsedRow[] {
     if (isNaN(parseFloat(convRate))) errors.push(`Row ${i + 2}: Invalid conversion rate`);
     if (groupId && !VALID_GROUPS.includes(groupId as (typeof VALID_GROUPS)[number]))
       errors.push(`Row ${i + 2}: Group must be Weight, Volume, or Count`);
+
     return {
-      name: name ?? "",
-      supplierName: supplierName ?? "",
+      name,
+      supplierName,
       purchaseUnit: purchaseUnit || "kg",
       purchasePrice: parseFloat(purchasePrice) || 0,
       recipeUnit: recipeUnit || "g",
       yieldPercent: parseFloat(yieldPct) || 100,
       conversionRate: parseFloat(convRate) || 1000,
       groupId: VALID_GROUPS.includes(groupId as (typeof VALID_GROUPS)[number]) ? groupId : "Weight",
+      category,
+      sku,
+      storageArea,
+      imageUrl,
       error: errors.join("; ") || undefined,
     };
   });
@@ -64,17 +92,45 @@ export default function ImportIngredientsPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [preview, setPreview] = useState<ParsedRow[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [categories, setCategories] = useState<IngredientCategory[]>([]);
+  const [storageAreas, setStorageAreas] = useState<StorageArea[]>([]);
 
-  useEffect(() => { suppliersApi.list().then(setSuppliers).catch(() => {}); }, []);
+  useEffect(() => {
+    suppliersApi.list().then(setSuppliers).catch(() => {});
+    ingredientCategoriesApi.list().then(setCategories).catch(() => {});
+    storageAreasApi.list().then(setStorageAreas).catch(() => {});
+  }, []);
 
   const handleDownloadTemplate = () => {
-    const csv = [
-      "Name,Supplier Name,Purchase Unit,Purchase Price,Recipe Unit,Yield %,Conversion Rate,Group",
-      "Shrimp (Medium),Fresh Market Co.,kg,180.00,g,85,1000,Weight",
-      "Rice Noodles,Dry Goods Supplier,kg,32.00,g,100,1000,Weight",
-      "Tamarind Paste,Sauce House,kg,68.00,g,100,1000,Weight",
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const header = [
+      "Name",
+      "Supplier Name",
+      "Purchase Unit",
+      "Purchase Price",
+      "Recipe Unit",
+      "Yield %",
+      "Conversion Rate",
+      "Group",
+      "Category",
+      "SKU",
+      "Storage Area",
+      "Image URL",
+    ].join(",");
+
+    const examples = [
+      // Name, Supplier Name, Purchase Unit, Purchase Price, Recipe Unit, Yield %, Conversion Rate, Group, Category, SKU, Storage Area, Image URL
+      ["Shrimp (Medium)", "Fresh Market Co.", "kg", "180.00", "g", "85", "1000", "Weight", "Seafood", "SEA-WGT-SHRMPM", "Walk-in Fridge", ""].join(","),
+      ["Rice Noodles (Dry)", "Dry Goods Supplier", "kg", "32.00", "g", "100", "1000", "Weight", "Dry Goods", "DRY-WGT-RCNDL", "Dry Store", ""].join(","),
+      ["Tamarind Paste", "Sauce House", "kg", "68.00", "g", "100", "1000", "Weight", "Sauces & Pastes", "SAU-WGT-TMRND", "Dry Store", ""].join(","),
+      ["Fish Sauce", "Thai Condiment Co.", "L", "45.00", "ml", "100", "1000", "Volume", "Sauces & Pastes", "SAU-VOL-FSHSC", "Dry Store", ""].join(","),
+      ["Chicken Egg", "Local Farm", "pack", "72.00", "pc", "100", "30", "Count", "Proteins", "PRO-CNT-CHKEG", "Walk-in Fridge", ""].join(","),
+      ["Galangal (Fresh)", "Fresh Market Co.", "kg", "55.00", "g", "95", "1000", "Weight", "Herbs & Spices", "HRB-WGT-GLNGL", "Walk-in Fridge", ""].join(","),
+      ["Coconut Milk (can)", "Dry Goods Supplier", "L", "38.00", "ml", "100", "1000", "Volume", "Dairy & Alternatives", "DAI-VOL-CCMK", "Dry Store", ""].join(","),
+      ["Lime", "Fresh Market Co.", "kg", "40.00", "pc", "100", "8", "Count", "Produce", "PRD-CNT-LIME", "Walk-in Fridge", ""].join(","),
+    ];
+
+    const csv = [header, ...examples].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -103,17 +159,38 @@ export default function ImportIngredientsPage() {
       const validRows = rows.filter(r => !r.error);
       const errors = rows.filter(r => r.error).map(r => r.error!);
       let success = 0;
+
       for (const row of validRows) {
         try {
+          // Resolve supplier
           const matched = suppliers.find(s => s.name.toLowerCase() === row.supplierName.toLowerCase())
             ?? suppliers.find(s => s.status === "Active")
             ?? suppliers[0];
           if (!matched) { errors.push(`${row.name}: No supplier found`); continue; }
+
+          // Resolve category by name (case-insensitive)
+          const matchedCategory = categories.find(
+            c => c.name.toLowerCase() === row.category.toLowerCase()
+          );
+
+          // Resolve storage area by name (case-insensitive)
+          const matchedArea = storageAreas.find(
+            a => a.name.toLowerCase() === row.storageArea.toLowerCase()
+          );
+
           await ingredientsApi.create({
-            name: row.name, supplierId: matched.id, purchaseUnit: row.purchaseUnit,
-            purchasePrice: row.purchasePrice, recipeUnit: row.recipeUnit,
-            yieldPercent: row.yieldPercent, conversionRate: row.conversionRate,
-            groupId: row.groupId as "Weight" | "Volume" | "Count", imageUrl: null,
+            name: row.name,
+            supplierId: matched.id,
+            purchaseUnit: row.purchaseUnit,
+            purchasePrice: row.purchasePrice,
+            recipeUnit: row.recipeUnit,
+            yieldPercent: row.yieldPercent,
+            conversionRate: row.conversionRate,
+            groupId: row.groupId as "Weight" | "Volume" | "Count",
+            imageUrl: row.imageUrl || null,
+            ...(row.sku ? { sku: row.sku } : {}),
+            ...(matchedCategory ? { categoryId: matchedCategory.id } : {}),
+            ...(matchedArea ? { storageAreaId: matchedArea.id } : {}),
           });
           success++;
         } catch (err) {
@@ -131,7 +208,7 @@ export default function ImportIngredientsPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-2">
         <Link href="/ingredients">
           <Button variant="ghost" size="icon">
@@ -140,17 +217,49 @@ export default function ImportIngredientsPage() {
         </Link>
         <div>
           <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Import Ingredients</h2>
-          <p className="text-muted-foreground">Upload raw material data to import into the database en masse.</p>
+          <p className="text-muted-foreground">Upload a CSV to bulk-import ingredients with all V3 fields.</p>
         </div>
       </div>
+
+      {/* Column guide */}
+      <Card className="border-muted">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">CSV Column Reference</CardTitle>
+          <CardDescription>12 columns — optional fields can be left blank</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-1 text-sm">
+            {[
+              ["1", "Name", "required"],
+              ["2", "Supplier Name", "matched by name"],
+              ["3", "Purchase Unit", "kg / L / pack …"],
+              ["4", "Purchase Price", "THB per purchase unit"],
+              ["5", "Recipe Unit", "g / ml / pc …"],
+              ["6", "Yield %", "e.g. 85"],
+              ["7", "Conversion Rate", "e.g. 1000 (kg→g)"],
+              ["8", "Group", "Weight / Volume / Count"],
+              ["9", "Category", "matched by name, optional"],
+              ["10", "SKU", "auto-generated if blank"],
+              ["11", "Storage Area", "matched by name, optional"],
+              ["12", "Image URL", "optional"],
+            ].map(([num, col, hint]) => (
+              <div key={num} className="flex gap-2 py-0.5">
+                <span className="text-muted-foreground w-5 shrink-0">{num}.</span>
+                <span className="font-medium">{col}</span>
+                <span className="text-muted-foreground text-xs self-center">({hint})</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
-              <CardTitle>Upload CSV / Excel</CardTitle>
+              <CardTitle>Upload CSV</CardTitle>
               <CardDescription>
-                Ensure columns match: Name, Supplier ID, Purchase Unit, Price, Recipe Unit, Yield %
+                Download the template, fill it in, then upload here.
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
@@ -160,9 +269,9 @@ export default function ImportIngredientsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:bg-accent/50 transition-colors cursor-pointer relative">
-            <Input 
-              type="file" 
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+            <Input
+              type="file"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               accept=".csv"
               onChange={handleFileChange}
             />
@@ -194,20 +303,30 @@ export default function ImportIngredientsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead><TableHead>Supplier</TableHead>
-                      <TableHead>Price</TableHead><TableHead>Group</TableHead><TableHead>Status</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Group</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Storage Area</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {preview.map((row, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{row.name}</TableCell>
-                        <TableCell>{row.supplierName}</TableCell>
-                        <TableCell>{row.purchasePrice}</TableCell>
+                        <TableCell>{row.supplierName || <span className="text-muted-foreground italic">auto</span>}</TableCell>
                         <TableCell>{row.groupId}</TableCell>
-                        <TableCell>{row.error
-                          ? <Badge variant="destructive">Error</Badge>
-                          : <Badge className="bg-green-100 text-green-800 border-green-200">Valid</Badge>}
+                        <TableCell>{row.category || <span className="text-muted-foreground italic">—</span>}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.sku || <span className="text-muted-foreground italic">auto</span>}</TableCell>
+                        <TableCell>{row.storageArea || <span className="text-muted-foreground italic">—</span>}</TableCell>
+                        <TableCell>฿{row.purchasePrice.toFixed(2)}</TableCell>
+                        <TableCell>
+                          {row.error
+                            ? <Badge variant="destructive" title={row.error}>Error</Badge>
+                            : <Badge className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400">Valid</Badge>}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -223,7 +342,7 @@ export default function ImportIngredientsPage() {
               <div>
                 <p className="font-medium">Import Complete</p>
                 <p className="text-sm opacity-90 mt-1">
-                  {importResult.success} ingredient{importResult.success !== 1 ? "s" : ""} imported.
+                  {importResult.success} ingredient{importResult.success !== 1 ? "s" : ""} imported successfully.
                   {importResult.failed > 0 && ` ${importResult.failed} row${importResult.failed !== 1 ? "s" : ""} failed.`}
                 </p>
                 {importResult.errors.length > 0 && (

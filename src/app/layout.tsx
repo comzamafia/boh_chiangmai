@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Montserrat, Playfair_Display } from "next/font/google";
 import "./globals.css";
+/* build: 2026-05-23 schema v3 */
 
 /* Montserrat — matches chiangmai.ca's Google Font */
 const montserrat = Montserrat({

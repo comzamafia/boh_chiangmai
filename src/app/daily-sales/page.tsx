@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { recipesApi, salesApi, RecipeWithIngredients, SalesEntry } from "@/lib/api";
 import { useCurrency } from "@/components/currency-context";
@@ -41,7 +41,15 @@ function KpiCard({ title, value, sub, color }: { title: string; value: string; s
     );
 }
 
-export default function DailySalesPage() {
+export default function DailySalesPageWrapper() {
+    return (
+        <Suspense fallback={<div className="flex justify-center items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+            <DailySalesPage />
+        </Suspense>
+    );
+}
+
+function DailySalesPage() {
     const { format } = useCurrency();
     const today = new Date().toISOString().slice(0, 10);
     const searchParams = useSearchParams();

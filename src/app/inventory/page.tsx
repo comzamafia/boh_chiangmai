@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     inventoryApi, ingredientsApi, suppliersApi, storageAreasApi, ingredientSuppliersApi,
     InventoryItem, InventoryTransaction, InventoryAlert,
@@ -138,6 +138,7 @@ export default function InventoryPage() {
     // Add to tracking dialog
     const [addOpen,     setAddOpen]     = useState(false);
     const [addForm,     setAddForm]     = useState({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
+    const [addSearch,   setAddSearch]   = useState("");
 
     // Receive goods form
     const [rcvForm,     setRcvForm]     = useState({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
@@ -230,6 +231,7 @@ export default function InventoryPage() {
             });
             setItems(prev => [...prev, item]);
             setAddOpen(false);
+            setAddSearch("");
             setAddForm({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
         } catch (e) { console.error(e); } finally { setSaving(false); }
     }
@@ -1057,27 +1059,128 @@ export default function InventoryPage() {
             </Tabs>
 
             {/* ══ ADD TO TRACKING DIALOG ════════════════════════════════════════ */}
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <DialogContent className="w-full sm:max-w-md max-h-[92dvh] flex flex-col p-0 gap-0">
+            <Dialog open={addOpen} onOpenChange={v => { setAddOpen(v); if (!v) { setAddSearch(""); setAddForm({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" }); } }}>
+                <DialogContent className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col p-0 gap-0">
                     <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
                         <DialogTitle>Track Ingredient</DialogTitle>
-                        <DialogDescription>Add an ingredient to live inventory tracking and set PAR levels.</DialogDescription>
+                        <DialogDescription>Search and select an ingredient to add to live inventory tracking.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+                        {/* ── Searchable ingredient picker ── */}
                         <div className="space-y-1.5">
                             <Label>Ingredient <span className="text-destructive">*</span></Label>
-                            <Select value={addForm.ingredientId} onValueChange={v => setAddForm(f => ({ ...f, ingredientId: v }))}>
-                                <SelectTrigger><SelectValue placeholder="Select ingredient..." /></SelectTrigger>
-                                <SelectContent>
-                                    {untrackedIngr.length === 0
-                                        ? <SelectItem value="_none" disabled>All ingredients are already tracked</SelectItem>
-                                        : untrackedIngr.map(i => (
-                                            <SelectItem key={i.id} value={i.id}>{i.name} <span className="text-muted-foreground">({i.recipeUnit})</span></SelectItem>
-                                        ))
-                                    }
-                                </SelectContent>
-                            </Select>
+
+                            {untrackedIngr.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-2">All ingredients are already tracked.</p>
+                            ) : (() => {
+                                const selectedIngr = untrackedIngr.find(i => i.id === addForm.ingredientId);
+                                const searchLower  = addSearch.toLowerCase();
+                                const filtered     = addSearch.trim()
+                                    ? untrackedIngr.filter(i =>
+                                        i.name.toLowerCase().includes(searchLower) ||
+                                        (i.supplier?.name ?? "").toLowerCase().includes(searchLower) ||
+                                        (i.category?.name ?? "").toLowerCase().includes(searchLower) ||
+                                        (i.sku ?? "").toLowerCase().includes(searchLower)
+                                      )
+                                    : untrackedIngr;
+
+                                // Group by category name (or "Uncategorised")
+                                const grouped: Record<string, typeof filtered> = {};
+                                for (const i of filtered) {
+                                    const cat = i.category?.name ?? "Uncategorised";
+                                    if (!grouped[cat]) grouped[cat] = [];
+                                    grouped[cat].push(i);
+                                }
+                                const groups = Object.entries(grouped).sort(([a], [b]) =>
+                                    a === "Uncategorised" ? 1 : b === "Uncategorised" ? -1 : a.localeCompare(b)
+                                );
+
+                                return (
+                                    <div className="space-y-2">
+                                        {/* Search box */}
+                                        <div className="relative">
+                                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <Input
+                                                placeholder="Search by name, category, supplier or SKU…"
+                                                className="pl-8 h-9 text-sm"
+                                                value={addSearch}
+                                                onChange={e => setAddSearch(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {addSearch && (
+                                                <button
+                                                    type="button"
+                                                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                                                    onClick={() => setAddSearch("")}
+                                                >
+                                                    ×
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Selected chip */}
+                                        {selectedIngr && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+                                                <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                                                <span className="font-medium text-primary flex-1">{selectedIngr.name}</span>
+                                                <span className="text-xs text-muted-foreground">{selectedIngr.recipeUnit}</span>
+                                                <button
+                                                    type="button"
+                                                    className="ml-1 text-muted-foreground hover:text-destructive text-xs"
+                                                    onClick={() => setAddForm(f => ({ ...f, ingredientId: "" }))}
+                                                >×</button>
+                                            </div>
+                                        )}
+
+                                        {/* Scrollable grouped list */}
+                                        <div className="border rounded-lg overflow-hidden">
+                                            <div className="max-h-52 overflow-y-auto">
+                                                {filtered.length === 0 ? (
+                                                    <p className="text-sm text-muted-foreground text-center py-6">No ingredients match &ldquo;{addSearch}&rdquo;</p>
+                                                ) : (
+                                                    groups.map(([catName, items]) => (
+                                                        <div key={catName}>
+                                                            <div className="sticky top-0 bg-muted/80 backdrop-blur-sm px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b">
+                                                                {catName} <span className="font-normal">({items.length})</span>
+                                                            </div>
+                                                            {items.map(i => {
+                                                                const isSelected = addForm.ingredientId === i.id;
+                                                                return (
+                                                                    <button
+                                                                        key={i.id}
+                                                                        type="button"
+                                                                        onClick={() => { setAddForm(f => ({ ...f, ingredientId: i.id })); setAddSearch(""); }}
+                                                                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/60 transition-colors text-sm border-b border-border/40 last:border-0 ${isSelected ? "bg-primary/8 font-medium" : ""}`}
+                                                                    >
+                                                                        {/* Group badge */}
+                                                                        <span className={`shrink-0 w-1.5 h-5 rounded-full ${
+                                                                            i.groupId === "Weight" ? "bg-amber-400" :
+                                                                            i.groupId === "Volume" ? "bg-blue-400" : "bg-purple-400"
+                                                                        }`} />
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="font-medium truncate">{i.name}</p>
+                                                                            <p className="text-xs text-muted-foreground truncate">
+                                                                                {i.supplier?.name ?? "—"}&ensp;·&ensp;{i.recipeUnit}
+                                                                                {i.sku && <span className="ml-1 font-mono opacity-60">{i.sku}</span>}
+                                                                            </p>
+                                                                        </div>
+                                                                        {isSelected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                            <div className="px-3 py-1.5 bg-muted/30 border-t text-[11px] text-muted-foreground">
+                                                {filtered.length} of {untrackedIngr.length} untracked ingredient{untrackedIngr.length !== 1 ? "s" : ""}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">

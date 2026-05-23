@@ -100,6 +100,7 @@ import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, ImageIcon, Wand2, In
 import Link from "next/link";
 import { useCurrency } from "@/components/currency-context";
 import { CURRENCIES } from "@/lib/currency";
+import { DataPagination, paginate } from "@/components/ui/data-pagination";
 
 type FormState = Omit<Ingredient, "id" | "createdAt" | "updatedAt" | "supplier" | "category" | "storageArea" | "ingredientSuppliers">;
 
@@ -123,6 +124,8 @@ export default function IngredientsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [groupFilter, setGroupFilter] = useState("all");
     const [categoryFilter, setCategoryFilter] = useState("all");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<Ingredient | null>(null);
@@ -161,17 +164,25 @@ export default function IngredientsPage() {
         } catch { setIngSuppliers([]); }
     }, []);
 
-    const filtered = useMemo(() => ingredients.filter(i => {
-        const matchSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (i.supplier?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
-        const matchGroup    = groupFilter === "all" || i.groupId === groupFilter;
-        const matchCategory = categoryFilter === "all"
-            ? true
-            : categoryFilter === "none"
-                ? !i.categoryId
-                : i.categoryId === categoryFilter;
-        return matchSearch && matchGroup && matchCategory;
-    }), [ingredients, searchTerm, groupFilter, categoryFilter]);
+    const filtered = useMemo(() => {
+        const result = ingredients.filter(i => {
+            const matchSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (i.supplier?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
+            const matchGroup    = groupFilter === "all" || i.groupId === groupFilter;
+            const matchCategory = categoryFilter === "all"
+                ? true
+                : categoryFilter === "none"
+                    ? !i.categoryId
+                    : i.categoryId === categoryFilter;
+            return matchSearch && matchGroup && matchCategory;
+        });
+        return result;
+    }, [ingredients, searchTerm, groupFilter, categoryFilter]);
+
+    // Reset to page 1 whenever filters change
+    useEffect(() => { setPage(1); }, [searchTerm, groupFilter, categoryFilter]);
+
+    const paged = useMemo(() => paginate(filtered, page, pageSize), [filtered, page, pageSize]);
 
     // ─── Derived cost values ───────────────────────────────────────────────────
     const ingEffCost = (item: Ingredient) =>
@@ -449,12 +460,21 @@ export default function IngredientsPage() {
                 </div>
             </div>
 
+            {/* ─── Pagination bar ────────────────────────────────────────────── */}
+            <DataPagination
+                total={filtered.length}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={size => { setPageSize(size); setPage(1); }}
+            />
+
             {/* ─── Mobile card list (sm and below) ──────────────────────────── */}
             <div className="sm:hidden space-y-2">
-                {filtered.length === 0 && (
+                {paged.length === 0 && (
                     <p className="text-center py-10 text-sm text-muted-foreground">No ingredients found.</p>
                 )}
-                {filtered.map(item => {
+                {paged.map(item => {
                     const effCost = ingEffCost(item);
                     return (
                         <div key={item.id}
@@ -579,7 +599,7 @@ export default function IngredientsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filtered.map(item => {
+                        {paged.map(item => {
                             const rawCostPerRecipeUnit = Number(item.purchasePrice) / Number(item.conversionRate);
                             const effCost = ingEffCost(item);
                             const hasYieldLoss = Number(item.yieldPercent) < 100;
@@ -691,7 +711,7 @@ export default function IngredientsPage() {
                                 </TableRow>
                             );
                         })}
-                        {filtered.length === 0 && (
+                        {paged.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                                     No ingredients found.

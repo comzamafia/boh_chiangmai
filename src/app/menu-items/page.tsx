@@ -24,6 +24,7 @@ import {
     UtensilsCrossed, Bike, TrendingDown, TrendingUp,
     Clock, ChefHat, Zap, Users, X,
 } from "lucide-react";
+import { DataPagination, paginate } from "@/components/ui/data-pagination";
 
 // ─── Cost helpers ─────────────────────────────────────────────────────────────
 function calcIngredientCost(recipe: RecipeWithIngredients): number {
@@ -271,6 +272,8 @@ export default function MenuItemsPage() {
     const [sortKey, setSortKey] = useState<SortKey>("name");
     const [sortDir, setSortDir] = useState<SortDir>("asc");
     const [selected, setSelected] = useState<RecipeWithIngredients | null>(null);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
 
     const { format, symbol, currency } = useCurrency();
     const rate = CURRENCIES[currency].rateFromTHB;
@@ -312,6 +315,11 @@ export default function MenuItemsPage() {
             return sortDir === "asc" ? cmp : -cmp;
         });
     }, [rows, search, categoryFilter, sortKey, sortDir]);
+
+    // Reset page on filter/sort change
+    useEffect(() => { setPage(1); }, [search, categoryFilter, sortKey, sortDir]);
+
+    const paged = useMemo(() => paginate(filtered, page, pageSize), [filtered, page, pageSize]);
 
     // ── Summary stats ─────────────────────────────────────────────────────────
     const withPrice = filtered.filter(r => r.diningPrice != null);
@@ -398,6 +406,15 @@ export default function MenuItemsPage() {
                 </p>
             </div>
 
+            {/* Pagination bar */}
+            <DataPagination
+                total={filtered.length}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={size => { setPageSize(size); setPage(1); }}
+            />
+
             {/* Table */}
             <div className="border rounded-lg overflow-x-auto">
                 <Table>
@@ -431,9 +448,9 @@ export default function MenuItemsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filtered.map(({ recipe, costPerServing, diningPrice, fcPct }, idx) => (
+                        {paged.map(({ recipe, costPerServing, diningPrice, fcPct }, idx) => (
                             <TableRow key={recipe.id} className="hover:bg-muted/40 group">
-                                <TableCell className="hidden sm:table-cell text-muted-foreground text-sm font-medium">{idx + 1}</TableCell>
+                                <TableCell className="hidden sm:table-cell text-muted-foreground text-sm font-medium">{(page - 1) * pageSize + idx + 1}</TableCell>
 
                                 {/* Thumbnail — click opens popup */}
                                 <TableCell>
@@ -486,7 +503,7 @@ export default function MenuItemsPage() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {filtered.length === 0 && (
+                        {paged.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                                     No menu items found.

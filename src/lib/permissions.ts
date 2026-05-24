@@ -31,6 +31,7 @@ export const ALL_SLUGS = [
     "admin-audit",
     "recipes-manage-categories",
     "settings-storage-areas",
+    "settings-ingredient-categories",
     "pmix-dashboard",
 ] as const;
 
@@ -97,6 +98,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "admin-audit": "/admin/audit-log",
     "recipes-manage-categories": "/recipes",   // same page — controls in-page UI only
     "settings-storage-areas": "/settings/storage-areas",
+    "settings-ingredient-categories": "/settings/categories",
     "pmix-dashboard": "/analysis/pmix",
 };
 

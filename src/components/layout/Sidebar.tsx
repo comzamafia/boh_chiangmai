@@ -6,7 +6,7 @@ import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText, TrendingUp,
     Calculator, Scale, PieChart, Calendar, ClipboardList,
-    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse,
+    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
@@ -44,7 +44,8 @@ const navItems: NavItem[] = [
     { name: "Sales Sim",      href: "/sales-simulation",   icon: PieChart,      slug: "sales-simulation", group: "insights" },
     { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",                    group: "admin" },
     { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",              group: "admin" },
-    { name: "Storage Areas",  href: "/settings/storage-areas", icon: Warehouse, slug: "settings-storage-areas",   group: "admin" },
+    { name: "Storage Areas",  href: "/settings/storage-areas",  icon: Warehouse, slug: "settings-storage-areas",          group: "admin" },
+    { name: "Ing. Categories",href: "/settings/categories",     icon: Tag,       slug: "settings-ingredient-categories",  group: "admin" },
 ];
 
 const GROUP_LABELS: Record<string, string> = {

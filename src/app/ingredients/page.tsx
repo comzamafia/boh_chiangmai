@@ -559,7 +559,7 @@ export default function IngredientsPage() {
                             <TableHead>Name</TableHead>
                             <TableHead className="hidden xl:table-cell text-xs font-mono">SKU</TableHead>
                             <TableHead className="hidden sm:table-cell">Supplier</TableHead>
-                            <TableHead className="hidden lg:table-cell">Category</TableHead>
+                            <TableHead className="hidden md:table-cell">Category</TableHead>
                             <TableHead className="hidden md:table-cell">Group</TableHead>
                             <TableHead>Purchase Price</TableHead>
                             <TableHead className="hidden lg:table-cell">
@@ -631,7 +631,7 @@ export default function IngredientsPage() {
                                     <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                                         {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
                                     </TableCell>
-                                    <TableCell className="hidden lg:table-cell text-sm">
+                                    <TableCell className="hidden md:table-cell text-sm">
                                         {item.category
                                             ? <Badge variant="secondary">{item.category.name}</Badge>
                                             : <span className="text-muted-foreground text-xs">—</span>}

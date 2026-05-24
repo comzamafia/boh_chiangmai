@@ -51,10 +51,10 @@ export async function GET(req: NextRequest) {
         const dishName   = item.itemName as string;
         const category   = (item.category as string) ?? "";
 
-        for (const mod of item.modifiers as Array<{ modifierGroup: string; modifier: string; qty: number }>) {
+        for (const mod of item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>) {
             const grp  = (mod.modifierGroup ?? "").toLowerCase();
             const name = mod.modifier ?? "";
-            const qty  = Number(mod.qty ?? 0);
+            const qty  = Number(mod.qtySold ?? 0);
 
             const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
             const isMainProtein = grp.includes("protein") && !isExtra;

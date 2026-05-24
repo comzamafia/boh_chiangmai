@@ -224,6 +224,7 @@ model InventoryItem {
   parMax        Decimal   @db.Decimal(10, 4)  // max stock level
   reorderPoint  Decimal   @db.Decimal(10, 4)
   leadTimeDays  Int       @default(1)
+  holdingDays   Int       @default(7)          // CR: days of stock to hold (used for PAR Max calculation)
   lastCountDate DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

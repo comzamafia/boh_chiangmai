@@ -81,7 +81,7 @@ export const inventoryApi = {
     get:     (id: string) => apiFetch<InventoryItem>(`/inventory/${id}`),
     create:  (data: { ingredientId: string; currentStock?: number; parMin?: number; parMax?: number; reorderPoint?: number; leadTimeDays?: number }) =>
         apiFetch<InventoryItem>("/inventory", { method: "POST", body: JSON.stringify(data) }),
-    update:  (id: string, data: Partial<Pick<InventoryItem, "parMin" | "parMax" | "reorderPoint" | "leadTimeDays" | "currentStock">>) =>
+    update:  (id: string, data: Partial<Pick<InventoryItem, "parMin" | "parMax" | "reorderPoint" | "leadTimeDays" | "holdingDays" | "currentStock">>) =>
         apiFetch<InventoryItem>(`/inventory/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete:  (id: string) => apiFetch<void>(`/inventory/${id}`, { method: "DELETE" }),
 
@@ -212,6 +212,14 @@ export const pmixApi = {
         apiFetch<{ uploadId: string; syncedDates: string[]; totalEntries: number }>(
             `/pmix/sync-sales?uploadId=${uploadId}`
         ),
+    dailySummary: (uploadId: string) =>
+        apiFetch<PmixDailySummary>(`/pmix/daily-summary?uploadId=${uploadId}`),
+    trend: (limit = 10) =>
+        apiFetch<{ trend: PmixTrendPoint[] }>(`/pmix/trend?limit=${limit}`),
+    parSuggestions: (days = 30) =>
+        apiFetch<ParSuggestionsResult>(`/inventory/par-suggestions?days=${days}`),
+    applyParSuggestions: (items: { inventoryItemId: string; parMin: number; parMax: number; reorderPoint: number }[]) =>
+        apiFetch<{ applied: number }>("/inventory/par-suggestions", { method: "POST", body: JSON.stringify({ items }) }),
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
@@ -379,6 +387,7 @@ export interface InventoryItem {
     parMax: number;
     reorderPoint: number;
     leadTimeDays: number;
+    holdingDays: number;       // CR: days of stock to hold (PAR Max calculation)
     lastCountDate?: string | null;
     createdAt?: string;
     updatedAt?: string;
@@ -597,4 +606,84 @@ export interface PmixAnalytics {
         linkedCount:   number;
         unlinkedCount: number;
     };
+}
+
+// ─── CR: Daily Summary Types ──────────────────────────────────────────────────
+export interface PmixDailySummaryIngredient {
+    ingredientId:      string;
+    ingredientName:    string;
+    sku:               string | null;
+    unit:              string;
+    groupId:           string;
+    categoryId:        string | null;
+    categoryName:      string;
+    totalRequiredQty:  number;
+    topConsumingMenu:  { name: string; qty: number } | null;
+    currentStock:      number | null;
+    parMin:            number | null;
+    parMax:            number | null;
+    reorderPoint:      number | null;
+    leadTimeDays:      number | null;
+    holdingDays:       number | null;
+    menuBreakdown:     { menuName: string; qtySold: number; ingredientQty: number }[];
+    isBelowPar:        boolean;
+}
+
+export interface PmixDailySummaryCategory {
+    categoryId:   string | null;
+    categoryName: string;
+    sortOrder:    number;
+    ingredients:  PmixDailySummaryIngredient[];
+}
+
+export interface PmixDailySummary {
+    uploadId:        string;
+    periodLabel:     string | null;
+    uploadedAt:      string;
+    categories:      PmixDailySummaryCategory[];
+    linkedCount:     number;
+    unlinkedCount:   number;
+    totalIngredients: number;
+}
+
+export interface PmixTrendPoint {
+    uploadId:        string;
+    label:           string;
+    uploadedAt:      string;
+    totalIngQty:     number;
+    totalMenuQty:    number;
+    linkedMenuItems: number;
+}
+
+// ─── CR: PAR Suggestion Types ─────────────────────────────────────────────────
+export interface ParSuggestion {
+    inventoryItemId:  string;
+    ingredientId:     string;
+    ingredientName:   string;
+    sku:              string | null;
+    unit:             string;
+    groupId:          string;
+    categoryId:       string | null;
+    categoryName:     string;
+    daysAnalyzed:     number;
+    totalOutQty:      number;
+    adu:              number;
+    hasHistory:       boolean;
+    currentParMin:    number;
+    currentParMax:    number;
+    currentROP:       number;
+    leadTimeDays:     number;
+    holdingDays:      number;
+    currentStock:     number;
+    suggestedParMin:  number | null;
+    suggestedROP:     number | null;
+    suggestedParMax:  number | null;
+}
+
+export interface ParSuggestionsResult {
+    days:         number;
+    cutoffDate:   string;
+    suggestions:  ParSuggestion[];
+    totalTracked: number;
+    withHistory:  number;
 }

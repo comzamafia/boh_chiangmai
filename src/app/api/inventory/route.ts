@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { ingredientId, currentStock, parMin, parMax, reorderPoint, leadTimeDays } = body;
+        const { ingredientId, currentStock, parMin, parMax, reorderPoint, leadTimeDays, holdingDays } = body;
         if (!ingredientId) {
             return NextResponse.json({ error: "ingredientId is required" }, { status: 400 });
         }
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
                 parMax:       Number(parMax ?? 0),
                 reorderPoint: Number(reorderPoint ?? 0),
                 leadTimeDays: Number(leadTimeDays ?? 1),
+                holdingDays:  Number(holdingDays ?? 7),
             },
             include: INCLUDE,
         });

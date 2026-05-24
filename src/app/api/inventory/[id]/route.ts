@@ -29,6 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (body.parMax        !== undefined) data.parMax        = Number(body.parMax);
         if (body.reorderPoint  !== undefined) data.reorderPoint  = Number(body.reorderPoint);
         if (body.leadTimeDays  !== undefined) data.leadTimeDays  = Number(body.leadTimeDays);
+        if (body.holdingDays   !== undefined) data.holdingDays   = Number(body.holdingDays);
         if (body.currentStock  !== undefined) data.currentStock  = Number(body.currentStock);
         if (body.lastCountDate !== undefined) data.lastCountDate = body.lastCountDate ? new Date(body.lastCountDate) : null;
 

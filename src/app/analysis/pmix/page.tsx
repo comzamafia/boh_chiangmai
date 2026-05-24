@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import {
     ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ReferenceLine,
     ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend,
+    AreaChart, Area,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,15 +22,17 @@ import {
     Upload, Loader2, AlertTriangle, Star, TrendingDown, HelpCircle,
     Dog, ChefHat, FlameKindling, Beaker, UtensilsCrossed, Beer,
     IceCream, RefreshCw, BarChart3, PieChart as PieIcon,
-    ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight,
+    ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronDown,
     TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
-    ArrowRight, RotateCcw,
+    ArrowRight, RotateCcw, Package, Download, Brain, LayoutList,
+    CircleCheck, CircleAlert, Info,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
     pmixApi, PmixUpload, PmixAnalytics, PmixBcgItem, BcgQuadrant,
+    PmixDailySummary, PmixDailySummaryIngredient, PmixTrendPoint, ParSuggestion,
 } from "@/lib/api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -80,13 +83,14 @@ const fmt    = (n: number) => n.toLocaleString("en-CA", { minimumFractionDigits:
 const fmtN   = (n: number) => n.toLocaleString();
 const fmtD   = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
 
-type Tab = "bcg" | "prep" | "qc" | "bom";
+type Tab = "bcg" | "prep" | "qc" | "bom" | "summary";
 
 const TABS: { key: Tab; label: string; short: string; icon: React.ReactNode; color: string }[] = [
-    { key: "bcg",  label: "Menu Engineering", short: "Menu",    icon: <BarChart3 className="w-4 h-4" />,    color: "text-rose-600"    },
-    { key: "prep", label: "Kitchen Prep",      short: "Prep",    icon: <ClipboardList className="w-4 h-4" />,color: "text-orange-500"  },
-    { key: "qc",   label: "Quality & Loss",    short: "Quality", icon: <PieIcon className="w-4 h-4" />,      color: "text-yellow-600"  },
-    { key: "bom",  label: "BOM Linkage",       short: "BOM",     icon: <Link2 className="w-4 h-4" />,        color: "text-emerald-600" },
+    { key: "bcg",     label: "Menu Engineering", short: "Menu",    icon: <BarChart3 className="w-4 h-4" />,    color: "text-rose-600"    },
+    { key: "prep",    label: "Kitchen Prep",      short: "Prep",    icon: <ClipboardList className="w-4 h-4" />,color: "text-orange-500"  },
+    { key: "qc",      label: "Quality & Loss",    short: "Quality", icon: <PieIcon className="w-4 h-4" />,      color: "text-yellow-600"  },
+    { key: "bom",     label: "BOM Linkage",       short: "BOM",     icon: <Link2 className="w-4 h-4" />,        color: "text-emerald-600" },
+    { key: "summary", label: "Daily Summary",     short: "Summary", icon: <LayoutList className="w-4 h-4" />,   color: "text-blue-600"    },
 ];
 
 // ─── Tooltip components ───────────────────────────────────────────────────────
@@ -288,6 +292,19 @@ export default function PmixDashboardPage() {
     const [mounted,       setMounted]       = useState(false);
     const [showChart,     setShowChart]     = useState(false);
 
+    // Daily Summary state
+    const [summary,          setSummary]          = useState<PmixDailySummary | null>(null);
+    const [summaryLoading,   setSummaryLoading]   = useState(false);
+    const [trend,            setTrend]            = useState<PmixTrendPoint[]>([]);
+    const [trendLoading,     setTrendLoading]     = useState(false);
+    const [expandedRows,     setExpandedRows]     = useState<Set<string>>(new Set());
+    const [parData,          setParData]          = useState<ParSuggestion[]>([]);
+    const [parLoading,       setParLoading]       = useState(false);
+    const [parSelected,      setParSelected]      = useState<Set<string>>(new Set());
+    const [parApplying,      setParApplying]      = useState(false);
+    const [parApplied,       setParApplied]       = useState<number | null>(null);
+    const [catFilter,        setCatFilter]        = useState<string>("All");
+
     // Sync dialog state
     const [syncOpen,      setSyncOpen]      = useState(false);
     const [syncDate,      setSyncDate]      = useState(() => new Date().toISOString().slice(0, 10));
@@ -335,6 +352,96 @@ export default function PmixDashboardPage() {
     }, []);
 
     useEffect(() => { if (selectedId) loadSyncStatus(selectedId); }, [selectedId, loadSyncStatus]);
+
+    // ── Load daily summary ──
+    useEffect(() => {
+        if (selectedId && activeTab === "summary") {
+            setSummaryLoading(true);
+            setSummary(null);
+            setExpandedRows(new Set());
+            pmixApi.dailySummary(selectedId)
+                .then(setSummary)
+                .catch(() => {})
+                .finally(() => setSummaryLoading(false));
+        }
+    }, [selectedId, activeTab]);
+
+    // ── Load trend (once, when summary tab is first opened) ──
+    useEffect(() => {
+        if (activeTab === "summary" && trend.length === 0) {
+            setTrendLoading(true);
+            pmixApi.trend(10)
+                .then(r => setTrend(r.trend))
+                .catch(() => {})
+                .finally(() => setTrendLoading(false));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    // ── Load PAR suggestions (once per session when summary tab opens) ──
+    useEffect(() => {
+        if (activeTab === "summary" && parData.length === 0) {
+            setParLoading(true);
+            pmixApi.parSuggestions(30)
+                .then(r => setParData(r.suggestions))
+                .catch(() => {})
+                .finally(() => setParLoading(false));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    // ── Apply PAR suggestions ──
+    async function handleApplyPar() {
+        const toApply = parData
+            .filter(s => parSelected.has(s.inventoryItemId) && s.suggestedParMin !== null)
+            .map(s => ({
+                inventoryItemId: s.inventoryItemId,
+                parMin:          s.suggestedParMin!,
+                parMax:          s.suggestedParMax ?? s.currentParMax,
+                reorderPoint:    s.suggestedROP    ?? s.currentROP,
+            }));
+        if (toApply.length === 0) return;
+        setParApplying(true);
+        try {
+            const r = await pmixApi.applyParSuggestions(toApply);
+            setParApplied(r.applied);
+            setParSelected(new Set());
+            // Refresh PAR data
+            const fresh = await pmixApi.parSuggestions(30);
+            setParData(fresh.suggestions);
+        } catch { /* ignore */ }
+        finally { setParApplying(false); }
+    }
+
+    // ── Export Daily Summary CSV ──
+    function handleExportCSV() {
+        if (!summary) return;
+        const rows: string[][] = [
+            ["Category", "SKU", "Ingredient", "Unit", "Daily Required Qty", "Top Consuming Menu", "Current Stock", "Below PAR?"],
+        ];
+        for (const cat of summary.categories) {
+            for (const ing of cat.ingredients) {
+                rows.push([
+                    cat.categoryName,
+                    ing.sku ?? "",
+                    ing.ingredientName,
+                    ing.unit,
+                    String(ing.totalRequiredQty),
+                    ing.topConsumingMenu ? `${ing.topConsumingMenu.name} (${ing.topConsumingMenu.qty} ${ing.unit})` : "",
+                    ing.currentStock !== null ? String(ing.currentStock) : "Not tracked",
+                    ing.isBelowPar ? "YES" : "no",
+                ]);
+            }
+        }
+        const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `daily-summary-${summary.periodLabel ?? selectedId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
     // ── Handle file ──
     async function handleFile(file: File) {
@@ -905,6 +1012,493 @@ export default function PmixDashboardPage() {
                                     </div>
                                 </Card>
                             )}
+                        </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════
+                        DAILY SUMMARY TAB (CR 2.2, 2.3, 2.4, 2.5)
+                    ══════════════════════════════════════════════════════ */}
+                    {activeTab === "summary" && (
+                        <div className="space-y-5">
+
+                            {/* ─ Header actions ─ */}
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-sm text-muted-foreground">
+                                    Aggregated ingredient consumption from BOM linkage — all stations
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-lg gap-1.5 text-xs"
+                                    onClick={handleExportCSV}
+                                    disabled={!summary || summary.totalIngredients === 0}
+                                >
+                                    <Download className="w-3.5 h-3.5" /> Export CSV
+                                </Button>
+                            </div>
+
+                            {/* ─ Trend chart ─ */}
+                            <Card className="overflow-hidden">
+                                <CardHeader className="pb-1 pt-4 px-5">
+                                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                        <TrendingUp className="w-4 h-4 text-blue-500" />
+                                        Ingredient Consumption Trend
+                                    </CardTitle>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Total estimated ingredient volume used (recipe units) across recent PMIX uploads
+                                    </p>
+                                </CardHeader>
+                                <CardContent className="pt-2 pb-4">
+                                    {trendLoading ? (
+                                        <Skeleton className="h-40" />
+                                    ) : trend.length < 2 ? (
+                                        <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
+                                            <Info className="w-5 h-5" />
+                                            <p className="text-sm">Need at least 2 uploads with BOM links for trend data</p>
+                                        </div>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height={180}>
+                                            <AreaChart data={trend} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+                                                <defs>
+                                                    <linearGradient id="ingGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
+                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                                                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                                                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }}
+                                                    label={{ value: "Units", angle: -90, position: "insideLeft", fontSize: 9, fill: "#94a3b8" }} />
+                                                <Tooltip
+                                                    formatter={(v) => [(Number(v ?? 0)).toLocaleString(), "Total Ing. Units"]}
+                                                    contentStyle={{ fontSize: 12 }}
+                                                />
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="totalIngQty"
+                                                    stroke="#3b82f6"
+                                                    strokeWidth={2}
+                                                    fill="url(#ingGradient)"
+                                                    dot={{ fill: "#3b82f6", r: 3 }}
+                                                    activeDot={{ r: 5 }}
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* ─ Summary loading / no-data states ─ */}
+                            {summaryLoading && <DashboardSkeleton />}
+
+                            {!summaryLoading && summary && summary.totalIngredients === 0 && (
+                                <Card>
+                                    <CardContent className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                                        <div className="p-4 rounded-2xl bg-muted/40">
+                                            <Link2 className="w-8 h-8 text-muted-foreground/40" />
+                                        </div>
+                                        <p className="font-semibold">No BOM-linked items in this upload</p>
+                                        <p className="text-sm text-muted-foreground max-w-xs">
+                                            Link BOH recipes to PMIX items in the BOM Linkage tab to see ingredient consumption here.
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* ─ Category filter ─ */}
+                            {!summaryLoading && summary && summary.categories.length > 0 && (() => {
+                                const cats = summary.categories.map(c => c.categoryName);
+                                const filteredCats = catFilter === "All"
+                                    ? summary.categories
+                                    : summary.categories.filter(c => c.categoryName === catFilter);
+                                const totalBelowPar = summary.categories.flatMap(c => c.ingredients).filter(i => i.isBelowPar).length;
+
+                                return (
+                                    <>
+                                        {/* KPI row */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <KpiCard label="Ingredients"     value={summary.totalIngredients} icon={Package}        />
+                                            <KpiCard label="Categories"      value={summary.categories.length} icon={Layers}        />
+                                            <KpiCard label="Linked Menus"    value={summary.linkedCount}       icon={Link2}         />
+                                            <KpiCard label="Below PAR"       value={totalBelowPar}             icon={CircleAlert}
+                                                valueClass={totalBelowPar > 0 ? "text-red-600" : "text-muted-foreground"}
+                                                sub={totalBelowPar > 0 ? "need restocking" : "all ok"} />
+                                        </div>
+
+                                        {/* Category filter pills */}
+                                        <div className="flex gap-2 flex-wrap">
+                                            <button
+                                                onClick={() => setCatFilter("All")}
+                                                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
+                                                    ${catFilter === "All" ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+                                            >All · {summary.totalIngredients}</button>
+                                            {cats.map(cat => {
+                                                const catData = summary.categories.find(c => c.categoryName === cat);
+                                                return (
+                                                    <button key={cat}
+                                                        onClick={() => setCatFilter(catFilter === cat ? "All" : cat)}
+                                                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
+                                                            ${catFilter === cat ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+                                                    >{cat} · {catData?.ingredients.length ?? 0}</button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Category sections */}
+                                        {filteredCats.map(cat => (
+                                            <Card key={cat.categoryId ?? cat.categoryName} className="overflow-hidden">
+                                                <CardHeader className="pb-2 pt-4 px-5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1">
+                                                            <CardTitle className="text-sm font-semibold">{cat.categoryName}</CardTitle>
+                                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                                {cat.ingredients.length} ingredient{cat.ingredients.length !== 1 ? "s" : ""}
+                                                            </p>
+                                                        </div>
+                                                        {cat.ingredients.some(i => i.isBelowPar) && (
+                                                            <Badge variant="destructive" className="text-[10px]">
+                                                                {cat.ingredients.filter(i => i.isBelowPar).length} below PAR
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </CardHeader>
+                                                <CardContent className="p-0">
+                                                    {/* Desktop table */}
+                                                    <div className="hidden md:block overflow-x-auto">
+                                                        <table className="w-full text-sm">
+                                                            <thead>
+                                                                <tr className="border-b bg-muted/30">
+                                                                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ingredient</th>
+                                                                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Required</th>
+                                                                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Top Menu</th>
+                                                                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Stock</th>
+                                                                    <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                                                                    <th className="px-2 py-2.5 w-8"></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y">
+                                                                {cat.ingredients.map(ing => {
+                                                                    const isExpanded = expandedRows.has(ing.ingredientId);
+                                                                    return (
+                                                                        <>
+                                                                            <tr key={ing.ingredientId}
+                                                                                className={`hover:bg-muted/20 transition-colors ${ing.isBelowPar ? "bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                                                                                <td className="px-5 py-3">
+                                                                                    <div className="font-medium truncate max-w-[200px]">{ing.ingredientName}</div>
+                                                                                    {ing.sku && <div className="text-[10px] text-muted-foreground font-mono">{ing.sku}</div>}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    <span className="font-bold tabular-nums">
+                                                                                        {ing.totalRequiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                                                    </span>
+                                                                                    <span className="text-xs text-muted-foreground ml-1">{ing.unit}</span>
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-sm text-muted-foreground max-w-[180px]">
+                                                                                    {ing.topConsumingMenu ? (
+                                                                                        <div className="truncate">
+                                                                                            <span className="text-foreground font-medium">{ing.topConsumingMenu.name}</span>
+                                                                                            <span className="text-xs ml-1">
+                                                                                                ({ing.topConsumingMenu.qty.toFixed(2)} {ing.unit})
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    ) : "—"}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    {ing.currentStock !== null ? (
+                                                                                        <span className={`font-medium tabular-nums ${ing.isBelowPar ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
+                                                                                            {Number(ing.currentStock).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                                                            <span className="text-xs text-muted-foreground ml-1">{ing.unit}</span>
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="text-xs text-muted-foreground">Not tracked</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-3">
+                                                                                    {ing.currentStock !== null ? (
+                                                                                        ing.isBelowPar ? (
+                                                                                            <Badge variant="destructive" className="text-[10px]">
+                                                                                                <CircleAlert className="w-3 h-3 mr-1" />Below PAR
+                                                                                            </Badge>
+                                                                                        ) : (
+                                                                                            <Badge variant="secondary" className="text-[10px] text-green-700 dark:text-green-400">
+                                                                                                <CircleCheck className="w-3 h-3 mr-1" />OK
+                                                                                            </Badge>
+                                                                                        )
+                                                                                    ) : (
+                                                                                        <Badge variant="outline" className="text-[10px]">Untracked</Badge>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-2 py-3 text-right">
+                                                                                    {ing.menuBreakdown.length > 1 && (
+                                                                                        <button
+                                                                                            onClick={() => setExpandedRows(prev => {
+                                                                                                const next = new Set(prev);
+                                                                                                if (next.has(ing.ingredientId)) next.delete(ing.ingredientId);
+                                                                                                else next.add(ing.ingredientId);
+                                                                                                return next;
+                                                                                            })}
+                                                                                            className="p-1 rounded hover:bg-muted/50 text-muted-foreground"
+                                                                                        >
+                                                                                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                </td>
+                                                                            </tr>
+                                                                            {/* Drill-down row */}
+                                                                            {isExpanded && (
+                                                                                <tr key={`${ing.ingredientId}-drill`} className="bg-muted/20">
+                                                                                    <td colSpan={6} className="px-5 pb-3 pt-1">
+                                                                                        <div className="pl-4 border-l-2 border-primary/30 space-y-1.5">
+                                                                                            <p className="text-xs font-semibold text-muted-foreground mb-2">Breakdown by Menu Item:</p>
+                                                                                            {ing.menuBreakdown.map(m => {
+                                                                                                const pct = ing.totalRequiredQty > 0 ? (m.ingredientQty / ing.totalRequiredQty) * 100 : 0;
+                                                                                                return (
+                                                                                                    <div key={m.menuName} className="flex items-center gap-3">
+                                                                                                        <span className="text-xs text-muted-foreground w-32 truncate shrink-0">{m.menuName}</span>
+                                                                                                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                                                                                            <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                                                                                                        </div>
+                                                                                                        <span className="text-xs font-medium tabular-nums w-24 text-right shrink-0">
+                                                                                                            {m.ingredientQty.toFixed(2)} {ing.unit}
+                                                                                                        </span>
+                                                                                                        <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
+                                                                                                            ({m.qtySold} covers)
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            )}
+                                                                        </>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+
+                                                    {/* Mobile cards */}
+                                                    <div className="md:hidden divide-y">
+                                                        {cat.ingredients.map(ing => {
+                                                            const isExpanded = expandedRows.has(ing.ingredientId);
+                                                            return (
+                                                                <div key={ing.ingredientId} className={`px-4 py-3 ${ing.isBelowPar ? "bg-red-50/30 dark:bg-red-950/10" : ""}`}>
+                                                                    <div className="flex items-start justify-between gap-2">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-sm font-medium truncate">{ing.ingredientName}</p>
+                                                                            {ing.sku && <p className="text-[10px] text-muted-foreground font-mono">{ing.sku}</p>}
+                                                                        </div>
+                                                                        <div className="text-right shrink-0">
+                                                                            <p className="text-sm font-bold tabular-nums">
+                                                                                {ing.totalRequiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {ing.unit}
+                                                                            </p>
+                                                                            {ing.isBelowPar
+                                                                                ? <Badge variant="destructive" className="text-[10px]">Below PAR</Badge>
+                                                                                : ing.currentStock !== null
+                                                                                    ? <span className="text-xs text-green-600">OK</span>
+                                                                                    : <span className="text-xs text-muted-foreground">Untracked</span>
+                                                                            }
+                                                                        </div>
+                                                                    </div>
+                                                                    {ing.topConsumingMenu && (
+                                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                                            Top: <span className="text-foreground">{ing.topConsumingMenu.name}</span>
+                                                                        </p>
+                                                                    )}
+                                                                    {ing.menuBreakdown.length > 1 && (
+                                                                        <button
+                                                                            onClick={() => setExpandedRows(prev => {
+                                                                                const next = new Set(prev);
+                                                                                if (next.has(ing.ingredientId)) next.delete(ing.ingredientId);
+                                                                                else next.add(ing.ingredientId);
+                                                                                return next;
+                                                                            })}
+                                                                            className="flex items-center gap-1 text-xs text-blue-600 mt-1.5"
+                                                                        >
+                                                                            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                                                            {isExpanded ? "Hide" : "Show"} breakdown ({ing.menuBreakdown.length} menus)
+                                                                        </button>
+                                                                    )}
+                                                                    {isExpanded && (
+                                                                        <div className="mt-2 pl-3 border-l-2 border-primary/30 space-y-1">
+                                                                            {ing.menuBreakdown.map(m => (
+                                                                                <div key={m.menuName} className="flex justify-between text-xs">
+                                                                                    <span className="text-muted-foreground truncate max-w-[55%]">{m.menuName}</span>
+                                                                                    <span className="font-medium tabular-nums">
+                                                                                        {m.ingredientQty.toFixed(2)} {ing.unit}
+                                                                                    </span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+
+                                        {/* ── PAR Suggestions Widget (CR 2.4) ── */}
+                                        <Card className="overflow-hidden border-blue-200 dark:border-blue-800">
+                                            <CardHeader className="pb-2 pt-4 px-5 bg-blue-50/50 dark:bg-blue-950/20">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                                                        <Brain className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <CardTitle className="text-sm font-semibold">Automated PAR / ROP Suggestions</CardTitle>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            Based on 30-day ADU from inventory transactions · ROP = (ADU × Lead Time) + Safety Stock
+                                                        </p>
+                                                    </div>
+                                                    {parSelected.size > 0 && (
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg shrink-0"
+                                                            onClick={handleApplyPar}
+                                                            disabled={parApplying}
+                                                        >
+                                                            {parApplying
+                                                                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Applying…</>
+                                                                : <><CheckCircle2 className="w-3.5 h-3.5" /> Accept & Apply ({parSelected.size})</>
+                                                            }
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                {parApplied !== null && (
+                                                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg px-3 py-2 mt-2">
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        {parApplied} inventory items updated with suggested PAR / ROP values
+                                                    </div>
+                                                )}
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                                {parLoading ? (
+                                                    <div className="p-5 space-y-2">
+                                                        {[1,2,3].map(i => <Skeleton key={i} className="h-12" />)}
+                                                    </div>
+                                                ) : parData.filter(s => s.hasHistory).length === 0 ? (
+                                                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground text-sm">
+                                                        <Info className="w-5 h-5" />
+                                                        No consumption history found. Record inventory "Out" transactions to enable suggestions.
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {/* Select all */}
+                                                        <div className="flex items-center gap-2 px-5 py-2.5 border-b bg-muted/20">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="rounded"
+                                                                checked={parSelected.size === parData.filter(s => s.hasHistory).length && parSelected.size > 0}
+                                                                onChange={e => {
+                                                                    if (e.target.checked) setParSelected(new Set(parData.filter(s => s.hasHistory).map(s => s.inventoryItemId)));
+                                                                    else setParSelected(new Set());
+                                                                }}
+                                                            />
+                                                            <span className="text-xs text-muted-foreground">
+                                                                Select all ({parData.filter(s => s.hasHistory).length} with history) · {parSelected.size} selected
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Table header */}
+                                                        <div className="hidden md:grid grid-cols-[24px_1fr_80px_repeat(3,_100px)_repeat(3,_100px)] gap-2 px-5 py-2 border-b bg-muted/10 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                            <span></span>
+                                                            <span>Ingredient</span>
+                                                            <span className="text-right">ADU</span>
+                                                            <span className="text-right">Curr. PAR Min</span>
+                                                            <span className="text-right">Curr. ROP</span>
+                                                            <span className="text-right">Curr. PAR Max</span>
+                                                            <span className="text-right text-blue-600">Sug. PAR Min</span>
+                                                            <span className="text-right text-blue-600">Sug. ROP</span>
+                                                            <span className="text-right text-blue-600">Sug. PAR Max</span>
+                                                        </div>
+
+                                                        <div className="divide-y max-h-80 overflow-y-auto">
+                                                            {parData.filter(s => s.hasHistory).map(s => (
+                                                                <div key={s.inventoryItemId}
+                                                                    className="hidden md:grid grid-cols-[24px_1fr_80px_repeat(3,_100px)_repeat(3,_100px)] gap-2 px-5 py-2.5 items-center hover:bg-muted/20 text-sm"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="rounded"
+                                                                        checked={parSelected.has(s.inventoryItemId)}
+                                                                        onChange={e => {
+                                                                            setParSelected(prev => {
+                                                                                const next = new Set(prev);
+                                                                                if (e.target.checked) next.add(s.inventoryItemId);
+                                                                                else next.delete(s.inventoryItemId);
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-medium truncate">{s.ingredientName}</p>
+                                                                        <p className="text-[10px] text-muted-foreground">
+                                                                            {s.categoryName} · {s.unit} · {s.adu.toFixed(2)}/day
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-right tabular-nums text-muted-foreground">{s.adu.toFixed(2)}</span>
+                                                                    <span className="text-right tabular-nums">{s.currentParMin.toFixed(2)}</span>
+                                                                    <span className="text-right tabular-nums">{s.currentROP.toFixed(2)}</span>
+                                                                    <span className="text-right tabular-nums">{s.currentParMax.toFixed(2)}</span>
+                                                                    <span className="text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+                                                                        {s.suggestedParMin?.toFixed(2) ?? "—"}
+                                                                    </span>
+                                                                    <span className="text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+                                                                        {s.suggestedROP?.toFixed(2) ?? "—"}
+                                                                    </span>
+                                                                    <span className="text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+                                                                        {s.suggestedParMax?.toFixed(2) ?? "—"}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            {/* Mobile PAR rows */}
+                                                            {parData.filter(s => s.hasHistory).map(s => (
+                                                                <div key={`mob-${s.inventoryItemId}`}
+                                                                    className="md:hidden flex items-start gap-3 px-4 py-3"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="rounded mt-0.5"
+                                                                        checked={parSelected.has(s.inventoryItemId)}
+                                                                        onChange={e => {
+                                                                            setParSelected(prev => {
+                                                                                const next = new Set(prev);
+                                                                                if (e.target.checked) next.add(s.inventoryItemId);
+                                                                                else next.delete(s.inventoryItemId);
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm font-medium truncate">{s.ingredientName}</p>
+                                                                        <p className="text-xs text-muted-foreground">ADU: {s.adu.toFixed(2)} {s.unit}/day</p>
+                                                                        <div className="grid grid-cols-3 gap-1 mt-2 text-xs">
+                                                                            {[
+                                                                                ["PAR Min", s.currentParMin, s.suggestedParMin],
+                                                                                ["ROP",     s.currentROP,    s.suggestedROP],
+                                                                                ["PAR Max", s.currentParMax, s.suggestedParMax],
+                                                                            ].map(([label, curr, sugg]) => (
+                                                                                <div key={String(label)} className="bg-muted/30 rounded p-1.5 text-center">
+                                                                                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                                                                                    <p className="tabular-nums">{Number(curr).toFixed(1)}</p>
+                                                                                    {sugg !== null && <p className="text-blue-600 font-semibold tabular-nums">→ {Number(sugg).toFixed(1)}</p>}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </>
+                                );
+                            })()}
                         </div>
                     )}
 

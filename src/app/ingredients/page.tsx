@@ -132,6 +132,11 @@ export default function IngredientsPage() {
     const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
     const [form, setForm] = useState<FormState>(emptyForm([]));
 
+    // ─── Auto-categorize state ────────────────────────────────────────────────
+    const [autoAssigning, setAutoAssigning]       = useState(false);
+    const [autoResult, setAutoResult]             = useState<{ assigned: number; skipped: number; details: string[]; unmatched: string[] } | null>(null);
+    const [autoResultOpen, setAutoResultOpen]     = useState(false);
+
     // ─── Multi-supplier panel state ───────────────────────────────────────────
     const [ingSuppliers, setIngSuppliers]       = useState<IngredientSupplier[]>([]);
     const [suppPanelOpen, setSuppPanelOpen]     = useState(false);
@@ -360,6 +365,28 @@ export default function IngredientsPage() {
         finally { setSaving(false); }
     };
 
+    const handleAutoAssign = async (overwrite = false) => {
+        setAutoAssigning(true);
+        try {
+            const res = await fetch("/api/ingredients/auto-categorize", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ overwrite }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Failed");
+            setAutoResult(data);
+            setAutoResultOpen(true);
+            // Refresh ingredient list so new categories appear
+            const refreshed = await ingredientsApi.list();
+            setIngredients(refreshed);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Auto-assign failed");
+        } finally {
+            setAutoAssigning(false);
+        }
+    };
+
     if (loading) return (
         <div className="flex justify-center items-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -374,12 +401,23 @@ export default function IngredientsPage() {
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Ingredients</h2>
                     <p className="text-muted-foreground">Manage raw materials, unit conversions and effective costs.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap justify-end">
                     <Link href="/import-ingredients">
                         <Button variant="outline" className="text-xs sm:text-sm px-3 sm:px-4">
                             Import CSV
                         </Button>
                     </Link>
+                    <Button
+                        variant="outline"
+                        className="text-xs sm:text-sm px-3 sm:px-4"
+                        onClick={() => handleAutoAssign(false)}
+                        disabled={autoAssigning || categories.length === 0}
+                        title={categories.length === 0 ? "Create categories first (Admin → Ing. Categories)" : "Auto-assign categories to unassigned ingredients"}
+                    >
+                        {autoAssigning
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Assigning…</>
+                            : <><Wand2 className="mr-2 h-4 w-4" /> Auto-Assign Categories</>}
+                    </Button>
                     {/* Hidden on mobile — FAB handles Add on small screens */}
                     <Button onClick={openAdd} className="hidden sm:flex">
                         <Plus className="mr-2 h-4 w-4" /> Add Ingredient
@@ -1159,6 +1197,62 @@ export default function IngredientsPage() {
                             Delete
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ─── Auto-Assign Results Dialog ────────────────────────────────── */}
+            <Dialog open={autoResultOpen} onOpenChange={setAutoResultOpen}>
+                <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col p-0 gap-0">
+                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+                        <DialogTitle className="flex items-center gap-2">
+                            <Wand2 className="h-5 w-5 text-primary" /> Auto-Assign Results
+                        </DialogTitle>
+                        <DialogDescription>
+                            {autoResult && (
+                                <span>
+                                    <span className="text-green-600 font-semibold">{autoResult.assigned} ingredient{autoResult.assigned !== 1 ? "s" : ""} assigned</span>
+                                    {autoResult.skipped > 0 && <span className="text-muted-foreground"> · {autoResult.skipped} could not be matched</span>}
+                                </span>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-sm">
+                        {autoResult && autoResult.assigned > 0 && (
+                            <div>
+                                <p className="font-semibold text-green-700 dark:text-green-400 mb-2">✓ Assigned ({autoResult.assigned})</p>
+                                <div className="space-y-1 max-h-48 overflow-y-auto border rounded-md p-2 bg-green-50 dark:bg-green-950/20">
+                                    {autoResult.details.map((d, i) => (
+                                        <p key={i} className="text-xs text-green-800 dark:text-green-300">{d}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {autoResult && autoResult.unmatched.length > 0 && (
+                            <div>
+                                <p className="font-semibold text-muted-foreground mb-2">— No match found ({autoResult.unmatched.length})</p>
+                                <div className="space-y-1 max-h-40 overflow-y-auto border rounded-md p-2 bg-muted/30">
+                                    {autoResult.unmatched.map((n, i) => (
+                                        <p key={i} className="text-xs text-muted-foreground">{n}</p>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Assign these manually or click <strong>Re-run (all)</strong> after adding more keyword rules.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="px-5 py-4 border-t shrink-0 flex flex-col sm:flex-row justify-between gap-2">
+                        <Button
+                            variant="outline" size="sm"
+                            onClick={() => { setAutoResultOpen(false); handleAutoAssign(true); }}
+                            disabled={autoAssigning}
+                        >
+                            Re-run (overwrite all)
+                        </Button>
+                        <Button onClick={() => setAutoResultOpen(false)}>Done</Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

@@ -238,6 +238,8 @@ export const pmixApi = {
         apiFetch<{ applied: number }>("/inventory/par-suggestions", { method: "POST", body: JSON.stringify({ items }) }),
     portionCalc: (uploadId: string) =>
         apiFetch<PortionCalcResult>(`/pmix/portion-calc?uploadId=${uploadId}`),
+    ingredientSummary: (uploadId: string) =>
+        apiFetch<IngredientSummaryResult>(`/pmix/ingredient-summary?uploadId=${uploadId}`),
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
@@ -766,4 +768,36 @@ export interface PortionCalcResult {
     };
     hasStandards:   boolean;
     totalStandards: number;
+}
+
+// ─── Ingredient Use Summary Types ─────────────────────────────────────────────
+export interface IngredientSummaryProteinByType {
+    proteinType: string;
+    qty:         number;
+}
+
+export interface IngredientSummaryProteinByDish {
+    category:    string;
+    dish:        string;
+    proteinType: string;
+    qty:         number;
+}
+
+export interface IngredientSummaryResult {
+    uploadId:     string;
+    periodLabel:  string | null;
+    uploadedAt:   string;
+    mainProtein: {
+        byType:     IngredientSummaryProteinByType[];
+        byDish:     IngredientSummaryProteinByDish[];
+        total:      number;
+        groupNames: string[];
+    };
+    extraProtein: {
+        byType:     IngredientSummaryProteinByType[];
+        byDish:     IngredientSummaryProteinByDish[];
+        total:      number;
+        groupNames: string[];
+    };
+    hasProteinData: boolean;
 }

@@ -25,7 +25,7 @@ import {
     ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronDown,
     TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
     ArrowRight, RotateCcw, Package, Download, Brain, LayoutList,
-    CircleCheck, CircleAlert, Info, Search, Plus,
+    CircleCheck, CircleAlert, Info, Search, Plus, Table2, Beef,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import {
     pmixApi, PmixUpload, PmixAnalytics, PmixBcgItem, BcgQuadrant,
     PmixDailySummary, PmixDailySummaryIngredient, PmixTrendPoint, ParSuggestion,
-    PortionCalcResult,
+    PortionCalcResult, IngredientSummaryResult,
 } from "@/lib/api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -84,15 +84,16 @@ const fmt    = (n: number) => n.toLocaleString("en-CA", { minimumFractionDigits:
 const fmtN   = (n: number) => n.toLocaleString();
 const fmtD   = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
 
-type Tab = "bcg" | "prep" | "qc" | "bom" | "summary" | "portion";
+type Tab = "bcg" | "prep" | "qc" | "bom" | "summary" | "portion" | "ingsum";
 
 const TABS: { key: Tab; label: string; short: string; icon: React.ReactNode; color: string }[] = [
     { key: "bcg",     label: "Menu Engineering", short: "Menu",    icon: <BarChart3 className="w-4 h-4" />,    color: "text-rose-600"    },
     { key: "prep",    label: "Kitchen Prep",      short: "Prep",    icon: <ClipboardList className="w-4 h-4" />,color: "text-orange-500"  },
     { key: "qc",      label: "Quality & Loss",    short: "Quality", icon: <PieIcon className="w-4 h-4" />,      color: "text-yellow-600"  },
     { key: "bom",     label: "BOM Linkage",       short: "BOM",     icon: <Link2 className="w-4 h-4" />,        color: "text-emerald-600" },
-    { key: "summary", label: "Daily Summary",     short: "Summary", icon: <LayoutList className="w-4 h-4" />,   color: "text-blue-600"    },
-    { key: "portion", label: "Portion Calc",      short: "Portion", icon: <Package className="w-4 h-4" />,      color: "text-violet-600"  },
+    { key: "summary", label: "Daily Summary",        short: "Summary", icon: <LayoutList className="w-4 h-4" />,   color: "text-blue-600"    },
+    { key: "portion", label: "Portion Calc",         short: "Portion", icon: <Package className="w-4 h-4" />,      color: "text-violet-600"  },
+    { key: "ingsum",  label: "Ingredient Summary",   short: "Ing. Sum",icon: <Table2 className="w-4 h-4" />,       color: "text-teal-600"    },
 ];
 
 // ─── Tooltip components ───────────────────────────────────────────────────────
@@ -315,6 +316,11 @@ export default function PmixDashboardPage() {
     const [parApplied,       setParApplied]       = useState<number | null>(null);
     const [catFilter,        setCatFilter]        = useState<string>("All");
 
+    // Ingredient Summary state
+    const [ingSum,         setIngSum]         = useState<IngredientSummaryResult | null>(null);
+    const [ingLoading,     setIngLoading]     = useState(false);
+    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra">("main");
+
     // Sync dialog state
     const [syncOpen,      setSyncOpen]      = useState(false);
     const [syncDate,      setSyncDate]      = useState(() => new Date().toISOString().slice(0, 10));
@@ -375,6 +381,60 @@ export default function PmixDashboardPage() {
                 .finally(() => setPortionLoading(false));
         }
     }, [selectedId, activeTab]);
+
+    // ── Load Ingredient Summary ──
+    useEffect(() => {
+        if (selectedId && activeTab === "ingsum") {
+            setIngLoading(true);
+            setIngSum(null);
+            pmixApi.ingredientSummary(selectedId)
+                .then(setIngSum)
+                .catch(() => {})
+                .finally(() => setIngLoading(false));
+        }
+    }, [selectedId, activeTab]);
+
+    // ── Export Ingredient Summary CSV ──
+    function handleIngSumExportCSV() {
+        if (!ingSum) return;
+        const label = ingSum.periodLabel ?? selectedId;
+        // Sheet 1: Main Protein totals
+        const mainRows: string[][] = [
+            [`Main Protein by Type — ${label}`],
+            ["Protein Type", "Total Qty", "% of Total"],
+        ];
+        for (const r of ingSum.mainProtein.byType) {
+            const pct = ingSum.mainProtein.total > 0 ? ((r.qty / ingSum.mainProtein.total) * 100).toFixed(1) : "0.0";
+            mainRows.push([r.proteinType, String(r.qty), `${pct}%`]);
+        }
+        mainRows.push(["TOTAL", String(ingSum.mainProtein.total), "100%"]);
+        mainRows.push([]);
+        mainRows.push([`Extra Add-on Totals — ${label}`]);
+        mainRows.push(["Extra Add-on", "Total Qty"]);
+        for (const r of ingSum.extraProtein.byType) {
+            mainRows.push([r.proteinType, String(r.qty)]);
+        }
+        mainRows.push([]);
+        mainRows.push([`Main Protein by Dish — ${label}`]);
+        mainRows.push(["Category", "Dish", "Protein Choice", "Qty Ordered"]);
+        for (const r of ingSum.mainProtein.byDish) {
+            mainRows.push([r.category, r.dish, r.proteinType, String(r.qty)]);
+        }
+        mainRows.push([]);
+        mainRows.push([`Extra Protein by Dish — ${label}`]);
+        mainRows.push(["Category", "Dish", "Extra Add-on", "Qty"]);
+        for (const r of ingSum.extraProtein.byDish) {
+            mainRows.push([r.category, r.dish, r.proteinType, String(r.qty)]);
+        }
+        const csv  = mainRows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `ingredient-summary-${label}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
     // ── Export Portion CSV ──
     function handlePortionExportCSV() {
@@ -1943,6 +2003,345 @@ export default function PmixDashboardPage() {
                                         </CardContent>
                                     </Card>
                                 </>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                INGREDIENT USE SUMMARY TAB
+            ══════════════════════════════════════════════════════════ */}
+            {activeTab === "ingsum" && (
+                <>
+                    {/* Header bar */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                            <h2 className="text-base font-semibold flex items-center gap-2">
+                                <Table2 className="w-4 h-4 text-teal-600" />
+                                Ingredient Use Summary
+                            </h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Protein choices extracted directly from POS modifier data
+                            </p>
+                        </div>
+                        {ingSum && (
+                            <Button size="sm" variant="outline" className="gap-1.5 rounded-xl h-8 text-xs"
+                                onClick={handleIngSumExportCSV}>
+                                <Download className="w-3.5 h-3.5" /> Export CSV
+                            </Button>
+                        )}
+                    </div>
+
+                    {ingLoading && (
+                        <div className="flex justify-center py-16">
+                            <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+
+                    {!ingLoading && ingSum && !ingSum.hasProteinData && (
+                        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+                            <CardContent className="pt-5 pb-5 px-5">
+                                <div className="flex items-start gap-3">
+                                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No protein modifier data found</p>
+                                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                                            This PMIX upload has no modifiers with "protein" in the group name. Check that your POS
+                                            modifier groups (e.g. "Choice of Protein", "Extra Protein") are named correctly.
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {!ingLoading && ingSum && ingSum.hasProteinData && (
+                        <div className="space-y-6">
+                            {/* ── KPI row ── */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <KpiCard label="Total Orders" value={fmtN(ingSum.mainProtein.total + ingSum.extraProtein.total)}
+                                    sub="main + extras" icon={Beef} />
+                                <KpiCard label="Protein Types" value={ingSum.mainProtein.byType.length}
+                                    sub="main protein choices" icon={Table2} />
+                                <KpiCard label="Extra Add-ons" value={ingSum.extraProtein.byType.length}
+                                    sub="extra modifier types" icon={Plus} />
+                                <KpiCard label="Dishes w/ Protein" value={new Set(ingSum.mainProtein.byDish.map(d => d.dish)).size}
+                                    sub="unique menu items" icon={ChefHat} />
+                            </div>
+
+                            {/* ── Toggle: Main vs Extra ── */}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setIngCatFilter("main")}
+                                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                        ingCatFilter === "main"
+                                            ? "bg-teal-600 text-white border-teal-600 shadow-sm"
+                                            : "bg-muted/30 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                    }`}
+                                >
+                                    🥩 Main Protein ({ingSum.mainProtein.byType.length} types · {fmtN(ingSum.mainProtein.total)} total)
+                                </button>
+                                <button
+                                    onClick={() => setIngCatFilter("extra")}
+                                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                        ingCatFilter === "extra"
+                                            ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                                            : "bg-muted/30 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                    }`}
+                                >
+                                    ➕ Extra Add-ons ({ingSum.extraProtein.byType.length} types · {fmtN(ingSum.extraProtein.total)} total)
+                                </button>
+                            </div>
+
+                            {ingCatFilter === "main" && (
+                                <div className="space-y-4">
+                                    {/* ── Main Protein: type totals (summary card) ── */}
+                                    <div className="grid sm:grid-cols-2 gap-4">
+                                        {/* Left: protein type totals */}
+                                        <Card>
+                                            <CardHeader className="pb-2 pt-4 px-5">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Beef className="w-4 h-4 text-teal-600" />
+                                                    Main Protein Totals
+                                                    {ingSum.mainProtein.groupNames.length > 0 && (
+                                                        <Badge variant="secondary" className="text-[10px] ml-auto font-normal">
+                                                            {ingSum.mainProtein.groupNames[0]}
+                                                        </Badge>
+                                                    )}
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="px-5 pb-4">
+                                                <div className="space-y-2">
+                                                    {ingSum.mainProtein.byType.map(row => {
+                                                        const pct = ingSum.mainProtein.total > 0
+                                                            ? Math.round((row.qty / ingSum.mainProtein.total) * 100)
+                                                            : 0;
+                                                        return (
+                                                            <div key={row.proteinType}>
+                                                                <div className="flex justify-between text-sm mb-1">
+                                                                    <span className="font-medium truncate">{row.proteinType}</span>
+                                                                    <span className="tabular-nums text-muted-foreground ml-2 shrink-0">
+                                                                        {fmtN(row.qty)} <span className="text-xs">({pct}%)</span>
+                                                                    </span>
+                                                                </div>
+                                                                <ProgressBar value={row.qty} max={ingSum.mainProtein.byType[0].qty} color="#0d9488" />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
+                                                        <span>TOTAL</span>
+                                                        <span className="tabular-nums">{fmtN(ingSum.mainProtein.total)}</span>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Right: extra add-on totals (preview) */}
+                                        <Card>
+                                            <CardHeader className="pb-2 pt-4 px-5">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Plus className="w-4 h-4 text-violet-600" />
+                                                    Extra Add-on Overview
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="px-5 pb-4">
+                                                {ingSum.extraProtein.byType.length === 0 ? (
+                                                    <p className="text-sm text-muted-foreground italic">No extra add-ons found</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {ingSum.extraProtein.byType.map(row => (
+                                                            <div key={row.proteinType} className="flex justify-between text-sm">
+                                                                <span className="font-medium truncate">{row.proteinType}</span>
+                                                                <span className="tabular-nums font-bold text-violet-600 dark:text-violet-400 shrink-0 ml-2">{fmtN(row.qty)}</span>
+                                                            </div>
+                                                        ))}
+                                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
+                                                            <span>TOTAL</span>
+                                                            <span className="tabular-nums">{fmtN(ingSum.extraProtein.total)}</span>
+                                                        </div>
+                                                        <button
+                                                            className="text-xs text-violet-600 dark:text-violet-400 underline mt-1"
+                                                            onClick={() => setIngCatFilter("extra")}
+                                                        >
+                                                            View extra detail →
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* ── Main Protein by Dish table ── */}
+                                    <Card className="overflow-hidden">
+                                        <CardHeader className="pb-2 pt-4 px-5">
+                                            <CardTitle className="text-sm flex items-center gap-2">
+                                                Main Protein by Dish
+                                                <Badge variant="secondary" className="text-[10px] ml-1">{ingSum.mainProtein.byDish.length} rows</Badge>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            {/* Desktop */}
+                                            <div className="hidden sm:block overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-muted/30">
+                                                            <TableHead className="text-xs font-semibold pl-5">Category</TableHead>
+                                                            <TableHead className="text-xs font-semibold">Dish</TableHead>
+                                                            <TableHead className="text-xs font-semibold">Protein Choice</TableHead>
+                                                            <TableHead className="text-xs font-semibold text-right pr-5">Qty Ordered</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {ingSum.mainProtein.byDish.map((row, i) => (
+                                                            <TableRow key={i} className="hover:bg-muted/20">
+                                                                <TableCell className="text-xs text-muted-foreground pl-5">{row.category || "—"}</TableCell>
+                                                                <TableCell className="text-sm font-medium">{row.dish}</TableCell>
+                                                                <TableCell>
+                                                                    <Badge variant="outline" className="text-xs">{row.proteinType}</Badge>
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-bold tabular-nums pr-5">{fmtN(row.qty)}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                            {/* Mobile */}
+                                            <div className="sm:hidden divide-y">
+                                                {ingSum.mainProtein.byDish.map((row, i) => (
+                                                    <div key={i} className="px-4 py-3 flex items-center gap-3">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium truncate">{row.dish}</p>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                {row.category && <span className="text-[10px] text-muted-foreground">{row.category}</span>}
+                                                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0">{row.proteinType}</Badge>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-base font-bold tabular-nums shrink-0">{fmtN(row.qty)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
+                            {ingCatFilter === "extra" && (
+                                <div className="space-y-4">
+                                    {/* ── Extra totals card ── */}
+                                    <div className="grid sm:grid-cols-2 gap-4">
+                                        <Card>
+                                            <CardHeader className="pb-2 pt-4 px-5">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Plus className="w-4 h-4 text-violet-600" />
+                                                    Extra Add-on Totals
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="px-5 pb-4">
+                                                {ingSum.extraProtein.byType.length === 0 ? (
+                                                    <p className="text-sm text-muted-foreground italic">No extra add-ons found in this upload.</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {ingSum.extraProtein.byType.map(row => {
+                                                            const pct = ingSum.extraProtein.total > 0
+                                                                ? Math.round((row.qty / ingSum.extraProtein.total) * 100)
+                                                                : 0;
+                                                            return (
+                                                                <div key={row.proteinType}>
+                                                                    <div className="flex justify-between text-sm mb-1">
+                                                                        <span className="font-medium truncate">{row.proteinType}</span>
+                                                                        <span className="tabular-nums text-muted-foreground ml-2 shrink-0">
+                                                                            {fmtN(row.qty)} <span className="text-xs">({pct}%)</span>
+                                                                        </span>
+                                                                    </div>
+                                                                    <ProgressBar value={row.qty} max={ingSum.extraProtein.byType[0].qty} color="#7c3aed" />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
+                                                            <span>TOTAL</span>
+                                                            <span className="tabular-nums">{fmtN(ingSum.extraProtein.total)}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Right: hint */}
+                                        <Card className="bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">
+                                            <CardContent className="pt-5 pb-5 px-5">
+                                                <p className="text-xs text-violet-700 dark:text-violet-300 font-medium mb-2 flex items-center gap-1.5">
+                                                    <Info className="w-3.5 h-3.5" /> How extras are detected
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Modifiers are classified as "Extra" when the modifier group name contains "extra" (case-insensitive)
+                                                    or the modifier name begins with "Extra ".
+                                                </p>
+                                                {ingSum.extraProtein.groupNames.length > 0 && (
+                                                    <div className="mt-3 flex flex-wrap gap-1">
+                                                        {ingSum.extraProtein.groupNames.map(g => (
+                                                            <Badge key={g} variant="outline" className="text-[10px]">{g}</Badge>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* ── Extra by Dish table ── */}
+                                    {ingSum.extraProtein.byDish.length > 0 && (
+                                        <Card className="overflow-hidden">
+                                            <CardHeader className="pb-2 pt-4 px-5">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    Extra Add-on by Dish
+                                                    <Badge variant="secondary" className="text-[10px] ml-1">{ingSum.extraProtein.byDish.length} rows</Badge>
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                                {/* Desktop */}
+                                                <div className="hidden sm:block overflow-x-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="bg-muted/30">
+                                                                <TableHead className="text-xs font-semibold pl-5">Category</TableHead>
+                                                                <TableHead className="text-xs font-semibold">Dish</TableHead>
+                                                                <TableHead className="text-xs font-semibold">Extra Add-on</TableHead>
+                                                                <TableHead className="text-xs font-semibold text-right pr-5">Qty</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {ingSum.extraProtein.byDish.map((row, i) => (
+                                                                <TableRow key={i} className="hover:bg-muted/20">
+                                                                    <TableCell className="text-xs text-muted-foreground pl-5">{row.category || "—"}</TableCell>
+                                                                    <TableCell className="text-sm font-medium">{row.dish}</TableCell>
+                                                                    <TableCell>
+                                                                        <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 dark:text-violet-300">{row.proteinType}</Badge>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-bold tabular-nums pr-5">{fmtN(row.qty)}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                                {/* Mobile */}
+                                                <div className="sm:hidden divide-y">
+                                                    {ingSum.extraProtein.byDish.map((row, i) => (
+                                                        <div key={i} className="px-4 py-3 flex items-center gap-3">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium truncate">{row.dish}</p>
+                                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                                    {row.category && <span className="text-[10px] text-muted-foreground">{row.category}</span>}
+                                                                    <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0 border-violet-300 text-violet-700 dark:text-violet-300">{row.proteinType}</Badge>
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-base font-bold tabular-nums shrink-0">{fmtN(row.qty)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}

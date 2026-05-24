@@ -804,9 +804,22 @@ export default function IngredientsPage() {
                                 </div>
                             </div>
 
-                            {categories.length > 0 && (
-                                <div className="space-y-1.5">
-                                    <Label>Category <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                            <div className="space-y-1.5">
+                                <Label>Category <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                                {categories.length === 0 ? (
+                                    <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                                        No categories yet —&nbsp;
+                                        <a
+                                            href="/settings/categories"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-primary underline underline-offset-2 hover:opacity-80"
+                                        >
+                                            create categories
+                                        </a>
+                                        &nbsp;first.
+                                    </div>
+                                ) : (
                                     <Select
                                         value={form.categoryId ?? "none"}
                                         onValueChange={v => setForm(f => ({ ...f, categoryId: v === "none" ? null : v }))}>
@@ -816,8 +829,8 @@ export default function IngredientsPage() {
                                             {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">

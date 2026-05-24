@@ -192,6 +192,22 @@ export const auditApi = {
     },
 };
 
+// ─── Portion Standards ────────────────────────────────────────────────────────
+export const portionStandardsApi = {
+    list: () => apiFetch<PortionStandard[]>("/portion-standards"),
+    create: (data: {
+        ingredientId: string;
+        itemName:     string;
+        type?:        string;
+        portionSize:  number;
+        portionUnit:  string;
+        notes?:       string;
+    }) => apiFetch<PortionStandard>("/portion-standards", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<Omit<PortionStandard, "id" | "ingredient" | "createdAt" | "updatedAt">>) =>
+        apiFetch<PortionStandard>(`/portion-standards/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/portion-standards/${id}`, { method: "DELETE" }),
+};
+
 // ─── PMIX ─────────────────────────────────────────────────────────────────────
 export const pmixApi = {
     listUploads: () => apiFetch<PmixUpload[]>("/pmix/uploads"),
@@ -220,6 +236,8 @@ export const pmixApi = {
         apiFetch<ParSuggestionsResult>(`/inventory/par-suggestions?days=${days}`),
     applyParSuggestions: (items: { inventoryItemId: string; parMin: number; parMax: number; reorderPoint: number }[]) =>
         apiFetch<{ applied: number }>("/inventory/par-suggestions", { method: "POST", body: JSON.stringify({ items }) }),
+    portionCalc: (uploadId: string) =>
+        apiFetch<PortionCalcResult>(`/pmix/portion-calc?uploadId=${uploadId}`),
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
@@ -686,4 +704,66 @@ export interface ParSuggestionsResult {
     suggestions:  ParSuggestion[];
     totalTracked: number;
     withHistory:  number;
+}
+
+// ─── Portion Standards Types ──────────────────────────────────────────────────
+export interface PortionStandard {
+    id:           string;
+    ingredientId: string;
+    ingredient?:  {
+        id: string; name: string; sku?: string | null; recipeUnit: string; groupId: string;
+        categoryId?: string | null;
+        category?: { id: string; name: string; sortOrder: number } | null;
+    };
+    itemName:     string;
+    type:         "base" | "modifier";
+    portionSize:  number;
+    portionUnit:  string;
+    notes?:       string | null;
+    createdAt?:   string;
+    updatedAt?:   string;
+}
+
+export interface PortionCalcIngredient {
+    ingredientId:      string;
+    ingredientName:    string;
+    sku:               string | null;
+    unit:              string;
+    groupId:           string;
+    categoryId:        string | null;
+    categoryName:      string;
+    categorySortOrder: number;
+    currentStock:      number | null;
+    parMin:            number | null;
+    totalQty:          number;
+    contributions: {
+        source:      string;
+        sourceType:  "base" | "modifier";
+        qtySold:     number;
+        portionSize: number;
+        portionUnit: string;
+        totalQty:    number;
+    }[];
+}
+
+export interface PortionCalcCategory {
+    categoryId:   string | null;
+    categoryName: string;
+    sortOrder:    number;
+    ingredients:  PortionCalcIngredient[];
+}
+
+export interface PortionCalcResult {
+    uploadId:       string;
+    periodLabel:    string | null;
+    uploadedAt:     string;
+    categories:     PortionCalcCategory[];
+    ingredients:    PortionCalcIngredient[];
+    coverage: {
+        matched:    number;
+        unmatched:  string[];
+        totalItems: number;
+    };
+    hasStandards:   boolean;
+    totalStandards: number;
 }

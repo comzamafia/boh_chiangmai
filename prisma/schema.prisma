@@ -69,6 +69,7 @@ model Ingredient {
   inventoryItem       InventoryItem?
   inventoryTxns       InventoryTransaction[]
   ingredientSuppliers IngredientSupplier[]
+  portionStandards    PortionStandard[]
 
   @@map("ingredients")
 }
@@ -288,6 +289,25 @@ model IngredientSupplier {
 
   @@unique([ingredientId, supplierId])
   @@map("ingredient_suppliers")
+}
+
+// ─── Portion Standards (BOM-free portion calculator) ─────────────────────────
+
+model PortionStandard {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  itemName     String     // POS menu item name (type=base) or modifier name (type=modifier)
+  type         String     @default("base") // "base" | "modifier"
+  portionSize  Decimal    @db.Decimal(10, 4) // amount of ingredient per serving/modifier
+  portionUnit  String     // "oz", "g", "kg", "ml", "L", "piece", "portion"
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([ingredientId])
+  @@index([itemName])
+  @@map("portion_standards")
 }
 
 // ─── PMIX: Product-Mix Upload & Analytics ────────────────────────────────────

@@ -25,7 +25,7 @@ import {
     ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronDown,
     TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
     ArrowRight, RotateCcw, Package, Download, Brain, LayoutList,
-    CircleCheck, CircleAlert, Info,
+    CircleCheck, CircleAlert, Info, Search, Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import {
     pmixApi, PmixUpload, PmixAnalytics, PmixBcgItem, BcgQuadrant,
     PmixDailySummary, PmixDailySummaryIngredient, PmixTrendPoint, ParSuggestion,
+    PortionCalcResult,
 } from "@/lib/api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -83,7 +84,7 @@ const fmt    = (n: number) => n.toLocaleString("en-CA", { minimumFractionDigits:
 const fmtN   = (n: number) => n.toLocaleString();
 const fmtD   = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
 
-type Tab = "bcg" | "prep" | "qc" | "bom" | "summary";
+type Tab = "bcg" | "prep" | "qc" | "bom" | "summary" | "portion";
 
 const TABS: { key: Tab; label: string; short: string; icon: React.ReactNode; color: string }[] = [
     { key: "bcg",     label: "Menu Engineering", short: "Menu",    icon: <BarChart3 className="w-4 h-4" />,    color: "text-rose-600"    },
@@ -91,6 +92,7 @@ const TABS: { key: Tab; label: string; short: string; icon: React.ReactNode; col
     { key: "qc",      label: "Quality & Loss",    short: "Quality", icon: <PieIcon className="w-4 h-4" />,      color: "text-yellow-600"  },
     { key: "bom",     label: "BOM Linkage",       short: "BOM",     icon: <Link2 className="w-4 h-4" />,        color: "text-emerald-600" },
     { key: "summary", label: "Daily Summary",     short: "Summary", icon: <LayoutList className="w-4 h-4" />,   color: "text-blue-600"    },
+    { key: "portion", label: "Portion Calc",      short: "Portion", icon: <Package className="w-4 h-4" />,      color: "text-violet-600"  },
 ];
 
 // ─── Tooltip components ───────────────────────────────────────────────────────
@@ -292,6 +294,14 @@ export default function PmixDashboardPage() {
     const [mounted,       setMounted]       = useState(false);
     const [showChart,     setShowChart]     = useState(false);
 
+    // Portion Calc state
+    const [portionCalc,        setPortionCalc]        = useState<PortionCalcResult | null>(null);
+    const [portionLoading,     setPortionLoading]     = useState(false);
+    const [portionExpanded,    setPortionExpanded]    = useState<Set<string>>(new Set());
+    const [portionSearch,      setPortionSearch]      = useState("");
+    const [portionCatFilter,   setPortionCatFilter]   = useState<string>("All");
+    const [portionShowUnmatched, setPortionShowUnmatched] = useState(false);
+
     // Daily Summary state
     const [summary,          setSummary]          = useState<PmixDailySummary | null>(null);
     const [summaryLoading,   setSummaryLoading]   = useState(false);
@@ -352,6 +362,44 @@ export default function PmixDashboardPage() {
     }, []);
 
     useEffect(() => { if (selectedId) loadSyncStatus(selectedId); }, [selectedId, loadSyncStatus]);
+
+    // ── Load portion calc ──
+    useEffect(() => {
+        if (selectedId && activeTab === "portion") {
+            setPortionLoading(true);
+            setPortionCalc(null);
+            setPortionExpanded(new Set());
+            pmixApi.portionCalc(selectedId)
+                .then(setPortionCalc)
+                .catch(() => {})
+                .finally(() => setPortionLoading(false));
+        }
+    }, [selectedId, activeTab]);
+
+    // ── Export Portion CSV ──
+    function handlePortionExportCSV() {
+        if (!portionCalc) return;
+        const rows: string[][] = [
+            ["Category", "Ingredient", "Unit", "Total Qty", "Contributions"],
+        ];
+        for (const ing of portionCalc.ingredients) {
+            rows.push([
+                ing.categoryName,
+                ing.ingredientName,
+                ing.unit,
+                String(ing.totalQty),
+                ing.contributions.map(c => `${c.source}(${c.qtySold}×${c.portionSize}=${c.totalQty})`).join("; "),
+            ]);
+        }
+        const csv  = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `portion-calc-${portionCalc.periodLabel ?? selectedId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
     // ── Load daily summary ──
     useEffect(() => {
@@ -1496,6 +1544,296 @@ export default function PmixDashboardPage() {
                                                 )}
                                             </CardContent>
                                         </Card>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════
+                        PORTION CALC TAB
+                    ══════════════════════════════════════════════════════ */}
+                    {activeTab === "portion" && (
+                        <div className="space-y-5">
+
+                            {/* Header actions */}
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-sm text-muted-foreground">
+                                    Ingredient usage calculated from standard portions — no BOM linkage required
+                                </p>
+                                <div className="flex gap-2 shrink-0">
+                                    <Button variant="outline" size="sm" className="h-8 rounded-lg gap-1.5 text-xs"
+                                        onClick={handlePortionExportCSV}
+                                        disabled={!portionCalc || portionCalc.ingredients.length === 0}
+                                    >
+                                        <Download className="w-3.5 h-3.5" /> Export CSV
+                                    </Button>
+                                    <Button variant="outline" size="sm" className="h-8 rounded-lg gap-1.5 text-xs"
+                                        onClick={() => window.open("/settings/portion-standards", "_blank")}
+                                    >
+                                        <Package className="w-3.5 h-3.5" /> Manage Standards
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {portionLoading && <DashboardSkeleton />}
+
+                            {!portionLoading && portionCalc && (() => {
+                                if (!portionCalc.hasStandards) {
+                                    return (
+                                        <Card>
+                                            <CardContent className="flex flex-col items-center justify-center py-14 gap-4 text-center">
+                                                <div className="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30">
+                                                    <Package className="w-8 h-8 text-violet-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold">No portion standards configured</p>
+                                                    <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                                                        Set up standard portions in Settings to calculate ingredient usage without BOM linkage.
+                                                    </p>
+                                                </div>
+                                                <Button className="gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white"
+                                                    onClick={() => window.open("/settings/portion-standards", "_blank")}>
+                                                    <Plus className="w-4 h-4" /> Set Up Portion Standards
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                }
+
+                                // Filter ingredients
+                                const allIngs = portionCalc.ingredients.filter(ing => {
+                                    const q = portionSearch.toLowerCase();
+                                    const matchSearch = !q || ing.ingredientName.toLowerCase().includes(q) ||
+                                        ing.categoryName.toLowerCase().includes(q);
+                                    const matchCat = portionCatFilter === "All" || ing.categoryName === portionCatFilter;
+                                    return matchSearch && matchCat;
+                                });
+
+                                const catNames = [...new Set(portionCalc.ingredients.map(i => i.categoryName))];
+
+                                return (
+                                    <>
+                                        {/* KPI row */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <KpiCard label="Ingredients"   value={portionCalc.ingredients.length}         icon={Package}       />
+                                            <KpiCard label="Items Matched" value={portionCalc.coverage.matched}            icon={CheckCircle2}  />
+                                            <KpiCard label="Standards"     value={portionCalc.totalStandards}              icon={Layers}        />
+                                            <KpiCard label="No Standard"   value={portionCalc.coverage.unmatched.length}   icon={AlertTriangle}
+                                                valueClass={portionCalc.coverage.unmatched.length > 0 ? "text-amber-600" : "text-muted-foreground"}
+                                                sub={portionCalc.coverage.unmatched.length > 0 ? "items unmatched" : "all matched"}
+                                            />
+                                        </div>
+
+                                        {/* Search + filter */}
+                                        <div className="flex gap-2 flex-col sm:flex-row">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+                                                <input
+                                                    type="text"
+                                                    value={portionSearch}
+                                                    onChange={e => setPortionSearch(e.target.value)}
+                                                    placeholder="Search ingredient or category…"
+                                                    className="w-full pl-9 pr-3 h-10 rounded-xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                />
+                                            </div>
+                                            <div className="flex gap-1.5 flex-wrap">
+                                                <button onClick={() => setPortionCatFilter("All")}
+                                                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all whitespace-nowrap
+                                                        ${portionCatFilter === "All" ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:bg-muted/50"}`}
+                                                >All</button>
+                                                {catNames.map(cat => (
+                                                    <button key={cat} onClick={() => setPortionCatFilter(portionCatFilter === cat ? "All" : cat)}
+                                                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all whitespace-nowrap
+                                                            ${portionCatFilter === cat ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted/50"}`}
+                                                    >{cat}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Main ingredient table */}
+                                        <Card className="overflow-hidden">
+                                            <CardHeader className="px-5 py-3 border-b bg-muted/20 flex flex-row items-center justify-between gap-2">
+                                                <CardTitle className="text-sm font-semibold">
+                                                    {allIngs.length} ingredient{allIngs.length !== 1 ? "s" : ""}
+                                                    {portionCatFilter !== "All" ? ` · ${portionCatFilter}` : ""}
+                                                </CardTitle>
+                                                <p className="text-xs text-muted-foreground">Click ▶ to drill down by menu item</p>
+                                            </CardHeader>
+
+                                            {/* Desktop */}
+                                            <div className="hidden md:block">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b bg-muted/10">
+                                                            <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-8"></th>
+                                                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ingredient</th>
+                                                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Category</th>
+                                                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Used</th>
+                                                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Top Source</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y">
+                                                        {allIngs.map(ing => {
+                                                            const isExp = portionExpanded.has(ing.ingredientId);
+                                                            const maxQty = allIngs[0]?.totalQty ?? 1;
+                                                            const pct = maxQty > 0 ? (ing.totalQty / maxQty) * 100 : 0;
+                                                            return (
+                                                                <>
+                                                                    <tr key={ing.ingredientId}
+                                                                        className="hover:bg-muted/20 transition-colors cursor-pointer"
+                                                                        onClick={() => setPortionExpanded(prev => {
+                                                                            const next = new Set(prev);
+                                                                            if (next.has(ing.ingredientId)) next.delete(ing.ingredientId);
+                                                                            else next.add(ing.ingredientId);
+                                                                            return next;
+                                                                        })}
+                                                                    >
+                                                                        <td className="pl-5 py-3">
+                                                                            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExp ? "rotate-90" : ""}`} />
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <div className="font-medium">{ing.ingredientName}</div>
+                                                                            {ing.sku && <div className="text-[10px] text-muted-foreground font-mono">{ing.sku}</div>}
+                                                                            <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden w-28">
+                                                                                <div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <span className="text-xs text-muted-foreground">{ing.categoryName}</span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            <span className="text-lg font-bold tabular-nums">{ing.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                                                            <span className="text-xs text-muted-foreground ml-1">{ing.unit}</span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-muted-foreground max-w-[200px]">
+                                                                            {ing.contributions[0] ? (
+                                                                                <div className="truncate">
+                                                                                    <span className="text-foreground font-medium">{ing.contributions[0].source}</span>
+                                                                                    <span className="text-xs ml-1">
+                                                                                        ({ing.contributions[0].qtySold} × {ing.contributions[0].portionSize} {ing.contributions[0].portionUnit})
+                                                                                    </span>
+                                                                                </div>
+                                                                            ) : "—"}
+                                                                        </td>
+                                                                    </tr>
+                                                                    {/* Drill-down */}
+                                                                    {isExp && (
+                                                                        <tr key={`${ing.ingredientId}-drill`}>
+                                                                            <td colSpan={5} className="bg-violet-50/30 dark:bg-violet-950/10 px-5 pb-3 pt-1">
+                                                                                <div className="pl-4 border-l-2 border-violet-400/40 space-y-2">
+                                                                                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 gap-y-1.5 text-xs">
+                                                                                        <span className="text-muted-foreground font-semibold uppercase tracking-wide">Source</span>
+                                                                                        <span className="text-muted-foreground font-semibold uppercase tracking-wide text-right">Type</span>
+                                                                                        <span className="text-muted-foreground font-semibold uppercase tracking-wide text-right">Sold</span>
+                                                                                        <span className="text-muted-foreground font-semibold uppercase tracking-wide text-right">× Portion</span>
+                                                                                        <span className="text-muted-foreground font-semibold uppercase tracking-wide text-right">= Total</span>
+                                                                                        {ing.contributions.map(c => (
+                                                                                            <>
+                                                                                                <span key={`n-${c.source}`} className="font-medium truncate pr-2">{c.source}</span>
+                                                                                                <span key={`t-${c.source}`} className={`text-right rounded-full px-1.5 py-0.5 text-[10px] font-medium
+                                                                                                    ${c.sourceType === "modifier"
+                                                                                                        ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                                                                                                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                                                                                    }`}>{c.sourceType === "modifier" ? "modifier" : "base"}</span>
+                                                                                                <span key={`q-${c.source}`} className="tabular-nums text-right">{c.qtySold.toLocaleString()}</span>
+                                                                                                <span key={`p-${c.source}`} className="tabular-nums text-right">{c.portionSize} {c.portionUnit}</span>
+                                                                                                <span key={`tot-${c.source}`} className="tabular-nums text-right font-semibold text-violet-700 dark:text-violet-400">
+                                                                                                    {c.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {c.portionUnit}
+                                                                                                </span>
+                                                                                            </>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Mobile */}
+                                            <div className="md:hidden divide-y">
+                                                {allIngs.map(ing => {
+                                                    const isExp = portionExpanded.has(ing.ingredientId);
+                                                    return (
+                                                        <div key={ing.ingredientId} className="px-4 py-3">
+                                                            <button className="w-full flex items-start gap-3 text-left"
+                                                                onClick={() => setPortionExpanded(prev => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(ing.ingredientId)) next.delete(ing.ingredientId);
+                                                                    else next.add(ing.ingredientId);
+                                                                    return next;
+                                                                })}
+                                                            >
+                                                                <ChevronRight className={`w-4 h-4 mt-0.5 text-muted-foreground transition-transform shrink-0 ${isExp ? "rotate-90" : ""}`} />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-start justify-between gap-2">
+                                                                        <div>
+                                                                            <p className="text-sm font-medium">{ing.ingredientName}</p>
+                                                                            <p className="text-xs text-muted-foreground">{ing.categoryName}</p>
+                                                                        </div>
+                                                                        <div className="text-right shrink-0">
+                                                                            <p className="text-base font-bold tabular-nums">{ing.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                                                                            <p className="text-xs text-muted-foreground">{ing.unit}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                            {isExp && (
+                                                                <div className="mt-2 pl-7 space-y-1.5">
+                                                                    {ing.contributions.map(c => (
+                                                                        <div key={c.source} className="flex items-center justify-between text-xs gap-2">
+                                                                            <span className="text-muted-foreground truncate flex-1">{c.source}</span>
+                                                                            <span className="text-muted-foreground tabular-nums shrink-0">{c.qtySold} × {c.portionSize} {c.portionUnit}</span>
+                                                                            <span className="font-semibold tabular-nums text-violet-700 dark:text-violet-400 shrink-0 w-20 text-right">
+                                                                                = {c.totalQty.toFixed(2)} {c.portionUnit}
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </Card>
+
+                                        {/* Unmatched items */}
+                                        {portionCalc.coverage.unmatched.length > 0 && (
+                                            <Card className="overflow-hidden border-amber-200 dark:border-amber-800">
+                                                <CardHeader className="px-5 py-3 border-b bg-amber-50/50 dark:bg-amber-950/20">
+                                                    <button
+                                                        className="flex items-center gap-2 w-full text-left"
+                                                        onClick={() => setPortionShowUnmatched(v => !v)}
+                                                    >
+                                                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                                                        <CardTitle className="text-sm font-semibold flex-1">
+                                                            {portionCalc.coverage.unmatched.length} items with no portion standard
+                                                        </CardTitle>
+                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${portionShowUnmatched ? "rotate-180" : ""}`} />
+                                                    </button>
+                                                    <p className="text-xs text-muted-foreground mt-0.5 pl-6">
+                                                        These PMIX items were not matched to any portion standard — add standards to include them.
+                                                    </p>
+                                                </CardHeader>
+                                                {portionShowUnmatched && (
+                                                    <CardContent className="px-5 pt-3 pb-4">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                                            {portionCalc.coverage.unmatched.map(name => (
+                                                                <div key={name} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                                                                    {name}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </CardContent>
+                                                )}
+                                            </Card>
+                                        )}
                                     </>
                                 );
                             })()}

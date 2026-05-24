@@ -32,6 +32,7 @@ export const ALL_SLUGS = [
     "recipes-manage-categories",
     "settings-storage-areas",
     "settings-ingredient-categories",
+    "settings-portion-standards",
     "pmix-dashboard",
 ] as const;
 
@@ -44,7 +45,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
         "ingredients", "import-ingredients", "suppliers", "import-suppliers", "inventory",
         "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production", "admin-audit",
-        "recipes-manage-categories", "pmix-dashboard",
+        "recipes-manage-categories", "settings-portion-standards", "pmix-dashboard",
     ],
     chef: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
@@ -99,6 +100,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "recipes-manage-categories": "/recipes",   // same page — controls in-page UI only
     "settings-storage-areas": "/settings/storage-areas",
     "settings-ingredient-categories": "/settings/categories",
+    "settings-portion-standards":     "/settings/portion-standards",
     "pmix-dashboard": "/analysis/pmix",
 };
 

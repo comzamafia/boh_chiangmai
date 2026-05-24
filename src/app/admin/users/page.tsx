@@ -63,6 +63,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "recipes-manage-categories": "Manage Recipe Categories",
     "settings-storage-areas": "Settings: Storage Areas",
     "settings-ingredient-categories": "Settings: Ingredient Categories",
+    "settings-portion-standards":     "Settings: Portion Standards",
     "pmix-dashboard": "PMIX Analytics Dashboard",
 };
 

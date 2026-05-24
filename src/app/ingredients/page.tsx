@@ -550,135 +550,146 @@ export default function IngredientsPage() {
                 })}
             </div>
 
-            {/* ─── Desktop table ─────────────────────────────────────────────── */}
-            <div className="hidden sm:block border rounded-lg overflow-x-auto">
+            {/* ─── Desktop table — 6 columns, no horizontal scroll ──────────── */}
+            <div className="hidden sm:block border rounded-lg overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-14 hidden sm:table-cell">Image</TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="hidden xl:table-cell text-xs font-mono">SKU</TableHead>
-                            <TableHead className="hidden sm:table-cell">Supplier</TableHead>
-                            <TableHead className="hidden md:table-cell">Category</TableHead>
-                            <TableHead className="hidden md:table-cell">Group</TableHead>
-                            <TableHead>Purchase Price</TableHead>
-                            <TableHead className="hidden lg:table-cell">
+                            {/* 1 – thumbnail */}
+                            <TableHead className="w-12 pl-3 pr-0" />
+                            {/* 2 – name block (name + category + supplier + group) */}
+                            <TableHead>Ingredient</TableHead>
+                            {/* 3 – purchase price + conversion */}
+                            <TableHead className="w-40">
                                 <span className="flex items-center gap-1">
-                                    Unit Conversion
-                                    <span title="How many recipe units are in 1 purchase unit" className="cursor-help">
+                                    Purchase
+                                    <span title="Price per purchase unit. Conversion rate shown below." className="cursor-help">
                                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
                                 </span>
                             </TableHead>
-                            <TableHead className="hidden md:table-cell">Yield %</TableHead>
-                            <TableHead>
+                            {/* 4 – effective cost */}
+                            <TableHead className="w-36">
                                 <span className="flex items-center gap-1">
                                     Eff. Cost
-                                    <span title="Cost per usable recipe unit after yield loss. Formula: (Purchase Price ÷ Conversion Rate) ÷ (Yield% ÷ 100)" className="cursor-help">
+                                    <span title="Cost per usable recipe unit: (Price ÷ Conversion Rate) ÷ Yield%" className="cursor-help">
                                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
                                 </span>
                             </TableHead>
-                            <TableHead className="hidden md:table-cell">
+                            {/* 5 – stock + value combined */}
+                            <TableHead className="w-36">
                                 <span className="flex items-center gap-1">
-                                    In Stock
-                                    <span title="Current stock level (recipe units). Red = below minimum par level." className="cursor-help">
+                                    Stock
+                                    <span title="Current stock level and total cost value." className="cursor-help">
                                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                                     </span>
                                 </span>
                             </TableHead>
-                            <TableHead className="hidden md:table-cell">
-                                <span className="flex items-center gap-1">
-                                    Stock Value
-                                    <span title="Total cost value of current stock = In Stock × (Purchase Price ÷ Conversion Rate)" className="cursor-help">
-                                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                                    </span>
-                                </span>
-                            </TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            {/* 6 – actions */}
+                            <TableHead className="w-20 text-right pr-3">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {paged.map(item => {
-                            const rawCostPerRecipeUnit = Number(item.purchasePrice) / Number(item.conversionRate);
-                            const effCost = ingEffCost(item);
-                            const hasYieldLoss = Number(item.yieldPercent) < 100;
+                            const effCost        = ingEffCost(item);
+                            const hasYieldLoss   = Number(item.yieldPercent) < 100;
+                            const supplierName   = item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—";
+                            const rawCostPerRU   = Number(item.purchasePrice) / Number(item.conversionRate);
+
                             return (
-                                <TableRow key={item.id}>
-                                    <TableCell className="hidden sm:table-cell">
+                                <TableRow key={item.id} className="align-top">
+
+                                    {/* 1 ─ Thumbnail */}
+                                    <TableCell className="pl-3 pr-0 pt-3 w-12">
                                         {item.imageUrl ? (
                                             <img src={item.imageUrl} alt={item.name}
-                                                className="h-10 w-10 rounded-md object-cover border" />
+                                                className="h-9 w-9 rounded-md object-cover border shrink-0" />
                                         ) : (
-                                            <div className="h-10 w-10 rounded-md border bg-muted flex items-center justify-center">
-                                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                                            <div className="h-9 w-9 rounded-md border bg-muted flex items-center justify-center shrink-0">
+                                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
                                             </div>
                                         )}
                                     </TableCell>
-                                    <TableCell className="font-medium">
-                                        {item.name}
-                                        {item.supplier?.name === "Owner Sauce" && (
-                                            <Badge variant="secondary" className="ml-2 text-[10px]">House-made</Badge>
-                                        )}
-                                        {/* Supplier shown inline on mobile */}
-                                        <p className="sm:hidden text-xs text-muted-foreground mt-0.5">
-                                            {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
+
+                                    {/* 2 ─ Ingredient info block */}
+                                    <TableCell className="py-2.5">
+                                        <p className="font-semibold text-sm leading-tight">
+                                            {item.name}
+                                            {supplierName === "Owner Sauce" && (
+                                                <Badge variant="secondary" className="ml-1.5 text-[10px]">House-made</Badge>
+                                            )}
+                                        </p>
+                                        {/* Category + Group badges */}
+                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                            {item.category && (
+                                                <Badge variant="secondary" className="text-[10px] px-1.5 h-4 font-normal">
+                                                    {item.category.name}
+                                                </Badge>
+                                            )}
+                                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 font-normal">
+                                                {item.groupId}
+                                            </Badge>
+                                        </div>
+                                        {/* Supplier + SKU */}
+                                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                            {supplierName}
+                                            {item.sku && (
+                                                <span className="ml-1.5 font-mono opacity-60">{item.sku}</span>
+                                            )}
                                         </p>
                                     </TableCell>
-                                    <TableCell className="hidden xl:table-cell text-xs font-mono text-muted-foreground">
-                                        {item.sku ?? <span className="opacity-40">—</span>}
+
+                                    {/* 3 ─ Purchase price + conversion */}
+                                    <TableCell className="py-2.5 tabular-nums">
+                                        <p className="text-sm font-medium">
+                                            {format(Number(item.purchasePrice))}
+                                            <span className="text-muted-foreground font-normal text-xs ml-1">/ {item.purchaseUnit}</span>
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            1 {item.purchaseUnit} = {Number(item.conversionRate)} {item.recipeUnit}
+                                        </p>
+                                        {hasYieldLoss && (
+                                            <p className="text-[10px] text-yellow-600 font-medium mt-0.5">
+                                                yield {Number(item.yieldPercent)}%
+                                            </p>
+                                        )}
                                     </TableCell>
-                                    <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                                        {item.supplier?.name ?? suppliers.find(s => s.id === item.supplierId)?.name ?? "—"}
-                                    </TableCell>
-                                    <TableCell className="hidden md:table-cell text-sm">
-                                        {item.category
-                                            ? <Badge variant="secondary">{item.category.name}</Badge>
-                                            : <span className="text-muted-foreground text-xs">—</span>}
-                                    </TableCell>
-                                    <TableCell className="hidden md:table-cell">
-                                        <Badge variant="outline">{item.groupId}</Badge>
-                                    </TableCell>
-                                    <TableCell className="tabular-nums text-sm">
-                                        {format(Number(item.purchasePrice))} / {item.purchaseUnit}
-                                    </TableCell>
-                                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground tabular-nums">
-                                        1 {item.purchaseUnit} = {Number(item.conversionRate)} {item.recipeUnit}
-                                    </TableCell>
-                                    <TableCell className="hidden md:table-cell">
-                                        <span className={Number(item.yieldPercent) < 90 ? "text-yellow-600 font-semibold" : ""}>
-                                            {Number(item.yieldPercent)}%
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
+
+                                    {/* 4 ─ Effective cost */}
+                                    <TableCell className="py-2.5 tabular-nums">
                                         <div className="cursor-help" title={
-                                            `1 ${item.purchaseUnit} @ ${format(Number(item.purchasePrice))} = ${Number(item.conversionRate)} ${item.recipeUnit} → raw ${format(rawCostPerRecipeUnit, 4)}/${item.recipeUnit}` +
-                                            (hasYieldLoss ? ` ÷ ${Number(item.yieldPercent)}% yield → usable ${format(effCost, 4)}/${item.recipeUnit}` : "")
+                                            `${format(Number(item.purchasePrice))} ÷ ${Number(item.conversionRate)} = ${format(rawCostPerRU, 4)}/${item.recipeUnit}` +
+                                            (hasYieldLoss ? ` ÷ ${Number(item.yieldPercent)}% = ${format(effCost, 4)}/${item.recipeUnit}` : "")
                                         }>
-                                            <span className="font-semibold text-primary tabular-nums">
+                                            <p className="font-semibold text-primary text-sm">
                                                 {format(effCost, 4)}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground ml-1">/ {item.recipeUnit}</span>
+                                                <span className="text-xs font-normal text-muted-foreground ml-1">/ {item.recipeUnit}</span>
+                                            </p>
                                             {hasYieldLoss && (
-                                                <span className="ml-1 text-[10px] text-yellow-600 font-medium">
-                                                    (yield adj.)
-                                                </span>
+                                                <p className="text-[10px] text-yellow-600 mt-0.5">yield adj.</p>
                                             )}
                                         </div>
                                     </TableCell>
-                                    {/* ── In Stock ── */}
-                                    <TableCell className="hidden md:table-cell tabular-nums text-sm">
+
+                                    {/* 5 ─ Stock + value */}
+                                    <TableCell className="py-2.5 tabular-nums">
                                         {item.inventoryItem != null ? (() => {
-                                            const stock = Number(item.inventoryItem!.currentStock);
+                                            const stock  = Number(item.inventoryItem!.currentStock);
                                             const parMin = Number(item.inventoryItem!.parMin);
-                                            const isLow = stock < parMin;
+                                            const val    = ingStockValue(item);
+                                            const isLow  = stock < parMin;
                                             return (
-                                                <div className="space-y-0.5">
-                                                    <span className={`font-medium ${isLow ? "text-red-600" : "text-foreground"}`}>
-                                                        {stock % 1 === 0 ? stock.toLocaleString() : stock.toFixed(2)} {item.recipeUnit}
-                                                    </span>
+                                                <div>
+                                                    <p className={`text-sm font-medium ${isLow ? "text-red-600" : ""}`}>
+                                                        {stock % 1 === 0 ? stock.toLocaleString() : stock.toFixed(2)}
+                                                        <span className="text-xs font-normal text-muted-foreground ml-1">{item.recipeUnit}</span>
+                                                    </p>
+                                                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">
+                                                        {format(val)}
+                                                    </p>
                                                     {isLow && (
-                                                        <p className="text-[10px] text-red-500 font-medium">⚠ Below par ({parMin.toFixed(0)} {item.recipeUnit})</p>
+                                                        <p className="text-[10px] text-red-500 font-medium mt-0.5">⚠ below par</p>
                                                     )}
                                                 </div>
                                             );
@@ -686,24 +697,13 @@ export default function IngredientsPage() {
                                             <span className="text-muted-foreground text-xs">—</span>
                                         )}
                                     </TableCell>
-                                    {/* ── Stock Value ── */}
-                                    <TableCell className="hidden md:table-cell tabular-nums text-sm">
-                                        {item.inventoryItem != null ? (() => {
-                                            const val = ingStockValue(item);
-                                            return (
-                                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                                                    {format(val)}
-                                                </span>
-                                            );
-                                        })() : (
-                                            <span className="text-muted-foreground text-xs">—</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+
+                                    {/* 6 ─ Actions */}
+                                    <TableCell className="py-2 text-right pr-2">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
                                             onClick={() => { setDeleteTarget(item); setDeleteDialogOpen(true); }}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -713,7 +713,7 @@ export default function IngredientsPage() {
                         })}
                         {paged.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                     No ingredients found.
                                 </TableCell>
                             </TableRow>

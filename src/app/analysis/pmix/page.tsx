@@ -290,7 +290,9 @@ function PmixMiniCalendar({
     selectedUploadId: string;
     onDayClick: (day: PmixCalendarDay) => void;
 }) {
-    const [y, m] = month.split("-").map(Number);
+    const parts = (month ?? "").split("-").map(Number);
+    const y = isFinite(parts[0]) ? parts[0] : new Date().getUTCFullYear();
+    const m = isFinite(parts[1]) ? parts[1] : new Date().getUTCMonth() + 1;
     const firstDay  = new Date(Date.UTC(y, m - 1, 1));
     const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
     const startDow  = firstDay.getUTCDay(); // 0=Sun
@@ -991,10 +993,10 @@ export default function PmixDashboardPage() {
                                     <SelectItem key={u.id} value={u.id}>
                                         <span className="flex items-center gap-2">
                                             <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                            {u.businessDate
+                                            {typeof u.businessDate === "string" && u.businessDate.length >= 10
                                                 ? <span className="font-mono text-xs">{u.businessDate.slice(0, 10)}</span>
                                                 : null}
-                                            {u.periodLabel ?? u.fileName}
+                                            <span>{u.periodLabel ?? u.fileName}</span>
                                             <span className="text-muted-foreground text-xs">· {u.totalItems} items</span>
                                         </span>
                                     </SelectItem>

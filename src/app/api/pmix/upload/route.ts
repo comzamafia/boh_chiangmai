@@ -84,7 +84,10 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const periodLabel = (formData.get("periodLabel") as string | null)?.trim() || null;
+    const periodLabel   = (formData.get("periodLabel")   as string | null)?.trim() || null;
+    const businessDateRaw = (formData.get("businessDate") as string | null)?.trim() || null;
+    // Parse YYYY-MM-DD → midnight UTC Date, or null
+    const businessDate  = businessDateRaw ? new Date(businessDateRaw + "T00:00:00.000Z") : null;
 
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
@@ -165,9 +168,10 @@ export async function POST(req: NextRequest) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const up = await (tx as any).pmixUpload.create({
             data: {
-                fileName: file.name,
+                fileName:     file.name,
                 periodLabel,
-                totalItems: items.length,
+                businessDate,
+                totalItems:   items.length,
                 totalQty,
                 totalSales,
             },

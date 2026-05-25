@@ -22,7 +22,7 @@ import {
     Upload, Loader2, AlertTriangle, Star, TrendingDown, HelpCircle,
     Dog, ChefHat, FlameKindling, Beaker, UtensilsCrossed, Beer,
     IceCream, RefreshCw, BarChart3, PieChart as PieIcon,
-    ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronDown,
+    ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronLeft, ChevronDown,
     TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
     ArrowRight, RotateCcw, Package, Download, Brain, LayoutList,
     CircleCheck, CircleAlert, Info, Search, Plus, Table2, Beef, X,
@@ -34,6 +34,7 @@ import {
     pmixApi, PmixUpload, PmixAnalytics, PmixBcgItem, BcgQuadrant,
     PmixDailySummary, PmixDailySummaryIngredient, PmixTrendPoint, ParSuggestion,
     PortionCalcResult, IngredientSummaryResult,
+    PmixCalendarDay, PmixRangeResult,
 } from "@/lib/api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -278,6 +279,105 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
     );
 }
 
+// ─── Mini Calendar Component ──────────────────────────────────────────────────
+function PmixMiniCalendar({
+    month, onMonthChange, days, loading, selectedUploadId, onDayClick,
+}: {
+    month: string;
+    onMonthChange: (m: string) => void;
+    days: PmixCalendarDay[];
+    loading: boolean;
+    selectedUploadId: string;
+    onDayClick: (day: PmixCalendarDay) => void;
+}) {
+    const [y, m] = month.split("-").map(Number);
+    const firstDay  = new Date(Date.UTC(y, m - 1, 1));
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const startDow  = firstDay.getUTCDay(); // 0=Sun
+
+    // Map "YYYY-MM-DD" → day data
+    const dayMap = new Map<string, PmixCalendarDay>();
+    for (const d of days) dayMap.set(d.date, d);
+
+    const cells: (number | null)[] = [
+        ...Array(startDow).fill(null),
+        ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    ];
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    function prevMonth() {
+        const d = new Date(Date.UTC(y, m - 2, 1));
+        onMonthChange(d.toISOString().slice(0, 7));
+    }
+    function nextMonth() {
+        const d = new Date(Date.UTC(y, m, 1));
+        onMonthChange(d.toISOString().slice(0, 7));
+    }
+
+    const monthLabel = firstDay.toLocaleDateString("en-CA", { month: "long", year: "numeric", timeZone: "UTC" });
+
+    return (
+        <div className="select-none">
+            {/* Month nav */}
+            <div className="flex items-center justify-between mb-2">
+                <button onClick={prevMonth} className="p-1 rounded-lg hover:bg-muted/60 transition-colors">
+                    <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm font-semibold">{monthLabel}</span>
+                <button onClick={nextMonth} className="p-1 rounded-lg hover:bg-muted/60 transition-colors">
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+
+            {/* Day headers */}
+            <div className="grid grid-cols-7 mb-1">
+                {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                    <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-0.5">{d}</div>
+                ))}
+            </div>
+
+            {/* Cells */}
+            {loading ? (
+                <div className="h-24 flex items-center justify-center text-muted-foreground text-xs">
+                    <Loader2 className="w-4 h-4 animate-spin mr-1" /> Loading…
+                </div>
+            ) : (
+                <div className="grid grid-cols-7 gap-0.5">
+                    {cells.map((day, i) => {
+                        if (day === null) return <div key={i} />;
+                        const dateStr = `${month}-${String(day).padStart(2, "0")}`;
+                        const info    = dayMap.get(dateStr);
+                        const isActive = info?.uploadIds.some(id => id === selectedUploadId) ?? false;
+                        const today   = new Date().toISOString().slice(0, 10);
+                        const isToday = dateStr === today;
+
+                        return (
+                            <button key={i} onClick={() => info && onDayClick(info)}
+                                disabled={!info}
+                                className={`relative flex flex-col items-center justify-center rounded-lg h-9 text-xs transition-all
+                                    ${isActive
+                                        ? "bg-primary text-primary-foreground font-bold shadow-sm"
+                                        : info
+                                            ? "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 font-semibold border border-teal-200 dark:border-teal-800"
+                                            : isToday
+                                                ? "bg-muted/60 text-muted-foreground ring-1 ring-primary/30"
+                                                : "text-muted-foreground/60"
+                                    }`}>
+                                <span>{day}</span>
+                                {info && (
+                                    <span className={`text-[8px] leading-none font-normal ${isActive ? "text-primary-foreground/80" : "text-teal-500"}`}>
+                                        {info.count > 1 ? `×${info.count}` : "●"}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Main Page ────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -334,6 +434,18 @@ export default function PmixDashboardPage() {
     const [syncResult,    setSyncResult]    = useState<{ synced: number; date: string } | null>(null);
     const [syncedDates,   setSyncedDates]   = useState<string[]>([]);
 
+    // ── History / Calendar / Range state ─────────────────────────────────────
+    const [historyOpen,    setHistoryOpen]    = useState(false);
+    const [historyMode,    setHistoryMode]    = useState<"single" | "range">("single");
+    const [calendarMonth,  setCalendarMonth]  = useState(() => new Date().toISOString().slice(0, 7));
+    const [calendarDays,   setCalendarDays]   = useState<PmixCalendarDay[]>([]);
+    const [calLoading,     setCalLoading]     = useState(false);
+    const [rangeFrom,      setRangeFrom]      = useState(() => new Date().toISOString().slice(0, 10));
+    const [rangeTo,        setRangeTo]        = useState(() => new Date().toISOString().slice(0, 10));
+    const [rangeData,      setRangeData]      = useState<PmixRangeResult | null>(null);
+    const [rangeLoading,   setRangeLoading]   = useState(false);
+    const [uploadDate,     setUploadDate]     = useState(() => new Date().toISOString().slice(0, 10));
+
     useEffect(() => { setMounted(true); }, []);
 
     // ── Load uploads ──
@@ -347,6 +459,31 @@ export default function PmixDashboardPage() {
     }, []);
 
     useEffect(() => { loadUploads(); }, [loadUploads]);
+
+    // ── Load calendar days for a month ──
+    const loadCalendar = useCallback(async (month: string) => {
+        setCalLoading(true);
+        try {
+            const days = await pmixApi.calendar(month);
+            setCalendarDays(days);
+        } catch { /* ignore */ }
+        finally { setCalLoading(false); }
+    }, []);
+
+    useEffect(() => {
+        if (historyOpen) loadCalendar(calendarMonth);
+    }, [historyOpen, calendarMonth, loadCalendar]);
+
+    // ── Load range analytics ──
+    async function loadRangeAnalytics() {
+        if (!rangeFrom || !rangeTo) return;
+        setRangeLoading(true); setRangeData(null);
+        try {
+            setRangeData(await pmixApi.rangeAnalytics(rangeFrom, rangeTo));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to load range analytics");
+        } finally { setRangeLoading(false); }
+    }
 
     // ── Load analytics ──
     const loadAnalytics = useCallback(async (id: string) => {
@@ -616,9 +753,11 @@ export default function PmixDashboardPage() {
     async function handleFile(file: File) {
         setUploading(true); setError(null);
         try {
-            const result = await pmixApi.upload(file, file.name.replace(/\.[^.]+$/, ""));
+            const result = await pmixApi.upload(file, file.name.replace(/\.[^.]+$/, ""), uploadDate);
             await loadUploads();
+            await loadCalendar(calendarMonth);
             setSelectedId(result.uploadId);
+            setHistoryMode("single");
         } catch (e) {
             setError(e instanceof Error ? e.message : "Upload failed");
         } finally {
@@ -700,73 +839,206 @@ export default function PmixDashboardPage() {
                 </div>
             )}
 
-            {/* ── EMPTY STATE ─────────────────────────────────────────── */}
-            {!selectedId && !uploading && (
-                <UploadZone onFile={handleFile} uploading={uploading} />
-            )}
+            {/* ── HISTORY PANEL ───────────────────────────────────────── */}
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                {/* Header toggle */}
+                <button
+                    onClick={() => setHistoryOpen(v => !v)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left">
+                    <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+                    <span className="font-semibold text-sm flex-1">PMIX History</span>
+                    <span className="text-xs text-muted-foreground hidden sm:block mr-2">
+                        {uploads.length} report{uploads.length !== 1 ? "s" : ""} stored
+                    </span>
+                    {historyOpen
+                        ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        : <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    }
+                </button>
 
-            {/* ── REPORT SELECTOR (when uploads exist) ────────────────── */}
-            {uploads.length > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <Select value={selectedId} onValueChange={setSelectedId}>
-                        <SelectTrigger className="flex-1 h-10 rounded-xl">
-                            <SelectValue placeholder="Select report…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {uploads.map(u => (
-                                <SelectItem key={u.id} value={u.id}>
-                                    <span className="flex items-center gap-2">
-                                        <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                        {u.periodLabel ?? u.fileName}
-                                        <span className="text-muted-foreground text-xs">· {u.totalItems} items</span>
-                                    </span>
-                                </SelectItem>
+                {historyOpen && (
+                    <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
+                        {/* Mode toggle */}
+                        <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-fit">
+                            {(["single", "range"] as const).map(m => (
+                                <button key={m}
+                                    onClick={() => setHistoryMode(m)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                                        ${historyMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                                    {m === "single" ? "📅 Single Day" : "📊 Date Range"}
+                                </button>
                             ))}
-                        </SelectContent>
-                    </Select>
+                        </div>
 
+                        {historyMode === "single" && (
+                            <div className="space-y-3">
+                                {/* Mini calendar */}
+                                <PmixMiniCalendar
+                                    month={calendarMonth}
+                                    onMonthChange={setCalendarMonth}
+                                    days={calendarDays}
+                                    loading={calLoading}
+                                    selectedUploadId={selectedId}
+                                    onDayClick={(day) => {
+                                        // Pick the latest upload for that day
+                                        const first = day.uploadIds[0];
+                                        if (first) { setSelectedId(first); setHistoryMode("single"); }
+                                    }}
+                                />
+                                {/* Upload list for selected date */}
+                                {calendarDays.length > 0 && (
+                                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                                        {calendarDays.slice(0, 10).map(day => (
+                                            <div key={day.date} className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                                                <span className="font-mono font-medium text-foreground w-24 shrink-0">{day.date}</span>
+                                                <div className="flex gap-1 flex-wrap flex-1">
+                                                    {day.uploads.map(up => (
+                                                        <button key={up.id}
+                                                            onClick={() => setSelectedId(up.id)}
+                                                            className={`px-2 py-0.5 rounded-md border text-xs transition-all
+                                                                ${up.id === selectedId
+                                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                                    : "bg-muted/30 border-border hover:bg-muted/60"}`}>
+                                                            {up.periodLabel ?? up.fileName.replace(/\.[^.]+$/, "").slice(0, 20)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <span className="shrink-0">${Number(day.totalSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {historyMode === "range" && (
+                            <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">From</Label>
+                                        <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
+                                            className="h-9 rounded-xl w-40 text-sm" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">To</Label>
+                                        <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)}
+                                            className="h-9 rounded-xl w-40 text-sm" />
+                                    </div>
+                                    <Button onClick={loadRangeAnalytics} disabled={rangeLoading}
+                                        className="h-9 rounded-xl gap-2 bg-primary">
+                                        {rangeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}
+                                        Load Analytics
+                                    </Button>
+                                    {/* Quick presets */}
+                                    <div className="flex gap-1 flex-wrap">
+                                        {[
+                                            { label: "Today",    from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                            { label: "7 days",   from: new Date(Date.now() - 6*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                            { label: "30 days",  from: new Date(Date.now() - 29*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                            { label: "This month", from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                        ].map(p => (
+                                            <button key={p.label}
+                                                onClick={() => { setRangeFrom(p.from); setRangeTo(p.to); }}
+                                                className="px-2.5 py-1 text-xs rounded-lg bg-muted/50 hover:bg-muted border border-border transition-colors">
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {rangeData && !rangeLoading && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Found <strong>{rangeData.uploadCount}</strong> uploads across <strong>{rangeData.dayCount}</strong> day{rangeData.dayCount !== 1 ? "s" : ""} ({rangeData.periodFrom} → {rangeData.periodTo})
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* ── UPLOAD CONTROLS ─────────────────────────────────────────── */}
+            <div className="flex flex-col gap-2">
+                {/* Date picker + upload */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex items-center gap-2 flex-1">
+                        <Label className="text-xs text-muted-foreground shrink-0">Sale Date</Label>
+                        <Input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)}
+                            className="h-9 rounded-xl w-40 text-sm" />
+                    </div>
                     <div className="flex gap-2 shrink-0">
-                        <Button variant="outline" className="h-10 rounded-xl gap-1.5 flex-1 sm:flex-none"
+                        <Button variant="outline" className="h-9 rounded-xl gap-1.5 flex-1 sm:flex-none"
                             onClick={() => document.getElementById("pmix-file-input")?.click()}
                             disabled={uploading}>
                             {uploading
                                 ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</>
-                                : <><Upload className="w-3.5 h-3.5" /> Upload</>
+                                : <><Upload className="w-3.5 h-3.5" /> Upload Report</>
                             }
                         </Button>
                         <input id="pmix-file-input" type="file" accept=".xlsx,.xls,.csv" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.target.value = ""; } }} />
-
-                        {selectedId && (
-                            <>
-                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0"
-                                    onClick={() => loadAnalytics(selectedId)}>
-                                    <RefreshCw className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0 text-destructive hover:text-destructive"
-                                    onClick={() => handleDelete(selectedId)}>
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                            </>
-                        )}
-                        {analytics && selectedId && (
-                            <Button
-                                onClick={() => { setSyncResult(null); setSyncOpen(true); }}
-                                className="h-10 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none">
-                                <Zap className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">Sync to Daily Sales</span>
-                                <span className="sm:hidden">Sync</span>
-                            </Button>
-                        )}
                     </div>
                 </div>
+
+                {/* Selector row */}
+                {uploads.length > 0 && historyMode === "single" && (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Select value={selectedId} onValueChange={setSelectedId}>
+                            <SelectTrigger className="flex-1 h-10 rounded-xl">
+                                <SelectValue placeholder="Select report…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {uploads.map(u => (
+                                    <SelectItem key={u.id} value={u.id}>
+                                        <span className="flex items-center gap-2">
+                                            <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                            {u.businessDate
+                                                ? <span className="font-mono text-xs">{u.businessDate.slice(0, 10)}</span>
+                                                : null}
+                                            {u.periodLabel ?? u.fileName}
+                                            <span className="text-muted-foreground text-xs">· {u.totalItems} items</span>
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <div className="flex gap-2 shrink-0">
+                            {selectedId && (
+                                <>
+                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0"
+                                        onClick={() => loadAnalytics(selectedId)}>
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl shrink-0 text-destructive hover:text-destructive"
+                                        onClick={() => handleDelete(selectedId)}>
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                </>
+                            )}
+                            {analytics && selectedId && (
+                                <Button
+                                    onClick={() => { setSyncResult(null); setSyncOpen(true); }}
+                                    className="h-10 rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none">
+                                    <Zap className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Sync to Daily Sales</span>
+                                    <span className="sm:hidden">Sync</span>
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ── EMPTY STATE ─────────────────────────────────────────── */}
+            {!selectedId && !uploading && historyMode === "single" && (
+                <UploadZone onFile={handleFile} uploading={uploading} />
             )}
 
             {/* ── LOADING ──────────────────────────────────────────────── */}
-            {loading && <DashboardSkeleton />}
+            {loading && historyMode === "single" && <DashboardSkeleton />}
 
             {/* ── DASHBOARD ────────────────────────────────────────────── */}
-            {analytics && !loading && (
+            {analytics && !loading && historyMode === "single" && (
                 <>
                     {/* ─ Report meta ─ */}
                     <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -2546,6 +2818,150 @@ export default function PmixDashboardPage() {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                RANGE ANALYTICS VIEW
+            ══════════════════════════════════════════════════════════ */}
+            {historyMode === "range" && (
+                <div className="space-y-5">
+                    {rangeLoading && (
+                        <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                            <Loader2 className="w-5 h-5 animate-spin" /> Loading range analytics…
+                        </div>
+                    )}
+                    {!rangeLoading && !rangeData && (
+                        <div className="text-center py-12 text-muted-foreground text-sm">
+                            <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                            Choose a date range above and click <strong>Load Analytics</strong>
+                        </div>
+                    )}
+                    {rangeData && !rangeLoading && (
+                        <>
+                            {/* KPI row */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <KpiCard label="Days" value={rangeData.dayCount} sub={`${rangeData.periodFrom} → ${rangeData.periodTo}`} icon={CalendarDays} />
+                                <KpiCard label="Total Net Sales" value={`$${Number(rangeData.totals.netSales).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`Avg $${rangeData.totals.avgSalesPerDay.toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/day`} icon={TrendingUp} valueClass="text-emerald-600" />
+                                <KpiCard label="Total Items Sold" value={rangeData.totals.qty.toLocaleString()} sub={`Avg ${rangeData.totals.avgQtyPerDay}/day`} icon={ShoppingBag} />
+                                <KpiCard label="Refunds" value={`$${Number(rangeData.totals.refundAmount).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`${rangeData.totals.refundQty} items`} icon={RotateCcw} valueClass="text-rose-500" />
+                            </div>
+
+                            {/* Daily trend chart */}
+                            {rangeData.dailyTrend.length > 1 && (
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                            Daily Sales Trend
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={180}>
+                                            <AreaChart data={rangeData.dailyTrend}>
+                                                <defs>
+                                                    <linearGradient id="rangeGrad" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d.slice(5)} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} width={55} />
+                                                <Tooltip
+                                                    formatter={(v: number) => [`$${v.toLocaleString("en-CA", { minimumFractionDigits: 2 })}`, "Net Sales"]}
+                                                    labelFormatter={l => l}
+                                                    contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", fontSize: 12 }} />
+                                                <Area dataKey="netSales" stroke="#10b981" fill="url(#rangeGrad)" strokeWidth={2} dot={{ r: 3, fill: "#10b981" }} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                {/* Top items */}
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Star className="w-4 h-4 text-amber-500" />
+                                            Top Items by Qty
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
+                                        {rangeData.topItems.map((item, i) => {
+                                            const maxQty = rangeData.topItems[0]?.qtySold ?? 1;
+                                            return (
+                                                <div key={i} className="space-y-0.5">
+                                                    <div className="flex items-center justify-between gap-2 text-xs">
+                                                        <span className="truncate font-medium">{item.itemName}</span>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="text-muted-foreground">{item.avgQtyPerDay}/day</span>
+                                                            <span className="font-bold text-foreground w-10 text-right">{item.qtySold}</span>
+                                                        </div>
+                                                    </div>
+                                                    <ProgressBar value={item.qtySold} max={maxQty} color="#f59e0b" />
+                                                </div>
+                                            );
+                                        })}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Category breakdown */}
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Layers className="w-4 h-4 text-indigo-500" />
+                                            Sales by Category
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
+                                        {rangeData.categoryBreakdown.map((cat, i) => {
+                                            const maxSales = Number(rangeData.categoryBreakdown[0]?.netSales ?? 1);
+                                            return (
+                                                <div key={i} className="space-y-0.5">
+                                                    <div className="flex items-center justify-between text-xs gap-2">
+                                                        <span className="truncate">{cat.category}</span>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="text-muted-foreground">{cat.qtySold} sold</span>
+                                                            <span className="font-bold">${Number(cat.netSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                                                        </div>
+                                                    </div>
+                                                    <ProgressBar value={Number(cat.netSales)} max={maxSales} color="#6366f1" />
+                                                </div>
+                                            );
+                                        })}
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* Protein totals */}
+                            {rangeData.proteinTotals.length > 0 && (
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Beef className="w-4 h-4 text-teal-500" />
+                                            Main Protein Usage ({rangeData.dayCount}-day total)
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1.5">
+                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Protein</div>
+                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Total Orders</div>
+                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Avg/Day</div>
+                                            {rangeData.proteinTotals.map((p, i) => (
+                                                <div key={i} className="contents">
+                                                    <div className="text-sm py-1">{p.proteinType}</div>
+                                                    <div className="text-sm font-bold text-teal-600 text-right py-1">{p.qty.toLocaleString()}</div>
+                                                    <div className="text-xs text-muted-foreground text-right py-1">{p.avgQtyPerDay}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </>
+                    )}
+                </div>
             )}
 
             {/* ══════════════════════════════════════════════════════════

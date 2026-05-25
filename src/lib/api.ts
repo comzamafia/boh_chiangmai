@@ -212,13 +212,6 @@ export const portionStandardsApi = {
 export const pmixApi = {
     listUploads: () => apiFetch<PmixUpload[]>("/pmix/uploads"),
     deleteUpload: (id: string) => apiFetch<void>(`/pmix/uploads?id=${id}`, { method: "DELETE" }),
-    upload: (file: File, periodLabel?: string) => {
-        const fd = new FormData();
-        fd.append("file", file);
-        if (periodLabel) fd.append("periodLabel", periodLabel);
-        return fetch("/api/pmix/upload", { method: "POST", body: fd })
-            .then(r => r.json()) as Promise<{ uploadId: string; totalItems: number; totalQty: number; totalSales: number }>;
-    },
     analytics: (uploadId: string) => apiFetch<PmixAnalytics>(`/pmix/analytics?uploadId=${uploadId}`),
     syncSales: (uploadId: string, date: string, replace: boolean) =>
         apiFetch<{ synced: number; skipped: number; date: string; uploadId: string }>(
@@ -257,6 +250,22 @@ export const pmixApi = {
         portionUnit:         string;
         message?:            string;
     }>("/pmix/auto-fill-portions", { method: "POST", body: JSON.stringify(data) }),
+
+    // ── History / Calendar ───────────────────────────────────────────────────
+    calendar: (month?: string) =>
+        apiFetch<PmixCalendarDay[]>(`/pmix/uploads/calendar${month ? `?month=${month}` : ""}`),
+
+    rangeAnalytics: (from: string, to: string) =>
+        apiFetch<PmixRangeResult>(`/pmix/analytics/range?from=${from}&to=${to}`),
+
+    upload: (file: File, periodLabel?: string, businessDate?: string) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (periodLabel)  fd.append("periodLabel",  periodLabel);
+        if (businessDate) fd.append("businessDate", businessDate);
+        return fetch("/api/pmix/upload", { method: "POST", body: fd })
+            .then(r => r.json()) as Promise<{ uploadId: string; totalItems: number; totalQty: number; totalSales: number }>;
+    },
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
@@ -552,13 +561,65 @@ export interface IngredientSupplier {
 
 // ─── PMIX Types ───────────────────────────────────────────────────────────────
 export interface PmixUpload {
-    id:          string;
-    fileName:    string;
-    periodLabel: string | null;
-    totalItems:  number;
+    id:           string;
+    fileName:     string;
+    periodLabel:  string | null;
+    businessDate: string | null;  // "YYYY-MM-DD" or null for old records
+    totalItems:   number;
+    totalQty:     number;
+    totalSales:   number;
+    uploadedAt:   string;
+}
+
+export interface PmixCalendarDay {
+    date:        string;   // "YYYY-MM-DD"
+    uploadIds:   string[];
+    count:       number;
     totalQty:    number;
-    totalSales:  number;
-    uploadedAt:  string;
+    totalSales:  string;
+    uploads:     { id: string; fileName: string; periodLabel: string | null; uploadedAt: string }[];
+}
+
+export interface PmixRangeTopItem {
+    itemName:       string;
+    category:       string;
+    qtySold:        number;
+    netSales:       string;
+    grossSales:     string;
+    refundQty:      number;
+    refundAmount:   string;
+    discountAmount: string;
+    avgQtyPerDay:   number;
+    avgSalesPerDay: number;
+}
+
+export interface PmixRangeDailyTrend {
+    date:        string;
+    netSales:    number;
+    qtySold:     number;
+    uploadCount: number;
+}
+
+export interface PmixRangeResult {
+    uploadIds:         string[];
+    dayCount:          number;
+    uploadCount:       number;
+    periodFrom:        string;
+    periodTo:          string;
+    totals: {
+        qty:           number;
+        grossSales:    string;
+        netSales:      string;
+        refundQty:     number;
+        refundAmount:  string;
+        avgSalesPerDay: number;
+        avgQtyPerDay:  number;
+    };
+    topItems:          PmixRangeTopItem[];
+    categoryBreakdown: { category: string; qtySold: number; netSales: string }[];
+    dailyTrend:        PmixRangeDailyTrend[];
+    proteinTotals:     { proteinType: string; qty: number; avgQtyPerDay: number }[];
+    message?:          string;
 }
 
 export type BcgQuadrant = "Star" | "Plowhorse" | "Puzzle" | "Dog";

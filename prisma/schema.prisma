@@ -313,16 +313,18 @@ model PortionStandard {
 // ─── PMIX: Product-Mix Upload & Analytics ────────────────────────────────────
 
 model PmixUpload {
-  id          String     @id @default(cuid())
-  fileName    String
-  periodLabel String?    // e.g. "2024-01-15" or "Week of Jan 13"
-  totalItems  Int        @default(0)
-  totalQty    Int        @default(0)
-  totalSales  Decimal    @db.Decimal(12, 2) @default(0)
-  uploadedAt  DateTime   @default(now())
+  id           String    @id @default(cuid())
+  fileName     String
+  periodLabel  String?   // e.g. "2024-01-15" or "Week of Jan 13"
+  businessDate DateTime? @db.Date  // actual date of sales (may differ from uploadedAt)
+  totalItems   Int       @default(0)
+  totalQty     Int       @default(0)
+  totalSales   Decimal   @db.Decimal(12, 2) @default(0)
+  uploadedAt   DateTime  @default(now())
 
   items PmixItem[]
 
+  @@index([businessDate])
   @@map("pmix_uploads")
 }
 

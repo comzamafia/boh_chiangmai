@@ -6,6 +6,7 @@
  *   - mainProtein: protein choice breakdown (modifierGroup contains "protein", not "extra")
  *   - extraProtein: extra add-on breakdown (modifierGroup contains "extra" OR modifier starts with "Extra ")
  *   - Both broken down by type totals and by dish detail
+ *   - Each protein/add-on type also exposes totalUsed = qty × Portion Standard
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";

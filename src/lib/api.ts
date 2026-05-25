@@ -240,6 +240,21 @@ export const pmixApi = {
         apiFetch<PortionCalcResult>(`/pmix/portion-calc?uploadId=${uploadId}`),
     ingredientSummary: (uploadId: string) =>
         apiFetch<IngredientSummaryResult>(`/pmix/ingredient-summary?uploadId=${uploadId}`),
+    autoFillPortions: (data: {
+        uploadId:    string;
+        portionSize: number;
+        portionUnit: string;
+        scope:       "main" | "extra" | "both";
+    }) => apiFetch<{
+        created:            number;
+        createdDetails:     { ingredientName: string; itemName: string }[];
+        skippedExisting:    number;
+        skippedDetails:     string[];
+        missingIngredients: string[];
+        portionSize:        number;
+        portionUnit:        string;
+        message?:           string;
+    }>("/pmix/auto-fill-portions", { method: "POST", body: JSON.stringify(data) }),
 };
 
 // ─── Analysis ────────────────────────────────────────────────────────────────

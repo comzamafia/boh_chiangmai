@@ -25,7 +25,7 @@ import {
     ClipboardList, Link2, FileSpreadsheet, Trash2, ChevronRight, ChevronDown,
     TrendingUp, ShoppingBag, Layers, Zap, CheckCircle2, CalendarDays,
     ArrowRight, RotateCcw, Package, Download, Brain, LayoutList,
-    CircleCheck, CircleAlert, Info, Search, Plus, Table2, Beef,
+    CircleCheck, CircleAlert, Info, Search, Plus, Table2, Beef, X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -320,6 +320,10 @@ export default function PmixDashboardPage() {
     const [ingSum,         setIngSum]         = useState<IngredientSummaryResult | null>(null);
     const [ingLoading,     setIngLoading]     = useState(false);
     const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra">("main");
+    const [autoFilling,    setAutoFilling]    = useState(false);
+    const [autoFillResult, setAutoFillResult] = useState<{
+        created: number; skipped: number; missing: string[]; portionSize: number; portionUnit: string;
+    } | null>(null);
 
     // Sync dialog state
     const [syncOpen,      setSyncOpen]      = useState(false);
@@ -393,6 +397,45 @@ export default function PmixDashboardPage() {
                 .finally(() => setIngLoading(false));
         }
     }, [selectedId, activeTab]);
+
+    // ── Auto-fill Portion Standards for every detected protein ──
+    async function handleAutoFillPortions(scope: "main" | "extra" | "both") {
+        if (!selectedId) return;
+        const proteinCount = scope === "main"
+            ? (ingSum?.mainProtein.byType.length ?? 0)
+            : scope === "extra"
+                ? (ingSum?.extraProtein.byType.length ?? 0)
+                : (ingSum?.mainProtein.byType.length ?? 0) + (ingSum?.extraProtein.byType.length ?? 0);
+        const ok = confirm(
+            `Auto-create Portion Standards (6 oz) for ${proteinCount} detected ${scope === "both" ? "protein/add-on" : scope === "main" ? "main protein" : "extra add-on"} types?\n\n` +
+            `Each will be matched to an existing Ingredient by name. Proteins with no matching ingredient will be skipped.`
+        );
+        if (!ok) return;
+        setAutoFilling(true);
+        setAutoFillResult(null);
+        try {
+            const r = await pmixApi.autoFillPortions({
+                uploadId:    selectedId,
+                portionSize: 6,
+                portionUnit: "oz",
+                scope,
+            });
+            setAutoFillResult({
+                created:     r.created,
+                skipped:     r.skippedExisting,
+                missing:     r.missingIngredients,
+                portionSize: r.portionSize,
+                portionUnit: r.portionUnit,
+            });
+            // Refresh summary so Total We Use column repopulates
+            const fresh = await pmixApi.ingredientSummary(selectedId);
+            setIngSum(fresh);
+        } catch (e) {
+            alert("Auto-fill failed: " + (e instanceof Error ? e.message : "Unknown error"));
+        } finally {
+            setAutoFilling(false);
+        }
+    }
 
     // ── Export Ingredient Summary CSV ──
     function handleIngSumExportCSV() {
@@ -2038,6 +2081,17 @@ export default function PmixDashboardPage() {
                                 Protein choices extracted directly from POS modifier data
                             </p>
                         </div>
+                        {ingSum && ingSum.hasProteinData && (
+                            <Button size="sm" variant="outline"
+                                disabled={autoFilling}
+                                onClick={() => handleAutoFillPortions("both")}
+                                className="gap-1.5 rounded-xl h-8 text-xs border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30">
+                                {autoFilling
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <Zap className="w-3.5 h-3.5" />}
+                                Auto-fill 6 oz standards
+                            </Button>
+                        )}
                         {ingSum && (
                             <Button size="sm" variant="outline" className="gap-1.5 rounded-xl h-8 text-xs"
                                 onClick={handleIngSumExportCSV}>
@@ -2045,6 +2099,48 @@ export default function PmixDashboardPage() {
                             </Button>
                         )}
                     </div>
+
+                    {autoFillResult && (
+                        <Card className={`border-2 ${autoFillResult.created > 0
+                            ? "border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/20"
+                            : "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"}`}>
+                            <CardContent className="pt-4 pb-4 px-5">
+                                <div className="flex items-start gap-3">
+                                    {autoFillResult.created > 0
+                                        ? <CircleCheck className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                                        : <CircleAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold">
+                                            {autoFillResult.created > 0
+                                                ? `Created ${autoFillResult.created} new Portion Standard${autoFillResult.created === 1 ? "" : "s"} at ${autoFillResult.portionSize} ${autoFillResult.portionUnit}`
+                                                : "No new Portion Standards created"}
+                                        </p>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                                            <span><strong className="text-teal-700 dark:text-teal-300">{autoFillResult.created}</strong> created</span>
+                                            <span><strong className="text-foreground">{autoFillResult.skipped}</strong> already existed</span>
+                                            <span><strong className="text-amber-700 dark:text-amber-400">{autoFillResult.missing.length}</strong> missing ingredients</span>
+                                        </div>
+                                        {autoFillResult.missing.length > 0 && (
+                                            <div className="mt-2.5">
+                                                <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                                                    Couldn't match these to an Ingredient — add them in <a href="/ingredients" className="underline">Ingredients</a> first:
+                                                </p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {autoFillResult.missing.map(n => (
+                                                        <Badge key={n} variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">{n}</Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button onClick={() => setAutoFillResult(null)}
+                                        className="text-muted-foreground hover:text-foreground shrink-0">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     {ingLoading && (
                         <div className="flex justify-center py-16">

@@ -35,8 +35,37 @@ export async function GET(req: NextRequest) {
         include: { modifiers: true },
     });
 
+    // 3. Load all portion standards (we use type=modifier matches for protein modifiers)
+    const standards = await db.portionStandard.findMany({
+        include: {
+            ingredient: {
+                select: { id: true, name: true, recipeUnit: true },
+            },
+        },
+    });
+
+    // Build modifier-name lookup (case-insensitive exact match)
+    const stdByModifier = new Map<string, { ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string }>();
+    for (const s of standards) {
+        if (s.type === "modifier" || s.type === "base") {
+            stdByModifier.set(String(s.itemName).toLowerCase().trim(), {
+                ingredientName: s.ingredient?.name ?? s.itemName,
+                portionSize:    Number(s.portionSize),
+                portionUnit:    s.portionUnit,
+                ingredientId:   s.ingredientId,
+            });
+        }
+    }
+
     // ─── classify each modifier ───────────────────────────────────────────
-    interface ProteinByType { proteinType: string; qty: number }
+    interface ProteinByType {
+        proteinType:    string;
+        qty:            number;
+        totalUsed:      number | null;
+        portionSize:    number | null;
+        portionUnit:    string | null;
+        ingredientName: string | null;
+    }
     interface ProteinByDish { category: string; dish: string; proteinType: string; qty: number }
 
     const mainByType  = new Map<string, number>();
@@ -84,8 +113,21 @@ export async function GET(req: NextRequest) {
     }
 
     // ─── Sort helpers ─────────────────────────────────────────────────────
+    function withPortion(proteinType: string, qty: number) {
+        const std = stdByModifier.get(proteinType.toLowerCase().trim());
+        if (!std) return { proteinType, qty, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null };
+        return {
+            proteinType,
+            qty,
+            totalUsed:      qty * std.portionSize,
+            portionSize:    std.portionSize,
+            portionUnit:    std.portionUnit,
+            ingredientName: std.ingredientName,
+        };
+    }
+
     const mainByTypeArr: ProteinByType[] = [...mainByType.entries()]
-        .map(([proteinType, qty]) => ({ proteinType, qty }))
+        .map(([proteinType, qty]) => withPortion(proteinType, qty))
         .sort((a, b) => b.qty - a.qty);
 
     const mainTotal = mainByTypeArr.reduce((s, x) => s + x.qty, 0);
@@ -100,7 +142,7 @@ export async function GET(req: NextRequest) {
         });
 
     const extraByTypeArr: ProteinByType[] = [...extraByType.entries()]
-        .map(([proteinType, qty]) => ({ proteinType, qty }))
+        .map(([proteinType, qty]) => withPortion(proteinType, qty))
         .sort((a, b) => b.qty - a.qty);
 
     const extraTotal = extraByTypeArr.reduce((s, x) => s + x.qty, 0);

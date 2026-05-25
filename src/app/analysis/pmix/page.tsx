@@ -401,18 +401,31 @@ export default function PmixDashboardPage() {
         // Sheet 1: Main Protein totals
         const mainRows: string[][] = [
             [`Main Protein by Type — ${label}`],
-            ["Protein Type", "Total Qty", "% of Total"],
+            ["Protein Type", "Total Orders", "Portion Standard", "Total We Use", "Unit", "% of Total"],
         ];
         for (const r of ingSum.mainProtein.byType) {
             const pct = ingSum.mainProtein.total > 0 ? ((r.qty / ingSum.mainProtein.total) * 100).toFixed(1) : "0.0";
-            mainRows.push([r.proteinType, String(r.qty), `${pct}%`]);
+            mainRows.push([
+                r.proteinType,
+                String(r.qty),
+                r.portionSize !== null ? `${r.portionSize} ${r.portionUnit ?? ""}` : "—",
+                r.totalUsed   !== null ? String(r.totalUsed) : "—",
+                r.portionUnit ?? "",
+                `${pct}%`,
+            ]);
         }
-        mainRows.push(["TOTAL", String(ingSum.mainProtein.total), "100%"]);
+        mainRows.push(["TOTAL", String(ingSum.mainProtein.total), "", "", "", "100%"]);
         mainRows.push([]);
         mainRows.push([`Extra Add-on Totals — ${label}`]);
-        mainRows.push(["Extra Add-on", "Total Qty"]);
+        mainRows.push(["Extra Add-on", "Total Orders", "Portion Standard", "Total We Use", "Unit"]);
         for (const r of ingSum.extraProtein.byType) {
-            mainRows.push([r.proteinType, String(r.qty)]);
+            mainRows.push([
+                r.proteinType,
+                String(r.qty),
+                r.portionSize !== null ? `${r.portionSize} ${r.portionUnit ?? ""}` : "—",
+                r.totalUsed   !== null ? String(r.totalUsed) : "—",
+                r.portionUnit ?? "",
+            ]);
         }
         mainRows.push([]);
         mainRows.push([`Main Protein by Dish — ${label}`]);
@@ -2112,9 +2125,10 @@ export default function PmixDashboardPage() {
                                                 </CardTitle>
                                             </CardHeader>
                                             <CardContent className="px-5 pb-4">
-                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protein Type</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
 
                                                     {ingSum.mainProtein.byType.map(row => {
@@ -2124,13 +2138,27 @@ export default function PmixDashboardPage() {
                                                         const max = ingSum.mainProtein.byType[0]?.qty ?? 1;
                                                         return (
                                                             <div key={row.proteinType} className="contents">
-                                                                <div className="font-medium truncate flex items-center gap-2">
+                                                                <div className="font-medium truncate flex items-center gap-2 min-w-0">
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-teal-600 shrink-0" />
                                                                     <span className="truncate">{row.proteinType}</span>
                                                                 </div>
                                                                 <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 text-right">{fmtN(row.qty)}</div>
+                                                                <div className="text-right">
+                                                                    {row.totalUsed !== null ? (
+                                                                        <div>
+                                                                            <div className="tabular-nums font-bold text-foreground">
+                                                                                {fmtN(row.totalUsed)} <span className="text-xs font-medium text-muted-foreground">{row.portionUnit}</span>
+                                                                            </div>
+                                                                            <div className="text-[10px] text-muted-foreground tabular-nums">
+                                                                                {row.qty} × {row.portionSize} {row.portionUnit}
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-muted-foreground italic">No standard</span>
+                                                                    )}
+                                                                </div>
                                                                 <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
-                                                                <div className="col-span-3 -mt-1">
+                                                                <div className="col-span-4 -mt-1">
                                                                     <ProgressBar value={row.qty} max={max} color="#0d9488" />
                                                                 </div>
                                                             </div>
@@ -2139,8 +2167,16 @@ export default function PmixDashboardPage() {
 
                                                     <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
                                                     <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.mainProtein.total)}</div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-[10px] text-muted-foreground">per unit shown</div>
                                                     <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
                                                 </div>
+
+                                                {ingSum.mainProtein.byType.some(r => r.totalUsed === null) && (
+                                                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-3 flex items-center gap-1.5">
+                                                        <Info className="w-3 h-3 shrink-0" />
+                                                        Some proteins have no Portion Standard. <a href="/settings/portion-standards" className="underline ml-1">Add standards →</a>
+                                                    </p>
+                                                )}
                                             </CardContent>
                                         </Card>
 
@@ -2251,9 +2287,11 @@ export default function PmixDashboardPage() {
                                                 {ingSum.extraProtein.byType.length === 0 ? (
                                                     <p className="text-sm text-muted-foreground italic">No extra add-ons found in this upload.</p>
                                                 ) : (
-                                                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                    <>
+                                                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
                                                         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Add-on</div>
                                                         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use</div>
                                                         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
 
                                                         {ingSum.extraProtein.byType.map(row => {
@@ -2263,13 +2301,27 @@ export default function PmixDashboardPage() {
                                                             const max = ingSum.extraProtein.byType[0]?.qty ?? 1;
                                                             return (
                                                                 <div key={row.proteinType} className="contents">
-                                                                    <div className="font-medium truncate flex items-center gap-2">
+                                                                    <div className="font-medium truncate flex items-center gap-2 min-w-0">
                                                                         <span className="w-1.5 h-1.5 rounded-full bg-violet-600 shrink-0" />
                                                                         <span className="truncate">{row.proteinType}</span>
                                                                     </div>
                                                                     <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 text-right">{fmtN(row.qty)}</div>
+                                                                    <div className="text-right">
+                                                                        {row.totalUsed !== null ? (
+                                                                            <div>
+                                                                                <div className="tabular-nums font-bold text-foreground">
+                                                                                    {fmtN(row.totalUsed)} <span className="text-xs font-medium text-muted-foreground">{row.portionUnit}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-muted-foreground tabular-nums">
+                                                                                    {row.qty} × {row.portionSize} {row.portionUnit}
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-xs text-muted-foreground italic">No standard</span>
+                                                                        )}
+                                                                    </div>
                                                                     <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
-                                                                    <div className="col-span-3 -mt-1">
+                                                                    <div className="col-span-4 -mt-1">
                                                                         <ProgressBar value={row.qty} max={max} color="#7c3aed" />
                                                                     </div>
                                                                 </div>
@@ -2278,8 +2330,17 @@ export default function PmixDashboardPage() {
 
                                                         <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
                                                         <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.extraProtein.total)}</div>
+                                                        <div className="border-t border-border pt-2 mt-1 text-right text-[10px] text-muted-foreground">per unit shown</div>
                                                         <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
                                                     </div>
+
+                                                    {ingSum.extraProtein.byType.some(r => r.totalUsed === null) && (
+                                                        <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-3 flex items-center gap-1.5">
+                                                            <Info className="w-3 h-3 shrink-0" />
+                                                            Some add-ons have no Portion Standard. <a href="/settings/portion-standards" className="underline ml-1">Add standards →</a>
+                                                        </p>
+                                                    )}
+                                                    </>
                                                 )}
                                             </CardContent>
                                         </Card>

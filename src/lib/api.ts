@@ -772,8 +772,12 @@ export interface PortionCalcResult {
 
 // ─── Ingredient Use Summary Types ─────────────────────────────────────────────
 export interface IngredientSummaryProteinByType {
-    proteinType: string;
-    qty:         number;
+    proteinType:    string;
+    qty:            number;
+    totalUsed:      number | null;   // qty × portionSize from PortionStandard (null if no standard)
+    portionSize:    number | null;
+    portionUnit:    string | null;
+    ingredientName: string | null;
 }
 
 export interface IngredientSummaryProteinByDish {

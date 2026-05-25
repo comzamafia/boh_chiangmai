@@ -212,6 +212,8 @@ export const portionStandardsApi = {
 export const pmixApi = {
     listUploads: () => apiFetch<PmixUpload[]>("/pmix/uploads"),
     deleteUpload: (id: string) => apiFetch<void>(`/pmix/uploads?id=${id}`, { method: "DELETE" }),
+    updateUpload: (id: string, data: { businessDate?: string | null; periodLabel?: string | null }) =>
+        apiFetch<PmixUpload>(`/pmix/uploads/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     analytics: (uploadId: string) => apiFetch<PmixAnalytics>(`/pmix/analytics?uploadId=${uploadId}`),
     syncSales: (uploadId: string, date: string, replace: boolean) =>
         apiFetch<{ synced: number; skipped: number; date: string; uploadId: string }>(

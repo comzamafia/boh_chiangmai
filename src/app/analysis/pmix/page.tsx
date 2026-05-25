@@ -887,25 +887,41 @@ export default function PmixDashboardPage() {
                                         if (first) { setSelectedId(first); setHistoryMode("single"); }
                                     }}
                                 />
-                                {/* Upload list for selected date */}
-                                {calendarDays.length > 0 && (
-                                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                                        {calendarDays.slice(0, 10).map(day => (
-                                            <div key={day.date} className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-                                                <span className="font-mono font-medium text-foreground w-24 shrink-0">{day.date}</span>
-                                                <div className="flex gap-1 flex-wrap flex-1">
-                                                    {day.uploads.map(up => (
-                                                        <button key={up.id}
-                                                            onClick={() => setSelectedId(up.id)}
-                                                            className={`px-2 py-0.5 rounded-md border text-xs transition-all
-                                                                ${up.id === selectedId
-                                                                    ? "bg-primary text-primary-foreground border-primary"
-                                                                    : "bg-muted/30 border-border hover:bg-muted/60"}`}>
-                                                            {up.periodLabel ?? up.fileName.replace(/\.[^.]+$/, "").slice(0, 20)}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <span className="shrink-0">${Number(day.totalSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                                {/* Upload list with inline date editor */}
+                                {uploads.length > 0 && (
+                                    <div className="space-y-1 max-h-60 overflow-y-auto border-t border-border pt-2">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                            All Uploads ({uploads.length})
+                                        </p>
+                                        {uploads.map(u => (
+                                            <div key={u.id} className="flex items-center gap-2 text-xs px-1 py-0.5">
+                                                <Input
+                                                    type="date"
+                                                    value={typeof u.businessDate === "string" ? u.businessDate.slice(0, 10) : ""}
+                                                    onChange={async (e) => {
+                                                        const v = e.target.value || null;
+                                                        try {
+                                                            await pmixApi.updateUpload(u.id, { businessDate: v });
+                                                            await loadUploads();
+                                                            await loadCalendar(calendarMonth);
+                                                        } catch (err) {
+                                                            alert("Failed to update date: " + (err instanceof Error ? err.message : "Unknown"));
+                                                        }
+                                                    }}
+                                                    className="h-7 rounded-md w-36 text-xs px-2"
+                                                />
+                                                <button
+                                                    onClick={() => setSelectedId(u.id)}
+                                                    className={`flex-1 text-left px-2 py-1 rounded-md border text-xs truncate transition-all
+                                                        ${u.id === selectedId
+                                                            ? "bg-primary text-primary-foreground border-primary"
+                                                            : "bg-muted/30 border-border hover:bg-muted/60"}`}>
+                                                    {u.periodLabel ?? u.fileName.replace(/\.[^.]+$/, "")}
+                                                    <span className={`ml-2 ${u.id === selectedId ? "text-primary-foreground/80" : "text-muted-foreground"}`}>· {u.totalItems} items</span>
+                                                </button>
+                                                <span className="text-muted-foreground shrink-0 w-16 text-right">
+                                                    ${Number(u.totalSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>

@@ -846,12 +846,12 @@ export default function PmixDashboardPage() {
                 {/* Header toggle */}
                 <button
                     onClick={() => setHistoryOpen(v => !v)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left">
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left">
                     <CalendarDays className="w-4 h-4 text-primary shrink-0" />
                     <span className="font-semibold text-sm flex-1">PMIX History</span>
-                    <span className="text-xs text-muted-foreground hidden sm:block mr-2">
-                        {uploads.length} report{uploads.length !== 1 ? "s" : ""} stored
-                    </span>
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0 h-5">
+                        {uploads.length}
+                    </Badge>
                     {historyOpen
                         ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
                         : <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -861,11 +861,11 @@ export default function PmixDashboardPage() {
                 {historyOpen && (
                     <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
                         {/* Mode toggle */}
-                        <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-fit">
+                        <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-full sm:w-fit">
                             {(["single", "range"] as const).map(m => (
                                 <button key={m}
                                     onClick={() => setHistoryMode(m)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all
                                         ${historyMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                                     {m === "single" ? "📅 Single Day" : "📊 Date Range"}
                                 </button>
@@ -889,39 +889,50 @@ export default function PmixDashboardPage() {
                                 />
                                 {/* Upload list with inline date editor */}
                                 {uploads.length > 0 && (
-                                    <div className="space-y-1 max-h-60 overflow-y-auto border-t border-border pt-2">
+                                    <div className="space-y-2 max-h-72 overflow-y-auto border-t border-border pt-2">
                                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                            All Uploads ({uploads.length})
+                                            All Uploads ({uploads.length}) · tap date to fix Sale Date
                                         </p>
                                         {uploads.map(u => (
-                                            <div key={u.id} className="flex items-center gap-2 text-xs px-1 py-0.5">
-                                                <Input
-                                                    type="date"
-                                                    value={typeof u.businessDate === "string" ? u.businessDate.slice(0, 10) : ""}
-                                                    onChange={async (e) => {
-                                                        const v = e.target.value || null;
-                                                        try {
-                                                            await pmixApi.updateUpload(u.id, { businessDate: v });
-                                                            await loadUploads();
-                                                            await loadCalendar(calendarMonth);
-                                                        } catch (err) {
-                                                            alert("Failed to update date: " + (err instanceof Error ? err.message : "Unknown"));
-                                                        }
-                                                    }}
-                                                    className="h-7 rounded-md w-36 text-xs px-2"
-                                                />
+                                            <div key={u.id}
+                                                className={`flex flex-col sm:flex-row sm:items-center gap-2 p-2 rounded-xl border text-xs transition-all
+                                                    ${u.id === selectedId
+                                                        ? "bg-primary/10 border-primary/40"
+                                                        : "bg-muted/20 border-border hover:bg-muted/40"}`}>
+                                                {/* Top row (mobile): name + price + select; (desktop: middle) */}
                                                 <button
                                                     onClick={() => setSelectedId(u.id)}
-                                                    className={`flex-1 text-left px-2 py-1 rounded-md border text-xs truncate transition-all
-                                                        ${u.id === selectedId
-                                                            ? "bg-primary text-primary-foreground border-primary"
-                                                            : "bg-muted/30 border-border hover:bg-muted/60"}`}>
-                                                    {u.periodLabel ?? u.fileName.replace(/\.[^.]+$/, "")}
-                                                    <span className={`ml-2 ${u.id === selectedId ? "text-primary-foreground/80" : "text-muted-foreground"}`}>· {u.totalItems} items</span>
+                                                    className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                                                    <FileSpreadsheet className={`w-3.5 h-3.5 shrink-0 ${u.id === selectedId ? "text-primary" : "text-muted-foreground"}`} />
+                                                    <span className="flex-1 truncate font-medium">
+                                                        {u.periodLabel ?? u.fileName.replace(/\.[^.]+$/, "")}
+                                                    </span>
+                                                    <span className="text-muted-foreground shrink-0">
+                                                        {u.totalItems} items
+                                                    </span>
+                                                    <span className="font-semibold shrink-0">
+                                                        ${Number(u.totalSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </span>
                                                 </button>
-                                                <span className="text-muted-foreground shrink-0 w-16 text-right">
-                                                    ${Number(u.totalSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                </span>
+                                                {/* Date editor row */}
+                                                <div className="flex items-center gap-2 sm:shrink-0">
+                                                    <Label className="text-[10px] text-muted-foreground sm:hidden">Sale Date</Label>
+                                                    <Input
+                                                        type="date"
+                                                        value={typeof u.businessDate === "string" ? u.businessDate.slice(0, 10) : ""}
+                                                        onChange={async (e) => {
+                                                            const v = e.target.value || null;
+                                                            try {
+                                                                await pmixApi.updateUpload(u.id, { businessDate: v });
+                                                                await loadUploads();
+                                                                await loadCalendar(calendarMonth);
+                                                            } catch (err) {
+                                                                alert("Failed to update date: " + (err instanceof Error ? err.message : "Unknown"));
+                                                            }
+                                                        }}
+                                                        className="h-9 rounded-lg flex-1 sm:w-40 sm:flex-none text-xs px-2"
+                                                    />
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -931,38 +942,41 @@ export default function PmixDashboardPage() {
 
                         {historyMode === "range" && (
                             <div className="space-y-3">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                                {/* Date pickers — 2 columns on mobile, inline on desktop */}
+                                <div className="grid grid-cols-2 sm:flex sm:items-end gap-2 sm:gap-3">
                                     <div className="space-y-1">
                                         <Label className="text-xs">From</Label>
                                         <Input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
-                                            className="h-9 rounded-xl w-40 text-sm" />
+                                            className="h-10 rounded-xl w-full sm:w-40 text-sm" />
                                     </div>
                                     <div className="space-y-1">
                                         <Label className="text-xs">To</Label>
                                         <Input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)}
-                                            className="h-9 rounded-xl w-40 text-sm" />
+                                            className="h-10 rounded-xl w-full sm:w-40 text-sm" />
                                     </div>
                                     <Button onClick={loadRangeAnalytics} disabled={rangeLoading}
-                                        className="h-9 rounded-xl gap-2 bg-primary">
-                                        {rangeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}
+                                        className="h-10 rounded-xl gap-2 bg-primary col-span-2 sm:col-span-1">
+                                        {rangeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
                                         Load Analytics
                                     </Button>
-                                    {/* Quick presets */}
-                                    <div className="flex gap-1 flex-wrap">
-                                        {[
-                                            { label: "Today",    from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
-                                            { label: "7 days",   from: new Date(Date.now() - 6*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
-                                            { label: "30 days",  from: new Date(Date.now() - 29*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
-                                            { label: "This month", from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
-                                        ].map(p => (
-                                            <button key={p.label}
-                                                onClick={() => { setRangeFrom(p.from); setRangeTo(p.to); }}
-                                                className="px-2.5 py-1 text-xs rounded-lg bg-muted/50 hover:bg-muted border border-border transition-colors">
-                                                {p.label}
-                                            </button>
-                                        ))}
-                                    </div>
                                 </div>
+
+                                {/* Quick presets */}
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {[
+                                        { label: "Today",    from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                        { label: "7 days",   from: new Date(Date.now() - 6*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                        { label: "30 days",  from: new Date(Date.now() - 29*86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                        { label: "This month", from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                                    ].map(p => (
+                                        <button key={p.label}
+                                            onClick={() => { setRangeFrom(p.from); setRangeTo(p.to); }}
+                                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-muted/50 hover:bg-muted border border-border transition-colors">
+                                            {p.label}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 {rangeData && !rangeLoading && (
                                     <p className="text-xs text-muted-foreground">
                                         Found <strong>{rangeData.uploadCount}</strong> uploads across <strong>{rangeData.dayCount}</strong> day{rangeData.dayCount !== 1 ? "s" : ""} ({rangeData.periodFrom} → {rangeData.periodTo})
@@ -978,23 +992,21 @@ export default function PmixDashboardPage() {
             <div className="flex flex-col gap-2">
                 {/* Date picker + upload */}
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Label className="text-xs text-muted-foreground shrink-0">Sale Date</Label>
                         <Input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)}
-                            className="h-9 rounded-xl w-40 text-sm" />
+                            className="h-10 rounded-xl flex-1 sm:w-40 sm:flex-none text-sm" />
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                        <Button variant="outline" className="h-9 rounded-xl gap-1.5 flex-1 sm:flex-none"
-                            onClick={() => document.getElementById("pmix-file-input")?.click()}
-                            disabled={uploading}>
-                            {uploading
-                                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</>
-                                : <><Upload className="w-3.5 h-3.5" /> Upload Report</>
-                            }
-                        </Button>
-                        <input id="pmix-file-input" type="file" accept=".xlsx,.xls,.csv" className="hidden"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.target.value = ""; } }} />
-                    </div>
+                    <Button variant="outline" className="h-10 rounded-xl gap-1.5 w-full sm:w-auto"
+                        onClick={() => document.getElementById("pmix-file-input")?.click()}
+                        disabled={uploading}>
+                        {uploading
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
+                            : <><Upload className="w-4 h-4" /> Upload Report</>
+                        }
+                    </Button>
+                    <input id="pmix-file-input" type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.target.value = ""; } }} />
                 </div>
 
                 {/* Selector row */}
@@ -2962,15 +2974,15 @@ export default function PmixDashboardPage() {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1.5">
-                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Protein</div>
-                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Total Orders</div>
-                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Avg/Day</div>
+                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 sm:gap-x-4 gap-y-1.5">
+                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">Protein</div>
+                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Orders</div>
+                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Avg/Day</div>
                                             {rangeData.proteinTotals.map((p, i) => (
                                                 <div key={i} className="contents">
-                                                    <div className="text-sm py-1">{p.proteinType}</div>
-                                                    <div className="text-sm font-bold text-teal-600 text-right py-1">{p.qty.toLocaleString()}</div>
-                                                    <div className="text-xs text-muted-foreground text-right py-1">{p.avgQtyPerDay}</div>
+                                                    <div className="text-xs sm:text-sm py-1 truncate">{p.proteinType}</div>
+                                                    <div className="text-xs sm:text-sm font-bold text-teal-600 text-right py-1 tabular-nums">{p.qty.toLocaleString()}</div>
+                                                    <div className="text-[11px] sm:text-xs text-muted-foreground text-right py-1 tabular-nums">{p.avgQtyPerDay}</div>
                                                 </div>
                                             ))}
                                         </div>

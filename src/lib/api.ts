@@ -245,15 +245,17 @@ export const pmixApi = {
         portionSize: number;
         portionUnit: string;
         scope:       "main" | "extra" | "both";
+        createMissingIngredients?: boolean;
     }) => apiFetch<{
-        created:            number;
-        createdDetails:     { ingredientName: string; itemName: string }[];
-        skippedExisting:    number;
-        skippedDetails:     string[];
-        missingIngredients: string[];
-        portionSize:        number;
-        portionUnit:        string;
-        message?:           string;
+        created:             number;
+        createdDetails:      { ingredientName: string; itemName: string }[];
+        ingredientsCreated?: string[];
+        skippedExisting:     number;
+        skippedDetails:      string[];
+        missingIngredients:  string[];
+        portionSize:         number;
+        portionUnit:         string;
+        message?:            string;
     }>("/pmix/auto-fill-portions", { method: "POST", body: JSON.stringify(data) }),
 };
 

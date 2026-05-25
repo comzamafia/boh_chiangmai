@@ -11,7 +11,15 @@
  *   portionSize: number,        // default 6
  *   portionUnit: string,        // default "oz"
  *   scope:       "main" | "extra" | "both"   // default "main"
+ *   createMissingIngredients?: boolean       // default false
  * }
+ *
+ * Ingredient matching strategy (in order):
+ *   1. Exact name match
+ *   2. Strip "Extra " prefix → exact match
+ *   3. Partial match: protein name is contained in ingredient name (e.g. "Chicken" → "Chicken Breast")
+ *   4. Reverse partial: ingredient name contained in protein name
+ *   5. If createMissingIngredients=true → create a placeholder ingredient
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -30,6 +38,7 @@ export async function POST(req: NextRequest) {
     const portionSize = Number(body.portionSize ?? 6);
     const portionUnit = (body.portionUnit ?? "oz") as string;
     const scope       = (body.scope ?? "main") as "main" | "extra" | "both";
+    const createMissingIngredients = body.createMissingIngredients === true;
 
     if (!uploadId)          return NextResponse.json({ error: "uploadId is required" }, { status: 400 });
     if (!(portionSize > 0)) return NextResponse.json({ error: "portionSize must be > 0" }, { status: 400 });
@@ -85,17 +94,79 @@ export async function POST(req: NextRequest) {
         existing.map(e => `${e.ingredientId}|${e.itemName.toLowerCase().trim()}`)
     );
 
+    // Helper: find an ingredient by name with progressive fallbacks
+    function findIngredient(proteinName: string): { id: string; name: string } | null {
+        const norm  = proteinName.toLowerCase().trim();
+        // 1. Exact
+        const exact = ingByName.get(norm);
+        if (exact) return exact;
+        // 2. Strip "Extra " prefix
+        if (norm.startsWith("extra ")) {
+            const stripped = ingByName.get(norm.replace(/^extra\s+/, ""));
+            if (stripped) return stripped;
+        }
+        // 3. Partial: protein name appears as a whole word in an ingredient name
+        const tokens = norm.split(/\s+/).filter(t => t.length > 2);
+        for (const ing of ingredients) {
+            const ingNorm = ing.name.toLowerCase();
+            if (ingNorm.includes(norm)) return ing;
+            // 4. Reverse partial: ingredient name appears in protein name
+            if (norm.includes(ingNorm) && ingNorm.length > 2) return ing;
+            // 5. Token match: any meaningful token shared
+            for (const t of tokens) {
+                if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(ingNorm)) {
+                    return ing;
+                }
+            }
+        }
+        return null;
+    }
+
+    // For auto-create: need a default supplier
+    let defaultSupplierId: string | null = null;
+    if (createMissingIngredients) {
+        const anySupplier = await prisma.supplier.findFirst({ select: { id: true } });
+        defaultSupplierId = anySupplier?.id ?? null;
+    }
+
     // 4. For each protein name, try to find ingredient + create standard
     const created:           { ingredientName: string; itemName: string }[] = [];
+    const ingredientsCreated: string[] = [];
     const skippedExisting:   string[] = [];
     const missingIngredients: string[] = [];
 
     for (const proteinName of proteinNames) {
-        const ingMatch = ingByName.get(proteinName.toLowerCase().trim())
-            // Try without "Extra " prefix for extras
-            ?? (proteinName.toLowerCase().startsWith("extra ")
-                ? ingByName.get(proteinName.toLowerCase().trim().replace(/^extra\s+/, ""))
-                : undefined);
+        let ingMatch = findIngredient(proteinName);
+
+        // Auto-create ingredient if requested and not found
+        if (!ingMatch && createMissingIngredients && defaultSupplierId) {
+            const newIng = await prisma.ingredient.create({
+                data: {
+                    name:           proteinName,
+                    supplierId:     defaultSupplierId,
+                    purchaseUnit:   "kg",
+                    purchasePrice:  0,
+                    recipeUnit:     portionUnit,   // use the same unit as the portion (e.g. "oz")
+                    yieldPercent:   100,
+                    conversionRate: 1,
+                    groupId:        "Weight",
+                },
+                select: { id: true, name: true },
+            });
+            ingMatch = newIng;
+            ingredientsCreated.push(newIng.name);
+            // Keep our in-memory lookup current for subsequent loop iterations
+            ingredients.push(newIng);
+            ingByName.set(newIng.name.toLowerCase().trim(), newIng);
+            logAudit({
+                session,
+                action:      "CREATE",
+                targetTable: "Ingredient",
+                targetId:    newIng.id,
+                targetName:  `${newIng.name} (placeholder via PMIX auto-fill)`,
+                newValues:   { name: newIng.name, supplierId: defaultSupplierId },
+            });
+        }
 
         if (!ingMatch) {
             missingIngredients.push(proteinName);
@@ -120,6 +191,7 @@ export async function POST(req: NextRequest) {
         });
 
         created.push({ ingredientName: row.ingredient.name, itemName: row.itemName });
+        existingKeys.add(key);
 
         logAudit({
             session,
@@ -132,10 +204,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-        created:            created.length,
-        createdDetails:     created,
-        skippedExisting:    skippedExisting.length,
-        skippedDetails:     skippedExisting,
+        created:             created.length,
+        createdDetails:      created,
+        ingredientsCreated,
+        skippedExisting:     skippedExisting.length,
+        skippedDetails:      skippedExisting,
         missingIngredients,
         portionSize,
         portionUnit,

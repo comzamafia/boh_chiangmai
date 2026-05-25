@@ -323,6 +323,7 @@ export default function PmixDashboardPage() {
     const [autoFilling,    setAutoFilling]    = useState(false);
     const [autoFillResult, setAutoFillResult] = useState<{
         created: number; skipped: number; missing: string[]; portionSize: number; portionUnit: string;
+        ingredientsCreated: string[];
     } | null>(null);
 
     // Sync dialog state
@@ -399,7 +400,7 @@ export default function PmixDashboardPage() {
     }, [selectedId, activeTab]);
 
     // ── Auto-fill Portion Standards for every detected protein ──
-    async function handleAutoFillPortions(scope: "main" | "extra" | "both") {
+    async function handleAutoFillPortions(scope: "main" | "extra" | "both", createMissing: boolean) {
         if (!selectedId) return;
         const proteinCount = scope === "main"
             ? (ingSum?.mainProtein.byType.length ?? 0)
@@ -408,7 +409,9 @@ export default function PmixDashboardPage() {
                 : (ingSum?.mainProtein.byType.length ?? 0) + (ingSum?.extraProtein.byType.length ?? 0);
         const ok = confirm(
             `Auto-create Portion Standards (6 oz) for ${proteinCount} detected ${scope === "both" ? "protein/add-on" : scope === "main" ? "main protein" : "extra add-on"} types?\n\n` +
-            `Each will be matched to an existing Ingredient by name. Proteins with no matching ingredient will be skipped.`
+            (createMissing
+                ? `Proteins with no matching ingredient will be created as placeholder ingredients (you can edit them later in /ingredients).`
+                : `Each will be matched to an existing Ingredient by name (partial match supported). Unmatched proteins will be listed for review.`)
         );
         if (!ok) return;
         setAutoFilling(true);
@@ -419,13 +422,15 @@ export default function PmixDashboardPage() {
                 portionSize: 6,
                 portionUnit: "oz",
                 scope,
+                createMissingIngredients: createMissing,
             });
             setAutoFillResult({
-                created:     r.created,
-                skipped:     r.skippedExisting,
-                missing:     r.missingIngredients,
-                portionSize: r.portionSize,
-                portionUnit: r.portionUnit,
+                created:            r.created,
+                skipped:            r.skippedExisting,
+                missing:            r.missingIngredients,
+                portionSize:        r.portionSize,
+                portionUnit:        r.portionUnit,
+                ingredientsCreated: r.ingredientsCreated ?? [],
             });
             // Refresh summary so Total We Use column repopulates
             const fresh = await pmixApi.ingredientSummary(selectedId);
@@ -2082,15 +2087,26 @@ export default function PmixDashboardPage() {
                             </p>
                         </div>
                         {ingSum && ingSum.hasProteinData && (
-                            <Button size="sm" variant="outline"
-                                disabled={autoFilling}
-                                onClick={() => handleAutoFillPortions("both")}
-                                className="gap-1.5 rounded-xl h-8 text-xs border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30">
-                                {autoFilling
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <Zap className="w-3.5 h-3.5" />}
-                                Auto-fill 6 oz standards
-                            </Button>
+                            <>
+                                <Button size="sm" variant="outline"
+                                    disabled={autoFilling}
+                                    onClick={() => handleAutoFillPortions("both", false)}
+                                    className="gap-1.5 rounded-xl h-8 text-xs border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30">
+                                    {autoFilling
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Zap className="w-3.5 h-3.5" />}
+                                    Auto-fill 6 oz (match only)
+                                </Button>
+                                <Button size="sm"
+                                    disabled={autoFilling}
+                                    onClick={() => handleAutoFillPortions("both", true)}
+                                    className="gap-1.5 rounded-xl h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white">
+                                    {autoFilling
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Plus className="w-3.5 h-3.5" />}
+                                    Auto-fill + create missing
+                                </Button>
+                            </>
                         )}
                         {ingSum && (
                             <Button size="sm" variant="outline" className="gap-1.5 rounded-xl h-8 text-xs"
@@ -2116,10 +2132,20 @@ export default function PmixDashboardPage() {
                                                 : "No new Portion Standards created"}
                                         </p>
                                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
-                                            <span><strong className="text-teal-700 dark:text-teal-300">{autoFillResult.created}</strong> created</span>
+                                            <span><strong className="text-teal-700 dark:text-teal-300">{autoFillResult.created}</strong> standards created</span>
                                             <span><strong className="text-foreground">{autoFillResult.skipped}</strong> already existed</span>
-                                            <span><strong className="text-amber-700 dark:text-amber-400">{autoFillResult.missing.length}</strong> missing ingredients</span>
+                                            {autoFillResult.ingredientsCreated.length > 0 && (
+                                                <span><strong className="text-emerald-700 dark:text-emerald-400">{autoFillResult.ingredientsCreated.length}</strong> placeholder ingredients created</span>
+                                            )}
+                                            <span><strong className="text-amber-700 dark:text-amber-400">{autoFillResult.missing.length}</strong> still missing</span>
                                         </div>
+                                        {autoFillResult.ingredientsCreated.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {autoFillResult.ingredientsCreated.map(n => (
+                                                    <Badge key={n} variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:text-emerald-300">+{n}</Badge>
+                                                ))}
+                                            </div>
+                                        )}
                                         {autoFillResult.missing.length > 0 && (
                                             <div className="mt-2.5">
                                                 <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">

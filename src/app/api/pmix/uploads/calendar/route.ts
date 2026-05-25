@@ -1,5 +1,5 @@
 /**
- * GET /api/pmix/uploads/calendar?month=YYYY-MM
+ * GET /api/pmix/uploads/calendar?month=YYYY-MM (v1)
  *
  * Returns all uploads for the given month (or all-time if no month given).
  * Used to render dots on the calendar UI.

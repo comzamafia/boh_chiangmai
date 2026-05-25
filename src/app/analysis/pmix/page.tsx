@@ -2964,30 +2964,116 @@ export default function PmixDashboardPage() {
                                 </Card>
                             </div>
 
-                            {/* Protein totals */}
-                            {rangeData.proteinTotals.length > 0 && (
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <Beef className="w-4 h-4 text-teal-500" />
-                                            Main Protein Usage ({rangeData.dayCount}-day total)
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 sm:gap-x-4 gap-y-1.5">
-                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">Protein</div>
-                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Orders</div>
-                                            <div className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">Avg/Day</div>
-                                            {rangeData.proteinTotals.map((p, i) => (
-                                                <div key={i} className="contents">
-                                                    <div className="text-xs sm:text-sm py-1 truncate">{p.proteinType}</div>
-                                                    <div className="text-xs sm:text-sm font-bold text-teal-600 text-right py-1 tabular-nums">{p.qty.toLocaleString()}</div>
-                                                    <div className="text-[11px] sm:text-xs text-muted-foreground text-right py-1 tabular-nums">{p.avgQtyPerDay}</div>
+                            {/* Ingredient Use Summary — Range-aware */}
+                            {rangeData.ingredientSummary?.hasProteinData && (
+                                <>
+                                    {/* Main Protein totals */}
+                                    {rangeData.ingredientSummary.mainProtein.byType.length > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Beef className="w-4 h-4 text-teal-500" />
+                                                    Main Protein Usage ({rangeData.dayCount}-day total)
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Protein</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Total We Use</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">%</div>
+                                                    {rangeData.ingredientSummary.mainProtein.byType.map((p, i) => {
+                                                        const pct = rangeData.ingredientSummary!.mainProtein.total > 0
+                                                            ? (p.qty / rangeData.ingredientSummary!.mainProtein.total) * 100
+                                                            : 0;
+                                                        return (
+                                                            <div key={i} className="contents">
+                                                                <div className="py-1 truncate">{p.proteinType}</div>
+                                                                <div className="font-bold text-teal-600 text-right py-1 tabular-nums">{p.qty.toLocaleString()}</div>
+                                                                <div className="text-muted-foreground text-right py-1 tabular-nums">{p.avgQtyPerDay}</div>
+                                                                <div className="text-right py-1 tabular-nums">
+                                                                    {p.totalUsed !== null
+                                                                        ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
+                                                                        : <span className="text-muted-foreground italic">No std</span>}
+                                                                </div>
+                                                                <div className="text-muted-foreground text-right py-1 tabular-nums text-[11px]">{pct.toFixed(1)}%</div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-teal-600 text-right tabular-nums">{rangeData.ingredientSummary.mainProtein.total.toLocaleString()}</div>
+                                                    <div className="border-t border-border pt-2 mt-1" />
+                                                    <div className="border-t border-border pt-2 mt-1" />
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    {/* Extra Add-on totals */}
+                                    {rangeData.ingredientSummary.extraProtein.byType.length > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Plus className="w-4 h-4 text-orange-500" />
+                                                    Extra Add-ons ({rangeData.dayCount}-day total)
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Add-on</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Total We Use</div>
+                                                    {rangeData.ingredientSummary.extraProtein.byType.map((p, i) => (
+                                                        <div key={i} className="contents">
+                                                            <div className="py-1 truncate">{p.proteinType}</div>
+                                                            <div className="font-bold text-orange-600 text-right py-1 tabular-nums">{p.qty.toLocaleString()}</div>
+                                                            <div className="text-muted-foreground text-right py-1 tabular-nums">{p.avgQtyPerDay}</div>
+                                                            <div className="text-right py-1 tabular-nums">
+                                                                {p.totalUsed !== null
+                                                                    ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
+                                                                    : <span className="text-muted-foreground italic">No std</span>}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    {/* By-Dish breakdown */}
+                                    {rangeData.ingredientSummary.mainProtein.byDish.length > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <UtensilsCrossed className="w-4 h-4 text-indigo-500" />
+                                                    Main Protein by Dish (top 30)
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="space-y-1 max-h-96 overflow-y-auto">
+                                                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 text-[10px] font-semibold uppercase text-muted-foreground sticky top-0 bg-card py-1">
+                                                        <div>Dish</div>
+                                                        <div className="text-right">Protein</div>
+                                                        <div className="text-right">Qty</div>
+                                                    </div>
+                                                    {rangeData.ingredientSummary.mainProtein.byDish.slice(0, 30).map((d, i) => (
+                                                        <div key={i} className="grid grid-cols-[1fr_auto_auto] gap-x-3 text-xs py-1 border-b border-border/40">
+                                                            <div className="truncate">
+                                                                <span className="text-muted-foreground text-[10px] mr-1">{d.category}</span>
+                                                                {d.dish}
+                                                            </div>
+                                                            <div className="text-right text-muted-foreground">{d.proteinType}</div>
+                                                            <div className="text-right font-semibold tabular-nums">{d.qty}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </>
                             )}
                         </>
                     )}

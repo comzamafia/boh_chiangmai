@@ -620,7 +620,28 @@ export interface PmixRangeResult {
     topItems:          PmixRangeTopItem[];
     categoryBreakdown: { category: string; qtySold: number; netSales: string }[];
     dailyTrend:        PmixRangeDailyTrend[];
-    proteinTotals:     { proteinType: string; qty: number; avgQtyPerDay: number }[];
+    proteinTotals: {
+        proteinType:    string;
+        qty:            number;
+        avgQtyPerDay:   number;
+        totalUsed:      number | null;
+        portionSize:    number | null;
+        portionUnit:    string | null;
+        ingredientName: string | null;
+    }[];
+    ingredientSummary?: {
+        mainProtein:  {
+            byType: PmixRangeResult["proteinTotals"];
+            byDish: { category: string; dish: string; proteinType: string; qty: number }[];
+            total:  number;
+        };
+        extraProtein: {
+            byType: PmixRangeResult["proteinTotals"];
+            byDish: { category: string; dish: string; proteinType: string; qty: number }[];
+            total:  number;
+        };
+        hasProteinData: boolean;
+    };
     message?:          string;
 }
 

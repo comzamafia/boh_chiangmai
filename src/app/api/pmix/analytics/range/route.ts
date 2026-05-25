@@ -72,6 +72,11 @@ export async function GET(req: NextRequest) {
                 avgSalesPerDay: 0, avgQtyPerDay: 0,
             },
             topItems: [], categoryBreakdown: [], dailyTrend: [], proteinTotals: [],
+            ingredientSummary: {
+                mainProtein:  { byType: [], byDish: [], total: 0 },
+                extraProtein: { byType: [], byDish: [], total: 0 },
+                hasProteinData: false,
+            },
             message: "No uploads found in this date range",
         });
     }
@@ -160,25 +165,83 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(d => ({ ...d, netSales: +d.netSales.toFixed(2) }));
 
-    // 6. Protein totals from modifiers
-    const proteinMap = new Map<string, { proteinType: string; qty: number }>();
+    // 6. Protein totals from modifiers (main + extras + by-dish)
+    const mainByType  = new Map<string, number>();
+    const extraByType = new Map<string, number>();
+    const mainByDish  = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    const extraByDish = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+
     for (const item of items) {
+        const dishName = item.itemName as string;
+        const category = (item.category as string) ?? "";
         for (const mod of item.modifiers) {
             const grp  = (mod.modifierGroup ?? "").toLowerCase();
             const name = (mod.modifier ?? "").trim();
             const qty  = Number(mod.qtySold ?? 0);
+            if (!name) continue;
             const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
             const isMain  = grp.includes("protein") && !isExtra;
+            const dishKey = `${dishName}|||${name}`;
+
             if (isMain) {
-                const ex = proteinMap.get(name) ?? { proteinType: name, qty: 0 };
-                ex.qty += qty;
-                proteinMap.set(name, ex);
+                mainByType.set(name, (mainByType.get(name) ?? 0) + qty);
+                const ex = mainByDish.get(dishKey);
+                if (ex) ex.qty += qty;
+                else    mainByDish.set(dishKey, { category, dish: dishName, proteinType: name, qty });
+            } else if (isExtra) {
+                extraByType.set(name, (extraByType.get(name) ?? 0) + qty);
+                const ex = extraByDish.get(dishKey);
+                if (ex) ex.qty += qty;
+                else    extraByDish.set(dishKey, { category, dish: dishName, proteinType: name, qty });
             }
         }
     }
-    const proteinTotals = [...proteinMap.values()]
-        .sort((a, b) => b.qty - a.qty)
-        .map(p => ({ ...p, avgQtyPerDay: dayCount > 0 ? +(p.qty / dayCount).toFixed(1) : 0 }));
+
+    // Load portion standards for totalUsed = qty × portionSize
+    const allProteinNames = [...mainByType.keys(), ...extraByType.keys()];
+    const standards = await db.portionStandard.findMany({
+        where: { type: { in: ["modifier", "base"] } },
+        include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
+    });
+    const stdByName = new Map<string, { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string }>();
+    for (const s of standards) {
+        stdByName.set(String(s.itemName).toLowerCase().trim(), {
+            portionSize:    Number(s.portionSize),
+            portionUnit:    s.portionUnit,
+            ingredientName: s.ingredient?.name ?? s.itemName,
+            ingredientId:   s.ingredientId,
+        });
+    }
+    function withPortion(proteinType: string, qty: number) {
+        const std = stdByName.get(proteinType.toLowerCase().trim());
+        const avg = dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0;
+        if (!std) return { proteinType, qty, avgQtyPerDay: avg, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null };
+        return {
+            proteinType, qty, avgQtyPerDay: avg,
+            totalUsed:      qty * std.portionSize,
+            portionSize:    std.portionSize,
+            portionUnit:    std.portionUnit,
+            ingredientName: std.ingredientName,
+        };
+    }
+    void allProteinNames;
+
+    const proteinTotals = [...mainByType.entries()]
+        .map(([name, qty]) => withPortion(name, qty))
+        .sort((a, b) => b.qty - a.qty);
+    const extraTotals   = [...extraByType.entries()]
+        .map(([name, qty]) => withPortion(name, qty))
+        .sort((a, b) => b.qty - a.qty);
+
+    const sortByDish = (a: { category: string; dish: string; qty: number }, b: { category: string; dish: string; qty: number }) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category);
+        if (a.dish     !== b.dish)     return a.dish.localeCompare(b.dish);
+        return b.qty - a.qty;
+    };
+    const mainProteinByDish  = [...mainByDish.values()].sort(sortByDish);
+    const extraProteinByDish = [...extraByDish.values()].sort(sortByDish);
+    const mainTotal  = proteinTotals.reduce((s, p) => s + p.qty, 0);
+    const extraTotal = extraTotals.reduce((s, p) => s + p.qty, 0);
 
     // 7. Overall totals
     const totalQty         = [...itemMap.values()].reduce((s, i) => s + i.qtySold, 0);
@@ -208,5 +271,11 @@ export async function GET(req: NextRequest) {
         categoryBreakdown,
         dailyTrend,
         proteinTotals,
+        // Extended ingredient summary (CR 2.2/2.3 range-aware)
+        ingredientSummary: {
+            mainProtein:  { byType: proteinTotals, byDish: mainProteinByDish,  total: mainTotal },
+            extraProtein: { byType: extraTotals,   byDish: extraProteinByDish, total: extraTotal },
+            hasProteinData: proteinTotals.length > 0 || extraTotals.length > 0,
+        },
     });
 }

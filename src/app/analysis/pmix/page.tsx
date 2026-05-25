@@ -2869,7 +2869,7 @@ export default function PmixDashboardPage() {
                                                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} width={55} />
                                                 <Tooltip
                                                     formatter={(v: number | undefined) => [`$${(v ?? 0).toLocaleString("en-CA", { minimumFractionDigits: 2 })}`, "Net Sales"]}
-                                                    labelFormatter={(l: string) => l}
+                                                    labelFormatter={(l) => String(l ?? "")}
                                                     contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", fontSize: 12 }} />
                                                 <Area dataKey="netSales" stroke="#10b981" fill="url(#rangeGrad)" strokeWidth={2} dot={{ r: 3, fill: "#10b981" }} />
                                             </AreaChart>

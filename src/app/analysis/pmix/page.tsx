@@ -2842,10 +2842,10 @@ export default function PmixDashboardPage() {
                         <>
                             {/* KPI row */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <KpiCard label="Days" value={rangeData.dayCount} sub={`${rangeData.periodFrom} → ${rangeData.periodTo}`} icon={CalendarDays} />
-                                <KpiCard label="Total Net Sales" value={`$${Number(rangeData.totals.netSales).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`Avg $${rangeData.totals.avgSalesPerDay.toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/day`} icon={TrendingUp} valueClass="text-emerald-600" />
-                                <KpiCard label="Total Items Sold" value={rangeData.totals.qty.toLocaleString()} sub={`Avg ${rangeData.totals.avgQtyPerDay}/day`} icon={ShoppingBag} />
-                                <KpiCard label="Refunds" value={`$${Number(rangeData.totals.refundAmount).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`${rangeData.totals.refundQty} items`} icon={RotateCcw} valueClass="text-rose-500" />
+                                <KpiCard label="Days" value={rangeData.dayCount ?? 0} sub={`${rangeData.periodFrom} → ${rangeData.periodTo}`} icon={CalendarDays} />
+                                <KpiCard label="Total Net Sales" value={`$${Number(rangeData.totals?.netSales ?? 0).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`Avg $${Number(rangeData.totals?.avgSalesPerDay ?? 0).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/day`} icon={TrendingUp} valueClass="text-emerald-600" />
+                                <KpiCard label="Total Items Sold" value={(rangeData.totals?.qty ?? 0).toLocaleString()} sub={`Avg ${rangeData.totals?.avgQtyPerDay ?? 0}/day`} icon={ShoppingBag} />
+                                <KpiCard label="Refunds" value={`$${Number(rangeData.totals?.refundAmount ?? 0).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} sub={`${rangeData.totals?.refundQty ?? 0} items`} icon={RotateCcw} valueClass="text-rose-500" />
                             </div>
 
                             {/* Daily trend chart */}

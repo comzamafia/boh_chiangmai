@@ -64,8 +64,13 @@ export async function GET(req: NextRequest) {
 
     if (uploads.length === 0) {
         return NextResponse.json({
-            uploadIds: [], dayCount: 0, periodFrom: fromStr, periodTo: toStr,
-            totals: { qty: 0, sales: "0.00", refundQty: 0, refundAmount: "0.00", netSales: "0.00" },
+            uploadIds: [], dayCount: 0, uploadCount: 0,
+            periodFrom: fromStr, periodTo: toStr,
+            totals: {
+                qty: 0, grossSales: "0.00", netSales: "0.00",
+                refundQty: 0, refundAmount: "0.00",
+                avgSalesPerDay: 0, avgQtyPerDay: 0,
+            },
             topItems: [], categoryBreakdown: [], dailyTrend: [], proteinTotals: [],
             message: "No uploads found in this date range",
         });

@@ -1,5 +1,5 @@
 /**
- * POST /api/pmix/auto-fill-portions
+ * POST /api/pmix/auto-fill-portions (v2)
  *
  * Bulk-creates Portion Standards for all protein modifiers detected in a
  * PMIX upload. Each modifier name (e.g. "Chicken", "Beef") is matched to an

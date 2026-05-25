@@ -2112,27 +2112,34 @@ export default function PmixDashboardPage() {
                                                 </CardTitle>
                                             </CardHeader>
                                             <CardContent className="px-5 pb-4">
-                                                <div className="space-y-2">
+                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protein Type</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
+
                                                     {ingSum.mainProtein.byType.map(row => {
                                                         const pct = ingSum.mainProtein.total > 0
                                                             ? Math.round((row.qty / ingSum.mainProtein.total) * 100)
                                                             : 0;
+                                                        const max = ingSum.mainProtein.byType[0]?.qty ?? 1;
                                                         return (
-                                                            <div key={row.proteinType}>
-                                                                <div className="flex justify-between text-sm mb-1">
-                                                                    <span className="font-medium truncate">{row.proteinType}</span>
-                                                                    <span className="tabular-nums text-muted-foreground ml-2 shrink-0">
-                                                                        {fmtN(row.qty)} <span className="text-xs">({pct}%)</span>
-                                                                    </span>
+                                                            <div key={row.proteinType} className="contents">
+                                                                <div className="font-medium truncate flex items-center gap-2">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-teal-600 shrink-0" />
+                                                                    <span className="truncate">{row.proteinType}</span>
                                                                 </div>
-                                                                <ProgressBar value={row.qty} max={ingSum.mainProtein.byType[0].qty} color="#0d9488" />
+                                                                <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 text-right">{fmtN(row.qty)}</div>
+                                                                <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
+                                                                <div className="col-span-3 -mt-1">
+                                                                    <ProgressBar value={row.qty} max={max} color="#0d9488" />
+                                                                </div>
                                                             </div>
                                                         );
                                                     })}
-                                                    <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
-                                                        <span>TOTAL</span>
-                                                        <span className="tabular-nums">{fmtN(ingSum.mainProtein.total)}</span>
-                                                    </div>
+
+                                                    <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
+                                                    <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.mainProtein.total)}</div>
+                                                    <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -2149,19 +2156,22 @@ export default function PmixDashboardPage() {
                                                 {ingSum.extraProtein.byType.length === 0 ? (
                                                     <p className="text-sm text-muted-foreground italic">No extra add-ons found</p>
                                                 ) : (
-                                                    <div className="space-y-2">
+                                                    <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Add-on</div>
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
                                                         {ingSum.extraProtein.byType.map(row => (
-                                                            <div key={row.proteinType} className="flex justify-between text-sm">
-                                                                <span className="font-medium truncate">{row.proteinType}</span>
-                                                                <span className="tabular-nums font-bold text-violet-600 dark:text-violet-400 shrink-0 ml-2">{fmtN(row.qty)}</span>
+                                                            <div key={row.proteinType} className="contents">
+                                                                <div className="font-medium truncate flex items-center gap-2">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-violet-600 shrink-0" />
+                                                                    <span className="truncate">{row.proteinType}</span>
+                                                                </div>
+                                                                <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 text-right">{fmtN(row.qty)}</div>
                                                             </div>
                                                         ))}
-                                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
-                                                            <span>TOTAL</span>
-                                                            <span className="tabular-nums">{fmtN(ingSum.extraProtein.total)}</span>
-                                                        </div>
+                                                        <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
+                                                        <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.extraProtein.total)}</div>
                                                         <button
-                                                            className="text-xs text-violet-600 dark:text-violet-400 underline mt-1"
+                                                            className="col-span-2 text-xs text-violet-600 dark:text-violet-400 underline mt-1 text-left"
                                                             onClick={() => setIngCatFilter("extra")}
                                                         >
                                                             View extra detail →
@@ -2241,27 +2251,34 @@ export default function PmixDashboardPage() {
                                                 {ingSum.extraProtein.byType.length === 0 ? (
                                                     <p className="text-sm text-muted-foreground italic">No extra add-ons found in this upload.</p>
                                                 ) : (
-                                                    <div className="space-y-2">
+                                                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Add-on</div>
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
+                                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
+
                                                         {ingSum.extraProtein.byType.map(row => {
                                                             const pct = ingSum.extraProtein.total > 0
                                                                 ? Math.round((row.qty / ingSum.extraProtein.total) * 100)
                                                                 : 0;
+                                                            const max = ingSum.extraProtein.byType[0]?.qty ?? 1;
                                                             return (
-                                                                <div key={row.proteinType}>
-                                                                    <div className="flex justify-between text-sm mb-1">
-                                                                        <span className="font-medium truncate">{row.proteinType}</span>
-                                                                        <span className="tabular-nums text-muted-foreground ml-2 shrink-0">
-                                                                            {fmtN(row.qty)} <span className="text-xs">({pct}%)</span>
-                                                                        </span>
+                                                                <div key={row.proteinType} className="contents">
+                                                                    <div className="font-medium truncate flex items-center gap-2">
+                                                                        <span className="w-1.5 h-1.5 rounded-full bg-violet-600 shrink-0" />
+                                                                        <span className="truncate">{row.proteinType}</span>
                                                                     </div>
-                                                                    <ProgressBar value={row.qty} max={ingSum.extraProtein.byType[0].qty} color="#7c3aed" />
+                                                                    <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 text-right">{fmtN(row.qty)}</div>
+                                                                    <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
+                                                                    <div className="col-span-3 -mt-1">
+                                                                        <ProgressBar value={row.qty} max={max} color="#7c3aed" />
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         })}
-                                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-border mt-3">
-                                                            <span>TOTAL</span>
-                                                            <span className="tabular-nums">{fmtN(ingSum.extraProtein.total)}</span>
-                                                        </div>
+
+                                                        <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
+                                                        <div className="tabular-nums font-bold text-violet-700 dark:text-violet-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.extraProtein.total)}</div>
+                                                        <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
                                                     </div>
                                                 )}
                                             </CardContent>

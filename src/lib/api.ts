@@ -12,7 +12,11 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? `API error ${res.status}`);
+        const e   = err as { error?: string; details?: string; stage?: string };
+        // Prefer details if present (richer diagnostic from notifications/test)
+        const msg = e.details ?? e.error ?? `API error ${res.status}`;
+        const stage = e.stage ? ` [stage: ${e.stage}]` : "";
+        throw new Error(`${msg}${stage}`);
     }
     if (res.status === 204) return undefined as unknown as T;
     return res.json();

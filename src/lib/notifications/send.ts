@@ -117,10 +117,23 @@ export async function sendAlert(p: SendAlertParams): Promise<SendAlertResult> {
     };
 }
 
-/** Helper: build today's YYYY-MM-DD in Asia/Bangkok for dedupe keys. */
+/**
+ * Helper: build today's YYYY-MM-DD in the configured local zone for dedupe keys.
+ * Uses Intl.DateTimeFormat so DST is handled automatically. Defaults to
+ * America/Toronto; override via NOTIFY_TIMEZONE env var.
+ */
+export function localDateKey(d: Date = new Date()): string {
+    const tz = process.env.NOTIFY_TIMEZONE ?? "America/Toronto";
+    // en-CA returns YYYY-MM-DD by default for date-only format
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year:  "numeric",
+        month: "2-digit",
+        day:   "2-digit",
+    }).format(d);
+}
+
+/** @deprecated old name retained for callers; same as localDateKey */
 export function bkkDateKey(d: Date = new Date()): string {
-    // Asia/Bangkok = UTC+7, no DST
-    const utc = d.getTime() + d.getTimezoneOffset() * 60_000;
-    const bkk = new Date(utc + 7 * 3600_000);
-    return bkk.toISOString().slice(0, 10);
+    return localDateKey(d);
 }

@@ -1,7 +1,7 @@
 /**
  * Vercel Cron entry point — daily inventory digest.
  *
- * Schedule (configure in vercel.json):  0 1 * * *   (UTC) → 08:00 Asia/Bangkok
+ * Schedule (configure in vercel.json):  0 11 * * *   (UTC) → 07:00 America/Toronto (EDT) / 06:00 EST
  *
  * Auth: Vercel cron sets header `x-vercel-cron: 1`. We additionally accept
  *       a bearer CRON_SECRET so manual runs from `curl` are possible.

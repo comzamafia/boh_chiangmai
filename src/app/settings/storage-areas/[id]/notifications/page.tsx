@@ -216,7 +216,7 @@ export default function AreaNotificationsPage(props: { params: Promise<{ id: str
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <span className="text-xs text-muted-foreground">BKK</span>
+                                    <span className="text-xs text-muted-foreground">Toronto</span>
                                 </div>
                             )}
                         </div>

@@ -90,7 +90,7 @@ export default function AdminNotificationsPage() {
                         <Send className="h-5 w-5 text-amber-600" /> Run Digest Now
                     </CardTitle>
                     <CardDescription>
-                        Manually trigger a stock digest run. Automatic runs happen daily at 08:00 BKK and weekly on Monday.
+                        Manually trigger a stock digest run. Automatic runs fire daily at 07:00 Toronto time (EDT) and weekly on Monday.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

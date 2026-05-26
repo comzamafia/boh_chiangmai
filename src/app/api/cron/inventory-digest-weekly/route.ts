@@ -1,6 +1,6 @@
 /**
  * Vercel Cron — weekly inventory digest.
- * Schedule:  0 1 * * 1  (UTC) → Mon 08:00 Asia/Bangkok
+ * Schedule:  0 11 * * 1  (UTC) → Mon 07:00 America/Toronto (EDT) / 06:00 EST
  */
 import { NextRequest, NextResponse } from "next/server";
 import { runDailyDigest } from "@/lib/notifications/triggers/daily-digest";

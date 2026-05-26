@@ -94,10 +94,20 @@ export default function AreaNotificationsPage(props: { params: Promise<{ id: str
         setTesting(true);
         setTestMsg(null);
         try {
-            const res = await notificationsApi.sendTest({ storageAreaId: id, type });
-            setTestMsg(res.ok
-                ? `✓ Test ${type} email sent — check your inbox.`
-                : `✗ Failed: ${res.message ?? "unknown error"}`);
+            // Use raw fetch so we can read the JSON error body on non-2xx
+            const r = await fetch("/api/notifications/test", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ storageAreaId: id, type }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.ok === false) {
+                const stage   = data.stage   ? ` [stage: ${data.stage}]` : "";
+                const details = data.details ?? data.error ?? data.message ?? `HTTP ${r.status}`;
+                setTestMsg(`✗ ${details}${stage}`);
+            } else {
+                setTestMsg(`✓ Test ${type} email sent to ${data.to} (from ${data.from}) — check your inbox.`);
+            }
         } catch (e) {
             setTestMsg(`✗ ${e instanceof Error ? e.message : String(e)}`);
         } finally {

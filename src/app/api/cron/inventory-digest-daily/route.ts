@@ -1,0 +1,30 @@
+/**
+ * Vercel Cron entry point — daily inventory digest.
+ *
+ * Schedule (configure in vercel.json):  0 1 * * *   (UTC) → 08:00 Asia/Bangkok
+ *
+ * Auth: Vercel cron sets header `x-vercel-cron: 1`. We additionally accept
+ *       a bearer CRON_SECRET so manual runs from `curl` are possible.
+ */
+import { NextRequest, NextResponse } from "next/server";
+import { runDailyDigest } from "@/lib/notifications/triggers/daily-digest";
+
+export const maxDuration = 60;
+
+function authorize(req: NextRequest): boolean {
+    if (req.headers.get("x-vercel-cron")) return true;
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return true; // fall through if not configured (dev)
+    const auth = req.headers.get("authorization") ?? "";
+    return auth === `Bearer ${secret}`;
+}
+
+export async function GET(req: NextRequest) {
+    if (!authorize(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const summary = await runDailyDigest({ cadence: "daily" });
+    return NextResponse.json({ ok: true, cadence: "daily", ...summary });
+}
+
+export async function POST(req: NextRequest) {
+    return GET(req);
+}

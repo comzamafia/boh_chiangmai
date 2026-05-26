@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { fireCriticalStockCheck } from "@/lib/notifications/triggers/critical-stock";
 import { NextResponse } from "next/server";
 
 const SIGN: Record<string, number> = {
@@ -59,6 +60,13 @@ export async function POST(request: Request) {
         const qtyNum = Number(qty);
         const sign   = SIGN[type] ?? 0;
 
+        // Capture prev stock to detect critical-threshold crossing for notifications
+        const prevItem = await prisma.inventoryItem.findUnique({
+            where:  { id: inventoryItemId },
+            select: { currentStock: true },
+        });
+        const prevStock = prevItem ? Number(prevItem.currentStock) : undefined;
+
         const [txn] = await prisma.$transaction([
             prisma.inventoryTransaction.create({
                 data: {
@@ -97,6 +105,20 @@ export async function POST(request: Request) {
                 targetId: txn.id, targetName: ingName,
                 newValues: { ingredientId, qty: qtyNum, unit, reason, costPerUnit, date },
                 request,
+            });
+        }
+
+        // Fire-and-forget critical stock alert (only for stock-reducing txns)
+        if (type === "Out" || type === "Waste" || type === "Stocktake" || type === "Adjust") {
+            const ingName = txn.ingredient?.name ?? "ingredient";
+            const human =
+                type === "Stocktake"
+                    ? `Stocktake set stock to ${qtyNum}${unit ? ` ${unit}` : ""}`
+                    : `${type}: ${Math.abs(qtyNum)}${unit ? ` ${unit}` : ""} of ${ingName}${reason ? ` (${reason})` : ""}`;
+            fireCriticalStockCheck({
+                inventoryItemId,
+                triggeredBy: human,
+                prevStock,
             });
         }
 

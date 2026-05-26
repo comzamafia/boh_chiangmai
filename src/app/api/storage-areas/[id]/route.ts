@@ -13,7 +13,10 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const { name, temperature, isActive, sortOrder } = await req.json();
+    const body = await req.json();
+    const { name, temperature, isActive, sortOrder } = body;
+    // Notification routing fields (optional)
+    const { notifyEnabled, alertThreshold, digestSchedule, digestHourLocal, digestDayOfWeek } = body;
 
     try {
         const area = await prisma.storageArea.update({
@@ -23,6 +26,16 @@ export async function PUT(
                 ...(temperature !== undefined ? { temperature: temperature?.trim() || null } : {}),
                 ...(isActive !== undefined ? { isActive } : {}),
                 ...(sortOrder !== undefined ? { sortOrder } : {}),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(notifyEnabled   !== undefined ? { notifyEnabled }   : {}) as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(alertThreshold  !== undefined ? { alertThreshold }  : {}) as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(digestSchedule  !== undefined ? { digestSchedule }  : {}) as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(digestHourLocal !== undefined ? { digestHourLocal } : {}) as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(digestDayOfWeek !== undefined ? { digestDayOfWeek } : {}) as any,
             },
             include: { _count: { select: { ingredients: true } } },
         });

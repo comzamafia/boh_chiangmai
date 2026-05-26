@@ -147,9 +147,53 @@ export const storageAreasApi = {
     list: () => apiFetch<StorageArea[]>("/storage-areas"),
     create: (data: { name: string; temperature?: string; isActive?: boolean; sortOrder?: number }) =>
         apiFetch<StorageArea>("/storage-areas", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<Pick<StorageArea, "name" | "temperature" | "isActive" | "sortOrder">>) =>
+    update: (id: string, data: Partial<Pick<StorageArea,
+        "name" | "temperature" | "isActive" | "sortOrder" |
+        "notifyEnabled" | "alertThreshold" | "digestSchedule" | "digestHourLocal" | "digestDayOfWeek"
+    >>) =>
         apiFetch<StorageArea>(`/storage-areas/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/storage-areas/${id}`, { method: "DELETE" }),
+
+    // Watchers
+    listWatchers: (id: string) =>
+        apiFetch<StorageAreaWatcher[]>(`/storage-areas/${id}/watchers`),
+    addWatcher: (id: string, data: { userId: string; role?: "owner" | "watcher"; ccOnly?: boolean; alertThreshold?: string; digestSchedule?: string }) =>
+        apiFetch<StorageAreaWatcher>(`/storage-areas/${id}/watchers`, { method: "POST", body: JSON.stringify(data) }),
+    removeWatcher: (id: string, userId: string) =>
+        apiFetch<void>(`/storage-areas/${id}/watchers?userId=${encodeURIComponent(userId)}`, { method: "DELETE" }),
+};
+
+// ─── Users (lite — for watcher pickers) ──────────────────────────────────────
+export interface User {
+    id:          string;
+    name:        string;
+    email:       string;
+    role:        string;
+    department?: string | null;
+    isActive:    boolean;
+    permissions?: string[];
+    createdAt?:  string;
+}
+
+export const usersApi = {
+    list: () => apiFetch<User[]>("/users"),
+};
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+export const notificationsApi = {
+    list: (params?: { type?: string; storageAreaId?: string; status?: string; limit?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.type)          q.set("type",          params.type);
+        if (params?.storageAreaId) q.set("storageAreaId", params.storageAreaId);
+        if (params?.status)        q.set("status",        params.status);
+        if (params?.limit)         q.set("limit",         String(params.limit));
+        const qs = q.toString();
+        return apiFetch<NotificationLogEntry[]>(`/notifications${qs ? `?${qs}` : ""}`);
+    },
+    sendTest: (data: { storageAreaId: string; type: "digest" | "critical" }) =>
+        apiFetch<{ ok: boolean; message: string }>("/notifications/test", { method: "POST", body: JSON.stringify(data) }),
+    runDigestNow: (cadence: "daily" | "weekly" = "daily") =>
+        apiFetch<{ areasChecked: number; areasSent: number; totalItems: number; sent: number; skipped: number; failed: number }>(`/notifications/run-digest?cadence=${cadence}`, { method: "POST" }),
 };
 
 // ─── Ingredient Suppliers ─────────────────────────────────────────────────────
@@ -542,9 +586,42 @@ export interface StorageArea {
     temperature?: string | null;
     isActive:    boolean;
     sortOrder:   number;
+    // Notification routing
+    notifyEnabled?:   boolean;
+    alertThreshold?:  "critical" | "reorder" | "any";
+    digestSchedule?:  "off" | "realtime" | "daily" | "weekly";
+    digestHourLocal?: number;
+    digestDayOfWeek?: number | null;
     createdAt?:  string;
     updatedAt?:  string;
     _count?: { ingredients: number };
+}
+
+export interface StorageAreaWatcher {
+    id:             string;
+    storageAreaId:  string;
+    userId:         string;
+    user:           { id: string; name: string; email: string; role: string; department: string | null; isActive?: boolean };
+    role:           "owner" | "watcher";
+    alertThreshold: string | null;
+    digestSchedule: string | null;
+    ccOnly:         boolean;
+    createdAt?:     string;
+}
+
+export interface NotificationLogEntry {
+    id:             string;
+    type:           string;
+    storageAreaId:  string | null;
+    ingredientId:   string | null;
+    userId:         string | null;
+    email:          string;
+    subject:        string;
+    status:         "queued" | "sent" | "failed" | "skipped";
+    errorMsg:       string | null;
+    dedupeKey:      string;
+    sentAt:         string | null;
+    createdAt:      string;
 }
 
 export interface IngredientSupplier {

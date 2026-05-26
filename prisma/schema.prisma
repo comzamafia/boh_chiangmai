@@ -15,12 +15,14 @@ model User {
   permissions String[] // custom slug overrides; empty = use role defaults
   department  String?  // e.g. "Bar", "Kitchen", "Bakery", "Pastry"
   isActive    Boolean  @default(true)
+  notificationPrefs Json? // { quietHoursStart, quietHoursEnd, channels, digestOnly }
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   categoryPermissions       UserCategoryPermission[]
   recipeCategoryPermissions UserRecipeCategoryPermission[]
   auditLogs                 AuditLog[]
+  storageAreaWatchers       StorageAreaWatcher[]
 
   @@map("users")
 }
@@ -265,12 +267,58 @@ model StorageArea {
   temperature String?      // "Ambient" | "Chilled (2-5°C)" | "Frozen (-18°C)"
   isActive    Boolean      @default(true)
   sortOrder   Int          @default(0)
+
+  // ── Notification routing ──
+  notifyEnabled   Boolean  @default(true)
+  alertThreshold  String   @default("reorder") // "critical" | "reorder" | "any"
+  digestSchedule  String   @default("daily")   // "off" | "realtime" | "daily" | "weekly"
+  digestHourLocal Int      @default(8)         // 0-23 in Asia/Bangkok
+  digestDayOfWeek Int?     // 0-6 (Mon=1) for weekly digests
+
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   ingredients Ingredient[]
+  watchers    StorageAreaWatcher[]
 
   @@map("storage_areas")
+}
+
+model StorageAreaWatcher {
+  id             String      @id @default(cuid())
+  storageAreaId  String
+  storageArea    StorageArea @relation(fields: [storageAreaId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String      @default("watcher") // "owner" | "watcher"
+  alertThreshold String?     // null = inherit area
+  digestSchedule String?     // null = inherit area
+  ccOnly         Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+
+  @@unique([storageAreaId, userId])
+  @@index([userId])
+  @@map("storage_area_watchers")
+}
+
+model NotificationLog {
+  id            String   @id @default(cuid())
+  type          String   // "low_stock_digest" | "critical_stock" | "stocktake_due" | "waste_spike" | "price_alert"
+  storageAreaId String?
+  ingredientId  String?
+  userId        String?
+  email         String
+  subject       String
+  status        String   // "queued" | "sent" | "failed" | "skipped"
+  errorMsg      String?
+  dedupeKey     String   @unique
+  sentAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([storageAreaId])
+  @@index([userId])
+  @@map("notification_logs")
 }
 
 model IngredientSupplier {

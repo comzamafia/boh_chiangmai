@@ -19,8 +19,9 @@ import {
     Table, TableBody, TableCell, TableHead,
     TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Warehouse, Plus, Pencil, Trash2, Thermometer, Loader2, AlertCircle } from "lucide-react";
+import { Warehouse, Plus, Pencil, Trash2, Thermometer, Loader2, AlertCircle, Bell, BellOff } from "lucide-react";
 import { storageAreasApi, type StorageArea } from "@/lib/api";
+import Link from "next/link";
 
 const TEMPERATURES = [
     "Ambient (15-25°C)",
@@ -231,6 +232,17 @@ export default function StorageAreasPage() {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
+                                                <Link href={`/settings/storage-areas/${area.id}/notifications`}>
+                                                    <Button
+                                                        size="icon" variant="ghost"
+                                                        title={area.notifyEnabled === false ? "Notifications off" : "Notifications"}
+                                                        className={area.notifyEnabled === false ? "text-muted-foreground" : "text-amber-600 hover:text-amber-700"}
+                                                    >
+                                                        {area.notifyEnabled === false
+                                                            ? <BellOff className="w-4 h-4" />
+                                                            : <Bell    className="w-4 h-4" />}
+                                                    </Button>
+                                                </Link>
                                                 <Button size="icon" variant="ghost" onClick={() => openEdit(area)}>
                                                     <Pencil className="w-4 h-4" />
                                                 </Button>

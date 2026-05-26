@@ -65,6 +65,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "settings-ingredient-categories": "Settings: Ingredient Categories",
     "settings-portion-standards":     "Settings: Portion Standards",
     "pmix-dashboard": "PMIX Analytics Dashboard",
+    "admin-notifications": "Email Notifications Log",
 };
 
 interface UserRow {

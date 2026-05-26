@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -51,8 +52,9 @@ export default function AreaNotificationsPage(props: { params: Promise<{ id: str
     const [loading,  setLoading]  = useState(true);
     const [saving,   setSaving]   = useState(false);
     const [addOpen,  setAddOpen]  = useState(false);
-    const [testing,  setTesting]  = useState(false);
-    const [testMsg,  setTestMsg]  = useState<string | null>(null);
+    const [testing,    setTesting]    = useState(false);
+    const [testMsg,    setTestMsg]    = useState<string | null>(null);
+    const [overrideTo, setOverrideTo] = useState("");
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -95,10 +97,12 @@ export default function AreaNotificationsPage(props: { params: Promise<{ id: str
         setTestMsg(null);
         try {
             // Use raw fetch so we can read the JSON error body on non-2xx
+            const body: Record<string, unknown> = { storageAreaId: id, type };
+            if (overrideTo.trim()) body.overrideEmail = overrideTo.trim();
             const r = await fetch("/api/notifications/test", {
                 method:  "POST",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ storageAreaId: id, type }),
+                body:    JSON.stringify(body),
             });
             const data = await r.json().catch(() => ({}));
             if (!r.ok || data.ok === false) {
@@ -300,6 +304,21 @@ export default function AreaNotificationsPage(props: { params: Promise<{ id: str
                     <CardDescription>Preview templates by sending one to yourself.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">
+                            Send to (optional — leave blank to send to your account email)
+                        </Label>
+                        <Input
+                            type="email"
+                            placeholder="e.g. you@gmail.com"
+                            value={overrideTo}
+                            onChange={e => setOverrideTo(e.target.value)}
+                            className="h-9"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Using Resend sandbox? This must be the exact email you signed up to Resend with.
+                        </p>
+                    </div>
                     <div className="flex flex-col sm:flex-row gap-2">
                         <Button
                             variant="outline" className="flex-1"

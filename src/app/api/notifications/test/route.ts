@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized", stage }, { status: 401 });
 
         stage = "parse-body";
-        const { storageAreaId, type } = await req.json();
+        const { storageAreaId, type, overrideEmail } = await req.json();
         if (!storageAreaId || !["digest", "critical"].includes(type)) {
             return NextResponse.json({ error: "storageAreaId and valid type required", stage }, { status: 400 });
         }
@@ -52,6 +52,10 @@ export async function POST(req: NextRequest) {
         const user = await db.user.findUnique({ where: { id: session.userId } });
         if (!user) return NextResponse.json({ error: "User not found", stage }, { status: 404 });
 
+        // Allow overriding the recipient email for sandboxed Resend testing
+        const recipientEmail = (overrideEmail ?? user.email) as string;
+        const recipientName  = overrideEmail ? "Test recipient" : user.name;
+
         const dedupeKey = `test:${type}:${storageAreaId}:${session.userId}:${Date.now()}`;
 
         stage = "render-and-send";
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
                 dedupeKey,
                 subject: `📦 [TEST] ${area.name} — Daily Stock (1 critical, 2 to reorder)`,
                 storageAreaId,
-                recipients: [{ userId: user.id, email: user.email, name: user.name }],
+                recipients: [{ userId: user.id, email: recipientEmail, name: recipientName }],
                 react: React.createElement(DailyDigest, {
                     storageAreaName: area.name,
                     storageAreaId,
@@ -83,7 +87,7 @@ export async function POST(req: NextRequest) {
                 dedupeKey,
                 subject: `🔴 [TEST] Critical: Tiger Prawn 16/20 below safety stock in ${area.name}`,
                 storageAreaId,
-                recipients: [{ userId: user.id, email: user.email, name: user.name }],
+                recipients: [{ userId: user.id, email: recipientEmail, name: recipientName }],
                 react: React.createElement(CriticalStockAlert, {
                     storageAreaName: area.name,
                     storageAreaId,
@@ -105,7 +109,7 @@ export async function POST(req: NextRequest) {
             ok: res.sent > 0,
             ...res,
             from: FROM_EMAIL,
-            to:   user.email,
+            to:   recipientEmail,
             envIssues: envIssues.length ? envIssues : undefined,
         });
     } catch (e) {

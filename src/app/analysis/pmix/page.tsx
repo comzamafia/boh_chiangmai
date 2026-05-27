@@ -2557,10 +2557,11 @@ export default function PmixDashboardPage() {
                                                 </CardTitle>
                                             </CardHeader>
                                             <CardContent className="px-5 pb-4">
-                                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protein Type</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use (lb)</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
 
                                                     {ingSum.mainProtein.byType.map(row => {
@@ -2568,6 +2569,9 @@ export default function PmixDashboardPage() {
                                                             ? Math.round((row.qty / ingSum.mainProtein.total) * 100)
                                                             : 0;
                                                         const max = ingSum.mainProtein.byType[0]?.qty ?? 1;
+                                                        const lbValue = row.totalUsed !== null && row.portionUnit === "oz"
+                                                            ? (row.totalUsed / 16).toFixed(2)
+                                                            : null;
                                                         return (
                                                             <div key={row.proteinType} className="contents">
                                                                 <div className="font-medium truncate flex items-center gap-2 min-w-0">
@@ -2589,8 +2593,17 @@ export default function PmixDashboardPage() {
                                                                         <span className="text-xs text-muted-foreground italic">No standard</span>
                                                                     )}
                                                                 </div>
+                                                                <div className="text-right">
+                                                                    {lbValue !== null ? (
+                                                                        <div className="tabular-nums font-bold text-foreground">
+                                                                            {lbValue} <span className="text-xs font-medium text-muted-foreground">lb</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-muted-foreground">—</span>
+                                                                    )}
+                                                                </div>
                                                                 <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
-                                                                <div className="col-span-4 -mt-1">
+                                                                <div className="col-span-5 -mt-1">
                                                                     <ProgressBar value={row.qty} max={max} color="#0d9488" />
                                                                 </div>
                                                             </div>
@@ -2600,6 +2613,15 @@ export default function PmixDashboardPage() {
                                                     <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
                                                     <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.mainProtein.total)}</div>
                                                     <div className="border-t border-border pt-2 mt-1 text-right text-[10px] text-muted-foreground">per unit shown</div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right">
+                                                        {ingSum.mainProtein.byType.every(r => r.portionUnit === "oz" && r.totalUsed !== null) ? (
+                                                            <span className="tabular-nums font-bold text-foreground text-sm">
+                                                                {(ingSum.mainProtein.byType.reduce((s, r) => s + (r.totalUsed ?? 0), 0) / 16).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">lb</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] text-muted-foreground">—</span>
+                                                        )}
+                                                    </div>
                                                     <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
                                                 </div>
 

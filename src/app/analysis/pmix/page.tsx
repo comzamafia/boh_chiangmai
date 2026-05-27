@@ -3163,38 +3163,43 @@ export default function PmixDashboardPage() {
                                                     Click any protein to view daily calendar
                                                 </p>
                                             </CardHeader>
-                                            <CardContent>
-                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1 text-xs">
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Protein</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Total We Use</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">%</div>
+                                            <CardContent className="px-3 sm:px-6">
+                                                {/* Horizontal scroll on narrow screens */}
+                                                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs min-w-[360px] px-3 sm:px-0">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Protein</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Avg/Day</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Total We Use</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">%</div>
                                                     {rangeData.ingredientSummary.mainProtein.byType.map((p, i) => {
                                                         const pct = rangeData.ingredientSummary!.mainProtein.total > 0
                                                             ? (p.qty / rangeData.ingredientSummary!.mainProtein.total) * 100
                                                             : 0;
                                                         return (
-                                                            <div key={i} className="contents group">
-                                                                {/* Protein name — clickable → calendar popup */}
+                                                            <div key={i} className="contents">
+                                                                {/* Protein name — tap/click → calendar popup
+                                                                    📅 icon always visible on mobile (no hover on touch),
+                                                                    hidden on desktop until hover */}
                                                                 <button
                                                                     onClick={() => {
                                                                         setProteinCalTarget({ protein: p.proteinType, portionUnit: p.portionUnit });
                                                                         setProteinCalOpen(true);
                                                                     }}
-                                                                    className="py-1.5 truncate text-left flex items-center gap-1.5 rounded hover:bg-teal-50 dark:hover:bg-teal-950/30 px-1 -ml-1 transition-colors"
+                                                                    className="py-2 text-left flex items-center gap-1 rounded-lg active:bg-teal-50 dark:active:bg-teal-950/30 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors touch-manipulation"
                                                                 >
-                                                                    <span className="text-[9px] text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity">📅</span>
-                                                                    <span className="font-medium hover:text-teal-700 dark:hover:text-teal-300 transition-colors">{p.proteinType}</span>
+                                                                    {/* Always visible on mobile; opacity-0 on desktop until hover */}
+                                                                    <span className="text-teal-500 text-[10px] shrink-0 sm:opacity-0 sm:group-hover:opacity-100">📅</span>
+                                                                    <span className="font-medium text-foreground truncate">{p.proteinType}</span>
                                                                 </button>
-                                                                <div className="font-bold text-teal-600 text-right py-1.5 tabular-nums">{p.qty.toLocaleString()}</div>
-                                                                <div className="text-muted-foreground text-right py-1.5 tabular-nums">{p.avgQtyPerDay}</div>
-                                                                <div className="text-right py-1.5 tabular-nums">
+                                                                <div className="font-bold text-teal-600 text-right py-2 tabular-nums self-center">{p.qty.toLocaleString()}</div>
+                                                                <div className="text-muted-foreground text-right py-2 tabular-nums self-center">{p.avgQtyPerDay}</div>
+                                                                <div className="text-right py-2 tabular-nums self-center">
                                                                     {p.totalUsed !== null
                                                                         ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
-                                                                        : <span className="text-muted-foreground italic">No std</span>}
+                                                                        : <span className="text-muted-foreground italic text-[10px]">No std</span>}
                                                                 </div>
-                                                                <div className="text-muted-foreground text-right py-1.5 tabular-nums text-[11px]">{pct.toFixed(1)}%</div>
+                                                                <div className="text-muted-foreground text-right py-2 tabular-nums text-[11px] self-center">{pct.toFixed(1)}%</div>
                                                             </div>
                                                         );
                                                     })}
@@ -3203,6 +3208,7 @@ export default function PmixDashboardPage() {
                                                     <div className="border-t border-border pt-2 mt-1" />
                                                     <div className="border-t border-border pt-2 mt-1" />
                                                     <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
+                                                </div>
                                                 </div>
                                             </CardContent>
                                         </Card>

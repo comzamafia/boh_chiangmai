@@ -333,6 +333,11 @@ export const pmixApi = {
     rangeAnalytics: (from: string, to: string) =>
         apiFetch<PmixRangeResult>(`/pmix/analytics/range?from=${from}&to=${to}`),
 
+    proteinDaily: (protein: string, from: string, to: string) =>
+        apiFetch<ProteinDailyResult>(
+            `/pmix/analytics/protein-daily?protein=${encodeURIComponent(protein)}&from=${from}&to=${to}`
+        ),
+
     upload: (file: File, periodLabel?: string, businessDate?: string) => {
         const fd = new FormData();
         fd.append("file", file);
@@ -1037,4 +1042,19 @@ export interface IngredientSummaryResult {
     };
     uncategorized: { itemName: string; category: string; qty: number }[];
     hasProteinData: boolean;
+}
+
+// ─── Protein daily calendar ───────────────────────────────────────────────────
+export interface ProteinDailyDay {
+    date:      string;         // YYYY-MM-DD
+    qty:       number;         // total orders that day
+    totalUsed: number | null;  // qty × portionSize (oz)
+    lb:        number | null;  // totalUsed / 16
+}
+export interface ProteinDailyResult {
+    protein:        string;
+    portionSize:    number | null;
+    portionUnit:    string | null;
+    ingredientName: string | null;
+    days:           ProteinDailyDay[];
 }

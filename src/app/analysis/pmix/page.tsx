@@ -36,6 +36,7 @@ import {
     PortionCalcResult, IngredientSummaryResult,
     PmixCalendarDay, PmixRangeResult,
 } from "@/lib/api";
+import ProteinCalendarModal from "@/components/pmix/ProteinCalendarModal";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BCG_COLORS: Record<BcgQuadrant, string> = {
@@ -447,6 +448,10 @@ export default function PmixDashboardPage() {
     const [rangeData,      setRangeData]      = useState<PmixRangeResult | null>(null);
     const [rangeLoading,   setRangeLoading]   = useState(false);
     const [uploadDate,     setUploadDate]     = useState(() => new Date().toISOString().slice(0, 10));
+
+    // ── Protein calendar modal ──
+    const [proteinCalOpen,    setProteinCalOpen]    = useState(false);
+    const [proteinCalTarget,  setProteinCalTarget]  = useState<{ protein: string; portionUnit: string | null } | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -3154,9 +3159,12 @@ export default function PmixDashboardPage() {
                                                     <Beef className="w-4 h-4 text-teal-500" />
                                                     Main Protein Usage ({rangeData.dayCount}-day total)
                                                 </CardTitle>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    Click any protein to view daily calendar
+                                                </p>
                                             </CardHeader>
                                             <CardContent>
-                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1 text-xs">
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Protein</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
@@ -3167,16 +3175,26 @@ export default function PmixDashboardPage() {
                                                             ? (p.qty / rangeData.ingredientSummary!.mainProtein.total) * 100
                                                             : 0;
                                                         return (
-                                                            <div key={i} className="contents">
-                                                                <div className="py-1 truncate">{p.proteinType}</div>
-                                                                <div className="font-bold text-teal-600 text-right py-1 tabular-nums">{p.qty.toLocaleString()}</div>
-                                                                <div className="text-muted-foreground text-right py-1 tabular-nums">{p.avgQtyPerDay}</div>
-                                                                <div className="text-right py-1 tabular-nums">
+                                                            <div key={i} className="contents group">
+                                                                {/* Protein name — clickable → calendar popup */}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setProteinCalTarget({ protein: p.proteinType, portionUnit: p.portionUnit });
+                                                                        setProteinCalOpen(true);
+                                                                    }}
+                                                                    className="py-1.5 truncate text-left flex items-center gap-1.5 rounded hover:bg-teal-50 dark:hover:bg-teal-950/30 px-1 -ml-1 transition-colors"
+                                                                >
+                                                                    <span className="text-[9px] text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity">📅</span>
+                                                                    <span className="font-medium hover:text-teal-700 dark:hover:text-teal-300 transition-colors">{p.proteinType}</span>
+                                                                </button>
+                                                                <div className="font-bold text-teal-600 text-right py-1.5 tabular-nums">{p.qty.toLocaleString()}</div>
+                                                                <div className="text-muted-foreground text-right py-1.5 tabular-nums">{p.avgQtyPerDay}</div>
+                                                                <div className="text-right py-1.5 tabular-nums">
                                                                     {p.totalUsed !== null
                                                                         ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
                                                                         : <span className="text-muted-foreground italic">No std</span>}
                                                                 </div>
-                                                                <div className="text-muted-foreground text-right py-1 tabular-nums text-[11px]">{pct.toFixed(1)}%</div>
+                                                                <div className="text-muted-foreground text-right py-1.5 tabular-nums text-[11px]">{pct.toFixed(1)}%</div>
                                                             </div>
                                                         );
                                                     })}
@@ -3293,6 +3311,18 @@ export default function PmixDashboardPage() {
                         </>
                     )}
                 </div>
+            )}
+
+            {/* ── Protein Daily Calendar Modal ──────────────────────── */}
+            {proteinCalTarget && (
+                <ProteinCalendarModal
+                    protein={proteinCalTarget.protein}
+                    portionUnit={proteinCalTarget.portionUnit}
+                    rangeFrom={rangeFrom}
+                    rangeTo={rangeTo}
+                    open={proteinCalOpen}
+                    onClose={() => setProteinCalOpen(false)}
+                />
             )}
 
             {/* ══════════════════════════════════════════════════════════

@@ -17,7 +17,8 @@ export type NotificationType =
     | "critical_stock"
     | "stocktake_due"
     | "waste_spike"
-    | "price_alert";
+    | "price_alert"
+    | "order_reminder";
 
 export interface AlertRecipient {
     userId?: string;

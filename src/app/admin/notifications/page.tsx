@@ -23,6 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
     stocktake_due:    "Stocktake Due",
     waste_spike:      "Waste Spike",
     price_alert:      "Price Alert",
+    order_reminder:   "Order Reminder",
 };
 
 const STATUS_STYLE: Record<string, { badge: string; icon: React.ReactNode }> = {
@@ -74,6 +75,17 @@ export default function AdminNotificationsPage() {
         } finally { setRunning(false); }
     }
 
+    async function runOrderReminders() {
+        setRunning(true); setLastRun(null);
+        try {
+            const r = await notificationsApi.runOrderReminders(14);
+            setLastRun(`Order reminders: ${r.suppliersNotified}/${r.suppliersDue} suppliers notified (of ${r.suppliersChecked} checked), ${r.totalItems} items below ROP, ${r.sent} emails sent`);
+            await load();
+        } catch (e) {
+            setLastRun(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+        } finally { setRunning(false); }
+    }
+
     const areaName = (id: string | null) => id ? areas.find(a => a.id === id)?.name ?? id : "—";
 
     return (
@@ -94,13 +106,16 @@ export default function AdminNotificationsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
                         <Button onClick={() => runDigest("daily")} disabled={running}>
                             {running && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             <Mail className="h-4 w-4 mr-2" /> Run Daily Digest
                         </Button>
                         <Button variant="outline" onClick={() => runDigest("weekly")} disabled={running}>
                             <Mail className="h-4 w-4 mr-2" /> Run Weekly Digest
+                        </Button>
+                        <Button variant="outline" onClick={runOrderReminders} disabled={running}>
+                            <Mail className="h-4 w-4 mr-2" /> Run Order Reminders
                         </Button>
                     </div>
                     {lastRun && (

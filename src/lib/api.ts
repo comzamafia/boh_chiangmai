@@ -198,6 +198,8 @@ export const notificationsApi = {
         apiFetch<{ ok: boolean; message: string }>("/notifications/test", { method: "POST", body: JSON.stringify(data) }),
     runDigestNow: (cadence: "daily" | "weekly" = "daily") =>
         apiFetch<{ areasChecked: number; areasSent: number; totalItems: number; sent: number; skipped: number; failed: number }>(`/notifications/run-digest?cadence=${cadence}`, { method: "POST" }),
+    runOrderReminders: (hours = 14) =>
+        apiFetch<{ suppliersChecked: number; suppliersDue: number; suppliersNotified: number; totalItems: number; sent: number; skipped: number; failed: number }>(`/notifications/run-order-reminders?hours=${hours}`, { method: "POST" }),
 };
 
 // ─── Ingredient Suppliers ─────────────────────────────────────────────────────
@@ -887,6 +889,13 @@ export interface ParSuggestion {
     suggestedParMin:  number | null;
     suggestedROP:     number | null;
     suggestedParMax:  number | null;
+    // Supplier-driven lead time
+    supplierName?:           string | null;
+    scheduleBasedLeadDays?:  number;
+    scheduleEffectiveDays?:  number;
+    scheduleFallback?:       boolean;
+    nextDeliveryDate?:       string | null;
+    nextOrderBy?:            string | null;
 }
 
 export interface ParSuggestionsResult {

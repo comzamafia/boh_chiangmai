@@ -1909,6 +1909,14 @@ export default function PmixDashboardPage() {
                                                                         <p className="text-[10px] text-muted-foreground">
                                                                             {s.categoryName} · {s.unit} · {s.adu.toFixed(2)}/day
                                                                         </p>
+                                                                        {(s.supplierName || s.scheduleBasedLeadDays != null) && (
+                                                                            <p className={`text-[10px] mt-0.5 ${s.scheduleFallback ? "text-muted-foreground italic" : "text-amber-700 dark:text-amber-400"}`}>
+                                                                                {s.supplierName ?? "No supplier"} · Lead {s.scheduleBasedLeadDays ?? s.leadTimeDays}d{s.scheduleFallback ? " (fallback)" : ""}
+                                                                                {s.nextDeliveryDate && !s.scheduleFallback && (
+                                                                                    <> · next {new Date(s.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
+                                                                                )}
+                                                                            </p>
+                                                                        )}
                                                                     </div>
                                                                     <span className="text-right tabular-nums text-muted-foreground">{s.adu.toFixed(2)}</span>
                                                                     <span className="text-right tabular-nums">{s.currentParMin.toFixed(2)}</span>

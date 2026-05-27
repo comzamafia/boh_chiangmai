@@ -37,6 +37,7 @@ import {
     PmixCalendarDay, PmixRangeResult,
 } from "@/lib/api";
 import ProteinCalendarModal from "@/components/pmix/ProteinCalendarModal";
+import DailyCalendarModal from "@/components/pmix/DailyCalendarModal";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BCG_COLORS: Record<BcgQuadrant, string> = {
@@ -452,6 +453,10 @@ export default function PmixDashboardPage() {
     // ── Protein calendar modal ──
     const [proteinCalOpen,    setProteinCalOpen]    = useState(false);
     const [proteinCalTarget,  setProteinCalTarget]  = useState<{ protein: string; portionUnit: string | null } | null>(null);
+
+    // ── Dessert calendar modal ──
+    const [dessertCalOpen,    setDessertCalOpen]    = useState(false);
+    const [dessertCalItem,    setDessertCalItem]    = useState<string | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -2916,15 +2921,19 @@ export default function PmixDashboardPage() {
                                                 Main Desserts Totals
                                                 <Badge variant="secondary" className="text-[10px] ml-auto font-normal">{ingSum.desserts?.byItem.length ?? 0} items</Badge>
                                             </CardTitle>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                Click any dessert to view daily calendar
+                                            </p>
                                         </CardHeader>
-                                        <CardContent className="px-5 pb-4">
+                                        <CardContent className="px-3 sm:px-5 pb-4">
                                             {(ingSum.desserts?.byItem.length ?? 0) === 0 ? (
                                                 <p className="text-sm text-muted-foreground italic">No dessert items found. Add classification rules to tag desserts.</p>
                                             ) : (
-                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-2 text-sm items-center">
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dessert Item</div>
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Orders</div>
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
+                                                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-4 gap-y-1 text-sm items-center min-w-[260px] px-3 sm:px-0">
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground py-1">Dessert Item</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right py-1">Orders</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right py-1 w-12">%</div>
 
                                                     {(ingSum.desserts?.byItem ?? []).map((item, idx) => {
                                                         const pct = (ingSum.desserts?.total ?? 0) > 0
@@ -2933,13 +2942,17 @@ export default function PmixDashboardPage() {
                                                         const max = ingSum.desserts?.byItem[0]?.qty ?? 1;
                                                         return (
                                                             <div key={idx} className="contents">
-                                                                <div className="font-medium truncate flex items-center gap-2 min-w-0">
+                                                                <button
+                                                                    onClick={() => { setDessertCalItem(item.itemName); setDessertCalOpen(true); }}
+                                                                    className="py-1.5 text-left flex items-center gap-1.5 rounded-lg active:bg-pink-50 dark:active:bg-pink-950/30 hover:bg-pink-50 dark:hover:bg-pink-950/30 transition-colors touch-manipulation min-w-0"
+                                                                >
+                                                                    <span className="text-pink-500 text-[10px] shrink-0">📅</span>
                                                                     <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
-                                                                    <span className="truncate">{item.itemName}</span>
-                                                                </div>
-                                                                <div className="tabular-nums font-bold text-pink-700 dark:text-pink-300 text-right">{fmtN(item.qty)}</div>
-                                                                <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
-                                                                <div className="col-span-3 -mt-1">
+                                                                    <span className="font-medium truncate">{item.itemName}</span>
+                                                                </button>
+                                                                <div className="tabular-nums font-bold text-pink-700 dark:text-pink-300 text-right self-center">{fmtN(item.qty)}</div>
+                                                                <div className="tabular-nums text-xs text-muted-foreground text-right self-center">{pct}%</div>
+                                                                <div className="col-span-3 -mt-1 px-0">
                                                                     <ProgressBar value={item.qty} max={max} color="#ec4899" />
                                                                 </div>
                                                             </div>
@@ -2949,6 +2962,7 @@ export default function PmixDashboardPage() {
                                                     <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
                                                     <div className="tabular-nums font-bold text-pink-700 dark:text-pink-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.desserts?.total ?? 0)}</div>
                                                     <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
+                                                </div>
                                                 </div>
                                             )}
                                         </CardContent>
@@ -3254,20 +3268,28 @@ export default function PmixDashboardPage() {
                                                     <span className="text-base leading-none">🍮</span>
                                                     Main Desserts ({rangeData.dayCount}-day total)
                                                 </CardTitle>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    Click any dessert to view daily calendar
+                                                </p>
                                             </CardHeader>
-                                            <CardContent>
-                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Item</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
-                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
+                                            <CardContent className="px-3 sm:px-6">
+                                                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs min-w-[280px] px-3 sm:px-0">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Item</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Avg/Day</div>
                                                     {(rangeData.ingredientSummary.desserts?.byItem ?? []).map((d, i) => (
                                                         <div key={i} className="contents">
-                                                            <div className="py-1 truncate flex items-center gap-1.5">
+                                                            <button
+                                                                onClick={() => { setDessertCalItem(d.itemName); setDessertCalOpen(true); }}
+                                                                className="py-2 text-left flex items-center gap-1.5 rounded-lg active:bg-pink-50 dark:active:bg-pink-950/30 hover:bg-pink-50 dark:hover:bg-pink-950/30 transition-colors touch-manipulation"
+                                                            >
+                                                                <span className="text-pink-500 text-[10px] shrink-0 sm:opacity-0 sm:group-hover:opacity-100">📅</span>
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
-                                                                {d.itemName}
-                                                            </div>
-                                                            <div className="font-bold text-pink-600 dark:text-pink-300 text-right py-1 tabular-nums">{d.qty.toLocaleString()}</div>
-                                                            <div className="text-muted-foreground text-right py-1 tabular-nums">{d.avgQtyPerDay ?? (rangeData.dayCount > 0 ? (d.qty / rangeData.dayCount).toFixed(1) : "—")}</div>
+                                                                <span className="font-medium text-foreground truncate">{d.itemName}</span>
+                                                            </button>
+                                                            <div className="font-bold text-pink-600 dark:text-pink-300 text-right py-2 tabular-nums self-center">{d.qty.toLocaleString()}</div>
+                                                            <div className="text-muted-foreground text-right py-2 tabular-nums self-center">{d.avgQtyPerDay ?? (rangeData.dayCount > 0 ? (d.qty / rangeData.dayCount).toFixed(1) : "—")}</div>
                                                         </div>
                                                     ))}
                                                     <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
@@ -3278,6 +3300,7 @@ export default function PmixDashboardPage() {
                                                         {rangeData.dayCount > 0 ? ((rangeData.ingredientSummary.desserts?.total ?? 0) / rangeData.dayCount).toFixed(1) : "—"}
                                                     </div>
                                                 </div>
+                                                </div>{/* /overflow-x-auto */}
                                             </CardContent>
                                         </Card>
                                     )}
@@ -3328,6 +3351,21 @@ export default function PmixDashboardPage() {
                     rangeTo={rangeTo}
                     open={proteinCalOpen}
                     onClose={() => setProteinCalOpen(false)}
+                />
+            )}
+
+            {/* ── Dessert Daily Calendar Modal ──────────────────────── */}
+            {dessertCalItem && (
+                <DailyCalendarModal
+                    itemName={dessertCalItem}
+                    unitLabel="orders / day"
+                    color="pink"
+                    rangeFrom={rangeFrom}
+                    rangeTo={rangeTo}
+                    open={dessertCalOpen}
+                    onClose={() => setDessertCalOpen(false)}
+                    fetchFn={pmixApi.dessertDaily}
+                    showLb={false}
                 />
             )}
 

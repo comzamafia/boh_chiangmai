@@ -338,6 +338,11 @@ export const pmixApi = {
             `/pmix/analytics/protein-daily?protein=${encodeURIComponent(protein)}&from=${from}&to=${to}`
         ),
 
+    dessertDaily: (item: string, from: string, to: string) =>
+        apiFetch<DessertDailyResult>(
+            `/pmix/analytics/dessert-daily?item=${encodeURIComponent(item)}&from=${from}&to=${to}`
+        ),
+
     upload: (file: File, periodLabel?: string, businessDate?: string) => {
         const fd = new FormData();
         fd.append("file", file);
@@ -1057,4 +1062,10 @@ export interface ProteinDailyResult {
     portionUnit:    string | null;
     ingredientName: string | null;
     days:           ProteinDailyDay[];
+}
+
+// ─── Dessert daily calendar ───────────────────────────────────────────────────
+export interface DessertDailyResult {
+    item: string;
+    days: { date: string; qty: number }[];
 }

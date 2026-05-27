@@ -347,6 +347,13 @@ export interface Supplier {
     address: string;
     status: "Active" | "Inactive";
     isSpecial: boolean;
+    // Delivery schedule (drives lead-time calculation for PAR Min/ROP/Max)
+    deliveryDays?:         number[];          // ISO weekdays 1..7
+    orderCutoffTime?:      string | null;     // "HH:MM"
+    orderCutoffDayOffset?: number;            // days before delivery
+    deliveryTimeWindow?:   string | null;     // "08:00-10:00"
+    minOrderValue?:        number | null;
+    deliveryNotes?:        string | null;
     createdAt?: string;
     updatedAt?: string;
 }

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { calculateLeadTime } from "@/lib/supplier-lead-time";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffStr = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
 
-    // Load all inventory items with ingredient details
+    // Load all inventory items with ingredient details + supplier schedule
     const inventoryItems = await prisma.inventoryItem.findMany({
         include: {
             ingredient: {
@@ -36,6 +37,18 @@ export async function GET(req: NextRequest) {
                     groupId: true,
                     categoryId: true,
                     category: { select: { id: true, name: true } },
+                    supplier: {
+                        select: {
+                            id: true,
+                            name: true,
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            deliveryDays:         true as any,
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            orderCutoffTime:      true as any,
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            orderCutoffDayOffset: true as any,
+                        },
+                    },
                 },
             },
         },
@@ -60,6 +73,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Build suggestions
+    const now = new Date();
     const suggestions = inventoryItems.map(iv => {
         const totalOut = outMap.get(iv.ingredientId) ?? 0;
         const adu = totalOut / days;  // Average Daily Usage in recipe units
@@ -67,13 +81,30 @@ export async function GET(req: NextRequest) {
         const currentParMin = Number(iv.parMin);
         const currentParMax = Number(iv.parMax);
         const currentROP    = Number(iv.reorderPoint);
-        const leadTime      = iv.leadTimeDays;
+        const flatLeadTime  = iv.leadTimeDays;
         const holdDays      = iv.holdingDays;
 
-        // Suggested values (round to 2dp for display)
+        // Compute effective lead time from supplier schedule if available
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sup = (iv.ingredient as any).supplier as
+            | { id: string; name: string; deliveryDays: number[]; orderCutoffTime: string | null; orderCutoffDayOffset: number }
+            | null
+            | undefined;
+
+        const lt = calculateLeadTime({
+            deliveryDays:         sup?.deliveryDays ?? [],
+            orderCutoffTime:      sup?.orderCutoffTime ?? null,
+            orderCutoffDayOffset: sup?.orderCutoffDayOffset ?? 1,
+            leadTimeFallback:     flatLeadTime,
+        }, now);
+
+        // PAR Min uses worst-case lead time (safety stock must cover the longest possible wait)
+        // ROP uses worst-case lead too: ROP = (ADU × worstCase) + safety stock (= parMin)
+        // PAR Max uses holdDays as before (how many days of stock to hold on hand)
         const r = (n: number) => Math.round(n * 100) / 100;
-        const suggestedParMin = r(adu * Math.max(leadTime, 2)); // safety buffer = lead time or 2 days min
-        const suggestedROP    = r((adu * leadTime) + currentParMin); // use existing parMin as safety stock
+        const ltForSafety = Math.max(lt.worstCaseLeadDays, 1);
+        const suggestedParMin = r(adu * Math.max(ltForSafety, 2));
+        const suggestedROP    = r((adu * ltForSafety) + currentParMin);
         const suggestedParMax = r(adu * holdDays);
 
         const hasHistory = totalOut > 0;
@@ -98,9 +129,17 @@ export async function GET(req: NextRequest) {
             currentParMin,
             currentParMax,
             currentROP,
-            leadTimeDays:     leadTime,
+            leadTimeDays:     flatLeadTime,
             holdingDays:      holdDays,
             currentStock:     Number(iv.currentStock),
+
+            // Supplier-driven lead time
+            supplierName:           sup?.name ?? null,
+            scheduleBasedLeadDays:  lt.worstCaseLeadDays,
+            scheduleEffectiveDays:  lt.effectiveLeadDays,
+            scheduleFallback:       lt.fallback,
+            nextDeliveryDate:       lt.nextDeliveryDate?.toISOString().slice(0, 10) ?? null,
+            nextOrderBy:            lt.nextOrderBy?.toISOString() ?? null,
 
             // Suggested limits
             suggestedParMin: hasHistory ? suggestedParMin : null,

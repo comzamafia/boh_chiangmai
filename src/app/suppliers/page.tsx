@@ -18,13 +18,28 @@ import {
     Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, Store, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Store, CheckCircle2, XCircle, Loader2, Truck, Clock } from "lucide-react";
 import Link from "next/link";
+import { calculateLeadTime, formatDeliveryDays, WEEKDAY_SHORT } from "@/lib/supplier-lead-time";
 
-const emptyForm = (): Omit<Supplier, "id" | "createdAt" | "updatedAt"> => ({
+type SupplierFormShape = Omit<Supplier, "id" | "createdAt" | "updatedAt">;
+
+const emptyForm = (): SupplierFormShape => ({
     name: "", contact: "", email: "", phone: "", address: "",
     status: "Active", isSpecial: false,
+    deliveryDays:         [],
+    orderCutoffTime:      "",
+    orderCutoffDayOffset: 1,
+    deliveryTimeWindow:   "",
+    minOrderValue:        null,
+    deliveryNotes:        "",
 });
+
+const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
+    { value: 1, label: "Mon" }, { value: 2, label: "Tue" }, { value: 3, label: "Wed" },
+    { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" },
+    { value: 7, label: "Sun" },
+];
 
 export default function SuppliersPage() {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -59,9 +74,24 @@ export default function SuppliersPage() {
             email: supplier.email, phone: supplier.phone,
             address: supplier.address, status: supplier.status,
             isSpecial: supplier.isSpecial ?? false,
+            deliveryDays:         supplier.deliveryDays         ?? [],
+            orderCutoffTime:      supplier.orderCutoffTime      ?? "",
+            orderCutoffDayOffset: supplier.orderCutoffDayOffset ?? 1,
+            deliveryTimeWindow:   supplier.deliveryTimeWindow   ?? "",
+            minOrderValue:        supplier.minOrderValue        ?? null,
+            deliveryNotes:        supplier.deliveryNotes        ?? "",
         });
         setDialogOpen(true);
     };
+
+    function toggleDeliveryDay(day: number) {
+        setForm(f => {
+            const current = new Set(f.deliveryDays ?? []);
+            if (current.has(day)) current.delete(day);
+            else                  current.add(day);
+            return { ...f, deliveryDays: [...current].sort((a, b) => a - b) };
+        });
+    }
 
     const handleSave = async () => {
         if (!form.name.trim()) return;
@@ -158,6 +188,7 @@ export default function SuppliersPage() {
                             <TableHead className="hidden md:table-cell">Email</TableHead>
                             <TableHead className="hidden md:table-cell">Phone</TableHead>
                             <TableHead className="hidden lg:table-cell">Address</TableHead>
+                            <TableHead className="hidden md:table-cell">Delivery</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -178,6 +209,9 @@ export default function SuppliersPage() {
                                 <TableCell className="hidden md:table-cell text-muted-foreground">{supplier.email}</TableCell>
                                 <TableCell className="hidden md:table-cell">{supplier.phone}</TableCell>
                                 <TableCell className="hidden lg:table-cell text-muted-foreground max-w-[180px] truncate text-sm">{supplier.address}</TableCell>
+                                <TableCell className="hidden md:table-cell text-xs">
+                                    <DeliveryCell supplier={supplier} />
+                                </TableCell>
                                 <TableCell>
                                     <Badge variant={supplier.status === "Active" ? "default" : "secondary"}>
                                         {supplier.status}
@@ -200,7 +234,7 @@ export default function SuppliersPage() {
                         ))}
                         {filteredSuppliers.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                                     No suppliers found.
                                 </TableCell>
                             </TableRow>
@@ -211,14 +245,14 @@ export default function SuppliersPage() {
 
             {/* Add / Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
+                <DialogContent className="sm:max-w-2xl max-h-[92dvh] flex flex-col p-0 gap-0">
+                    <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
                         <DialogTitle>{editTarget ? "Edit Supplier" : "Add New Supplier"}</DialogTitle>
                         <DialogDescription>
                             {editTarget ? `Editing ${editTarget.name}` : "Fill in the supplier details below."}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-3 py-2">
+                    <div className="flex-1 overflow-y-auto px-5 py-4 grid gap-3">
                         {[
                             { label: "Name *", key: "name", placeholder: "Supplier company name", type: "text" },
                             { label: "Contact Person", key: "contact", placeholder: "Contact person name", type: "text" },
@@ -248,8 +282,115 @@ export default function SuppliersPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {/* ── Delivery schedule ────────────────────────────────────────── */}
+                        <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Truck className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                                <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-300">Delivery Schedule</h4>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Drives lead-time calculations for PAR Min, ROP and PAR Max in Inventory.
+                            </p>
+
+                            {/* Delivery days */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Delivery days</Label>
+                                <div className="grid grid-cols-7 gap-1.5">
+                                    {WEEKDAY_OPTIONS.map(d => {
+                                        const active = (form.deliveryDays ?? []).includes(d.value);
+                                        return (
+                                            <button
+                                                key={d.value}
+                                                type="button"
+                                                onClick={() => toggleDeliveryDay(d.value)}
+                                                className={`h-9 rounded-md text-xs font-medium transition-colors border ${active
+                                                    ? "bg-amber-600 text-white border-amber-700"
+                                                    : "bg-background hover:bg-muted text-muted-foreground border-input"}`}
+                                            >
+                                                {d.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {(form.deliveryDays ?? []).length === 0
+                                        ? "No days selected — system will use static leadTimeDays as fallback."
+                                        : `Delivers ${formatDeliveryDays(form.deliveryDays ?? [])}`}
+                                </p>
+                            </div>
+
+                            {/* Cutoff time + offset */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Order cutoff time</Label>
+                                    <Input
+                                        type="time"
+                                        value={form.orderCutoffTime ?? ""}
+                                        onChange={e => setForm(f => ({ ...f, orderCutoffTime: e.target.value }))}
+                                        className="h-9"
+                                    />
+                                    <p className="text-xs text-muted-foreground">e.g. 17:00 = must order by 5 PM</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Order how many days before?</Label>
+                                    <Select
+                                        value={String(form.orderCutoffDayOffset ?? 1)}
+                                        onValueChange={v => setForm(f => ({ ...f, orderCutoffDayOffset: Number(v) }))}
+                                    >
+                                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="0">Same day</SelectItem>
+                                            <SelectItem value="1">Day before (1 day)</SelectItem>
+                                            <SelectItem value="2">2 days before</SelectItem>
+                                            <SelectItem value="3">3 days before</SelectItem>
+                                            <SelectItem value="7">1 week before</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            {/* Delivery window + MOV */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Delivery time window</Label>
+                                    <Input
+                                        type="text"
+                                        placeholder="08:00-10:00"
+                                        value={form.deliveryTimeWindow ?? ""}
+                                        onChange={e => setForm(f => ({ ...f, deliveryTimeWindow: e.target.value }))}
+                                        className="h-9"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Min order value (optional)</Label>
+                                    <Input
+                                        type="number" min={0} step={0.01}
+                                        placeholder="e.g. 1000"
+                                        value={form.minOrderValue ?? ""}
+                                        onChange={e => setForm(f => ({ ...f, minOrderValue: e.target.value === "" ? null : Number(e.target.value) }))}
+                                        className="h-9"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Delivery notes */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Delivery notes</Label>
+                                <Input
+                                    type="text"
+                                    placeholder="e.g. Order via LINE @cocoshop"
+                                    value={form.deliveryNotes ?? ""}
+                                    onChange={e => setForm(f => ({ ...f, deliveryNotes: e.target.value }))}
+                                    className="h-9"
+                                />
+                            </div>
+
+                            {/* Live lead-time preview */}
+                            <LeadTimePreview form={form} />
+                        </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="px-5 py-3 border-t shrink-0">
                         <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
                         <Button onClick={handleSave} disabled={!form.name.trim() || saving}>
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -277,6 +418,82 @@ export default function SuppliersPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+        </div>
+    );
+}
+
+// ─── Helper: short delivery summary shown in the suppliers table ──────────────
+function DeliveryCell({ supplier }: { supplier: Supplier }) {
+    const days = supplier.deliveryDays ?? [];
+    if (days.length === 0) {
+        return <span className="text-muted-foreground italic">—</span>;
+    }
+    const lt = calculateLeadTime({
+        deliveryDays:         days,
+        orderCutoffTime:      supplier.orderCutoffTime ?? null,
+        orderCutoffDayOffset: supplier.orderCutoffDayOffset ?? 1,
+    });
+    return (
+        <div className="leading-tight">
+            <div className="font-medium text-foreground">
+                {days.length === 7 ? "Daily" : days.map(d => WEEKDAY_SHORT[d]).join(", ")}
+            </div>
+            {supplier.orderCutoffTime && (
+                <div className="text-muted-foreground">
+                    Cutoff {supplier.orderCutoffTime}
+                    {supplier.orderCutoffDayOffset != null && supplier.orderCutoffDayOffset > 0
+                        ? ` (${supplier.orderCutoffDayOffset}d before)`
+                        : ""}
+                </div>
+            )}
+            <div className="text-muted-foreground">
+                Lead: <span className="font-medium">{lt.worstCaseLeadDays}d</span> worst-case
+            </div>
+        </div>
+    );
+}
+
+// ─── Helper: live preview shown inside the supplier form ──────────────────────
+function LeadTimePreview({ form }: { form: SupplierFormShape }) {
+    const days = form.deliveryDays ?? [];
+    if (days.length === 0) {
+        return (
+            <div className="rounded-md border border-dashed bg-background/50 px-3 py-2.5 text-xs text-muted-foreground">
+                Select at least one delivery day to see lead-time preview.
+            </div>
+        );
+    }
+    const lt = calculateLeadTime({
+        deliveryDays:         days,
+        orderCutoffTime:      form.orderCutoffTime || null,
+        orderCutoffDayOffset: form.orderCutoffDayOffset ?? 1,
+    });
+    return (
+        <div className="rounded-md border bg-background px-3 py-2.5 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                <Clock className="h-3.5 w-3.5" /> Lead-time preview (from now)
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                    <div className="text-muted-foreground">Effective lead</div>
+                    <div className="font-semibold text-base text-foreground">
+                        {lt.effectiveLeadDays} day{lt.effectiveLeadDays === 1 ? "" : "s"}
+                    </div>
+                </div>
+                <div>
+                    <div className="text-muted-foreground">Worst-case (for PAR Min)</div>
+                    <div className="font-semibold text-base text-foreground">
+                        {lt.worstCaseLeadDays} day{lt.worstCaseLeadDays === 1 ? "" : "s"}
+                    </div>
+                </div>
+            </div>
+            {lt.nextDeliveryDate && lt.nextOrderBy && (
+                <div className="text-xs text-muted-foreground pt-1 border-t">
+                    Next delivery: <strong className="text-foreground">{lt.nextDeliveryDate.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</strong>
+                    {" "}— order by{" "}
+                    <strong className="text-foreground">{lt.nextOrderBy.toLocaleString("en-CA", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</strong>
+                </div>
+            )}
         </div>
     );
 }

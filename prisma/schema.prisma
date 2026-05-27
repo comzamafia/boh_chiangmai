@@ -36,6 +36,15 @@ model Supplier {
   address     String
   status      String    // "Active" | "Inactive"
   isSpecial   Boolean   @default(false)
+
+  // ── Delivery schedule (drives lead-time calc for PAR Min / ROP / Max) ──
+  deliveryDays         Int[]   @default([])              // ISO weekdays: 1=Mon … 7=Sun
+  orderCutoffTime      String?                           // "HH:MM" 24h, time-of-day order cutoff
+  orderCutoffDayOffset Int     @default(1)               // days BEFORE delivery (1 = order by cutoff the day before)
+  deliveryTimeWindow   String?                           // e.g. "08:00-10:00"
+  minOrderValue        Decimal? @db.Decimal(10, 2)       // optional minimum order value
+  deliveryNotes        String?                           // free text (e.g. "Order via LINE")
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

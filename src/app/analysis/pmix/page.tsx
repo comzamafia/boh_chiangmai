@@ -438,7 +438,7 @@ export default function PmixDashboardPage() {
 
     // ── History / Calendar / Range state ─────────────────────────────────────
     const [historyOpen,    setHistoryOpen]    = useState(false);
-    const [historyMode,    setHistoryMode]    = useState<"single" | "range">("single");
+    const [historyMode,    setHistoryMode]    = useState<"single" | "range">("range");
     const [calendarMonth,  setCalendarMonth]  = useState(() => new Date().toISOString().slice(0, 7));
     const [calendarDays,   setCalendarDays]   = useState<PmixCalendarDay[]>([]);
     const [calLoading,     setCalLoading]     = useState(false);
@@ -860,19 +860,7 @@ export default function PmixDashboardPage() {
 
                 {historyOpen && (
                     <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
-                        {/* Mode toggle */}
-                        <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-full sm:w-fit">
-                            {(["single", "range"] as const).map(m => (
-                                <button key={m}
-                                    onClick={() => setHistoryMode(m)}
-                                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all
-                                        ${historyMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                                    {m === "single" ? "📅 Single Day" : "📊 Date Range"}
-                                </button>
-                            ))}
-                        </div>
-
-                        {historyMode === "single" && (
+                        {false && (
                             <div className="space-y-3">
                                 {/* Mini calendar */}
                                 <PmixMiniCalendar
@@ -3156,16 +3144,20 @@ export default function PmixDashboardPage() {
                                                 </CardTitle>
                                             </CardHeader>
                                             <CardContent>
-                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
+                                                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Protein</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Total We Use</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Total We Use (lb)</div>
                                                     <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">%</div>
                                                     {rangeData.ingredientSummary.mainProtein.byType.map((p, i) => {
                                                         const pct = rangeData.ingredientSummary!.mainProtein.total > 0
                                                             ? (p.qty / rangeData.ingredientSummary!.mainProtein.total) * 100
                                                             : 0;
+                                                        const lbValue = p.totalUsed !== null && p.portionUnit === "oz"
+                                                            ? (p.totalUsed / 16).toFixed(2)
+                                                            : null;
                                                         return (
                                                             <div key={i} className="contents">
                                                                 <div className="py-1 truncate">{p.proteinType}</div>
@@ -3176,6 +3168,11 @@ export default function PmixDashboardPage() {
                                                                         ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
                                                                         : <span className="text-muted-foreground italic">No std</span>}
                                                                 </div>
+                                                                <div className="text-right py-1 tabular-nums">
+                                                                    {lbValue !== null
+                                                                        ? <span className="font-bold text-foreground">{lbValue} <span className="text-muted-foreground text-[10px]">lb</span></span>
+                                                                        : <span className="text-muted-foreground italic text-[11px]">—</span>}
+                                                                </div>
                                                                 <div className="text-muted-foreground text-right py-1 tabular-nums text-[11px]">{pct.toFixed(1)}%</div>
                                                             </div>
                                                         );
@@ -3184,6 +3181,11 @@ export default function PmixDashboardPage() {
                                                     <div className="border-t border-border pt-2 mt-1 font-bold text-teal-600 text-right tabular-nums">{rangeData.ingredientSummary.mainProtein.total.toLocaleString()}</div>
                                                     <div className="border-t border-border pt-2 mt-1" />
                                                     <div className="border-t border-border pt-2 mt-1" />
+                                                    <div className="border-t border-border pt-2 mt-1 text-right tabular-nums font-bold text-sm">
+                                                        {rangeData.ingredientSummary.mainProtein.byType.every(r => r.portionUnit === "oz" && r.totalUsed !== null)
+                                                            ? <>{(rangeData.ingredientSummary.mainProtein.byType.reduce((s, r) => s + (r.totalUsed ?? 0), 0) / 16).toFixed(2)} <span className="text-muted-foreground text-xs font-medium">lb</span></>
+                                                            : <span className="text-muted-foreground text-[11px]">—</span>}
+                                                    </div>
                                                     <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
                                                 </div>
                                             </CardContent>

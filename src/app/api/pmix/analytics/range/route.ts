@@ -198,6 +198,13 @@ export async function GET(req: NextRequest) {
                 const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
                 const isMain  = grp.includes("protein") && !isExtra;
                 const dKey    = `${dishName}|||${name}`;
+
+                // Apply exclusion rules to modifier names too (e.g. "Veg & Tofu" → excluded)
+                if (isMain || isExtra) {
+                    const modClass = classifyItem(name, rules);
+                    if (modClass?.category === "excluded") continue;
+                }
+
                 if (isMain) {
                     mainGroupNames.add(mod.modifierGroup);
                     mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
@@ -260,8 +267,8 @@ export async function GET(req: NextRequest) {
         return b.qty - a.qty;
     };
 
-    const proteinTotals  = [...mainByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty);
-    const extraTotals    = [...extraByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty);
+    const proteinTotals  = [...mainByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
+    const extraTotals    = [...extraByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
     const mainTotal      = proteinTotals.reduce((s, p) => s + p.qty, 0);
     const extraTotal     = extraTotals.reduce((s, p) => s + p.qty, 0);
 

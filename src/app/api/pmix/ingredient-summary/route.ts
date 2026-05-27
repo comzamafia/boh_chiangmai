@@ -97,6 +97,12 @@ export async function GET(req: NextRequest) {
                 const isExtra   = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
                 const isMainPro = grp.includes("protein") && !isExtra;
 
+                // Apply exclusion rules to modifier names too (e.g. "Veg & Tofu" → excluded)
+                if (isMainPro || isExtra) {
+                    const modClass = classifyItem(name, rules);
+                    if (modClass?.category === "excluded") continue;
+                }
+
                 if (isMainPro) {
                     mainGroupNames.add(mod.modifierGroup);
                     mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
@@ -165,12 +171,12 @@ export async function GET(req: NextRequest) {
 
     const mainByTypeArr: ByType[] = [...mainByType.entries()]
         .map(([t, q]) => withPortion(t, q))
-        .sort((a, b) => b.qty - a.qty);
+        .sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
     const mainTotal = mainByTypeArr.reduce((s, x) => s + x.qty, 0);
 
     const extraByTypeArr: ByType[] = [...extraByType.entries()]
         .map(([t, q]) => withPortion(t, q))
-        .sort((a, b) => b.qty - a.qty);
+        .sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
     const extraTotal = extraByTypeArr.reduce((s, x) => s + x.qty, 0);
 
     const dessertArr: DessertItem[] = [...dessertItems.entries()]

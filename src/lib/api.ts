@@ -258,6 +258,29 @@ export const portionStandardsApi = {
     delete: (id: string) => apiFetch<void>(`/portion-standards/${id}`, { method: "DELETE" }),
 };
 
+// ─── PMIX Item Rules ──────────────────────────────────────────────────────────
+export interface PmixItemRule {
+    id:        string;
+    pattern:   string;
+    matchType: string;
+    category:  string;
+    label:     string | null;
+    priority:  number;
+    isActive:  boolean;
+    notes:     string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const itemRulesApi = {
+    list: () => apiFetch<PmixItemRule[]>("/pmix/item-rules"),
+    create: (data: Partial<PmixItemRule>) =>
+        apiFetch<PmixItemRule>("/pmix/item-rules", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<PmixItemRule>) =>
+        apiFetch<PmixItemRule>(`/pmix/item-rules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: string) => apiFetch<{ ok: boolean }>(`/pmix/item-rules/${id}`, { method: "DELETE" }),
+};
+
 // ─── PMIX ─────────────────────────────────────────────────────────────────────
 export const pmixApi = {
     listUploads: () => apiFetch<PmixUpload[]>("/pmix/uploads"),
@@ -724,12 +747,19 @@ export interface PmixRangeResult {
             byType: PmixRangeResult["proteinTotals"];
             byDish: { category: string; dish: string; proteinType: string; qty: number }[];
             total:  number;
+            groupNames?: string[];
         };
         extraProtein: {
             byType: PmixRangeResult["proteinTotals"];
             byDish: { category: string; dish: string; proteinType: string; qty: number }[];
             total:  number;
+            groupNames?: string[];
         };
+        desserts?: {
+            byItem: { itemName: string; qty: number; avgQtyPerDay?: number }[];
+            total:  number;
+        };
+        uncategorized?: { itemName: string; category: string; qty: number }[];
         hasProteinData: boolean;
     };
     message?:          string;
@@ -1001,5 +1031,10 @@ export interface IngredientSummaryResult {
         total:      number;
         groupNames: string[];
     };
+    desserts: {
+        byItem: { itemName: string; qty: number }[];
+        total:  number;
+    };
+    uncategorized: { itemName: string; category: string; qty: number }[];
     hasProteinData: boolean;
 }

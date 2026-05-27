@@ -1,16 +1,21 @@
 /**
  * GET /api/pmix/ingredient-summary?uploadId=X
  *
- * Extracts protein usage data from PMIX modifiers (no BOM linkage needed).
+ * Hybrid classifier:
+ *   1. Items WITH protein/extra modifier groups → existing modifier logic (unchanged)
+ *   2. Items WITHOUT those modifiers           → PmixItemRule engine (item-name matching)
+ *
  * Returns:
- *   - mainProtein: protein choice breakdown (modifierGroup contains "protein", not "extra")
- *   - extraProtein: extra add-on breakdown (modifierGroup contains "extra" OR modifier starts with "Extra ")
- *   - Both broken down by type totals and by dish detail
- *   - Each protein/add-on type also exposes totalUsed = qty × Portion Standard
+ *   - mainProtein   { byType[], byDish[], total, groupNames[] }
+ *   - extraProtein  { byType[], byDish[], total, groupNames[] }
+ *   - desserts      { byItem[], total }
+ *   - uncategorized { items[] }  — items with no rule match (for admin review)
+ *   - hasProteinData
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -23,33 +28,29 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = prisma as any;
 
-    // 1. Load upload header
+    // 1. Upload header
     const upload = await db.pmixUpload.findUnique({
-        where: { id: uploadId },
+        where:  { id: uploadId },
         select: { id: true, periodLabel: true, uploadedAt: true },
     });
     if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
 
-    // 2. Load all PMIX items with modifiers
+    // 2. All items + modifiers
     const pmixItems = await db.pmixItem.findMany({
-        where: { uploadId },
+        where:   { uploadId },
         include: { modifiers: true },
     });
 
-    // 3. Load all portion standards (we use type=modifier matches for protein modifiers)
+    // 3. Portion standards
     const standards = await db.portionStandard.findMany({
-        include: {
-            ingredient: {
-                select: { id: true, name: true, recipeUnit: true },
-            },
-        },
+        include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
     });
-
-    // Build modifier-name lookup (case-insensitive exact match)
-    const stdByModifier = new Map<string, { ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string }>();
+    const stdByName = new Map<string, {
+        ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string;
+    }>();
     for (const s of standards) {
         if (s.type === "modifier" || s.type === "base") {
-            stdByModifier.set(String(s.itemName).toLowerCase().trim(), {
+            stdByName.set(String(s.itemName).toLowerCase().trim(), {
                 ingredientName: s.ingredient?.name ?? s.itemName,
                 portionSize:    Number(s.portionSize),
                 portionUnit:    s.portionUnit,
@@ -58,64 +59,93 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // ─── classify each modifier ───────────────────────────────────────────
-    interface ProteinByType {
-        proteinType:    string;
-        qty:            number;
-        totalUsed:      number | null;
-        portionSize:    number | null;
-        portionUnit:    string | null;
-        ingredientName: string | null;
-    }
-    interface ProteinByDish { category: string; dish: string; proteinType: string; qty: number }
+    // 4. Item rules (sorted priority desc)
+    const rules: RuleRow[] = await db.pmixItemRule.findMany({
+        where:   { isActive: true },
+        orderBy: [{ priority: "desc" }, { pattern: "asc" }],
+    });
 
-    const mainByType  = new Map<string, number>();
-    const mainByDish  = new Map<string, ProteinByDish>();  // key: `dish|protein`
-    const extraByType = new Map<string, number>();
-    const extraByDish = new Map<string, ProteinByDish>(); // key: `dish|extra`
+    // ─── Accumulators ─────────────────────────────────────────────────────────
+    interface ByType { proteinType: string; qty: number; totalUsed: number | null; portionSize: number | null; portionUnit: string | null; ingredientName: string | null }
+    interface ByDish  { category: string; dish: string; proteinType: string; qty: number }
+    interface DessertItem { itemName: string; qty: number }
+
+    const mainByType   = new Map<string, number>();
+    const mainByDish   = new Map<string, ByDish>();
+    const extraByType  = new Map<string, number>();
+    const extraByDish  = new Map<string, ByDish>();
+    const dessertItems = new Map<string, number>();      // itemName → total qty
+    const uncategorized: { itemName: string; category: string; qty: number }[] = [];
 
     const mainGroupNames  = new Set<string>();
     const extraGroupNames = new Set<string>();
 
     for (const item of pmixItems) {
-        const dishName   = item.itemName as string;
-        const category   = (item.category as string) ?? "";
+        const dishName = item.itemName as string;
+        const category = (item.category as string) ?? "";
+        const qty      = Number(item.qtySold ?? 0);
+        if (qty === 0) continue;
 
-        for (const mod of item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>) {
-            const grp  = (mod.modifierGroup ?? "").toLowerCase();
-            const name = mod.modifier ?? "";
-            const qty  = Number(mod.qtySold ?? 0);
+        const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-            const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
-            const isMainProtein = grp.includes("protein") && !isExtra;
+        if (hasProteinModifier(mods)) {
+            // ── Modifier-based path (existing logic) ──────────────────────────
+            for (const mod of mods) {
+                const grp    = (mod.modifierGroup ?? "").toLowerCase();
+                const name   = mod.modifier ?? "";
+                const modQty = Number(mod.qtySold ?? 0);
+                const isExtra   = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
+                const isMainPro = grp.includes("protein") && !isExtra;
 
-            if (isMainProtein) {
-                mainGroupNames.add(mod.modifierGroup);
-                mainByType.set(name, (mainByType.get(name) ?? 0) + qty);
-                const k = `${dishName}|||${name}`;
-                const existing = mainByDish.get(k);
-                if (existing) {
-                    existing.qty += qty;
-                } else {
-                    mainByDish.set(k, { category, dish: dishName, proteinType: name, qty });
+                if (isMainPro) {
+                    mainGroupNames.add(mod.modifierGroup);
+                    mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
+                    const k = `${dishName}|||${name}`;
+                    const ex = mainByDish.get(k);
+                    if (ex) ex.qty += modQty;
+                    else    mainByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
+                } else if (isExtra) {
+                    extraGroupNames.add(mod.modifierGroup);
+                    extraByType.set(name, (extraByType.get(name) ?? 0) + modQty);
+                    const k = `${dishName}|||${name}`;
+                    const ex = extraByDish.get(k);
+                    if (ex) ex.qty += modQty;
+                    else    extraByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
                 }
-            } else if (isExtra) {
-                extraGroupNames.add(mod.modifierGroup);
-                extraByType.set(name, (extraByType.get(name) ?? 0) + qty);
-                const k = `${dishName}|||${name}`;
-                const existing = extraByDish.get(k);
-                if (existing) {
-                    existing.qty += qty;
-                } else {
-                    extraByDish.set(k, { category, dish: dishName, proteinType: name, qty });
-                }
+            }
+        } else {
+            // ── Item-rule path (new) ──────────────────────────────────────────
+            const result = classifyItem(dishName, rules);
+            if (!result) {
+                // Unknown — surface for admin review
+                const existing = uncategorized.find(u => u.itemName === dishName);
+                if (existing) existing.qty += qty;
+                else uncategorized.push({ itemName: dishName, category, qty });
+                continue;
+            }
+            if (result.category === "excluded") continue;
+
+            if (result.category === "dessert") {
+                dessertItems.set(dishName, (dessertItems.get(dishName) ?? 0) + qty);
+            } else if (result.category === "main_protein") {
+                mainByType.set(result.label, (mainByType.get(result.label) ?? 0) + qty);
+                const k  = `${dishName}|||${result.label}`;
+                const ex = mainByDish.get(k);
+                if (ex) ex.qty += qty;
+                else    mainByDish.set(k, { category, dish: dishName, proteinType: result.label, qty });
+            } else if (result.category === "extra_protein") {
+                extraByType.set(result.label, (extraByType.get(result.label) ?? 0) + qty);
+                const k  = `${dishName}|||${result.label}`;
+                const ex = extraByDish.get(k);
+                if (ex) ex.qty += qty;
+                else    extraByDish.set(k, { category, dish: dishName, proteinType: result.label, qty });
             }
         }
     }
 
-    // ─── Sort helpers ─────────────────────────────────────────────────────
-    function withPortion(proteinType: string, qty: number) {
-        const std = stdByModifier.get(proteinType.toLowerCase().trim());
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+    function withPortion(proteinType: string, qty: number): ByType {
+        const std = stdByName.get(proteinType.toLowerCase().trim());
         if (!std) return { proteinType, qty, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null };
         return {
             proteinType,
@@ -127,35 +157,28 @@ export async function GET(req: NextRequest) {
         };
     }
 
-    const mainByTypeArr: ProteinByType[] = [...mainByType.entries()]
-        .map(([proteinType, qty]) => withPortion(proteinType, qty))
-        .sort((a, b) => b.qty - a.qty);
+    const sortByDish = (a: ByDish, b: ByDish) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category);
+        if (a.dish     !== b.dish)     return a.dish.localeCompare(b.dish);
+        return b.qty - a.qty;
+    };
 
+    const mainByTypeArr: ByType[] = [...mainByType.entries()]
+        .map(([t, q]) => withPortion(t, q))
+        .sort((a, b) => b.qty - a.qty);
     const mainTotal = mainByTypeArr.reduce((s, x) => s + x.qty, 0);
 
-    const mainByDishArr: ProteinByDish[] = [...mainByDish.values()]
-        .sort((a, b) => {
-            if (a.category < b.category) return -1;
-            if (a.category > b.category) return 1;
-            if (a.dish < b.dish) return -1;
-            if (a.dish > b.dish) return 1;
-            return b.qty - a.qty;
-        });
-
-    const extraByTypeArr: ProteinByType[] = [...extraByType.entries()]
-        .map(([proteinType, qty]) => withPortion(proteinType, qty))
+    const extraByTypeArr: ByType[] = [...extraByType.entries()]
+        .map(([t, q]) => withPortion(t, q))
         .sort((a, b) => b.qty - a.qty);
-
     const extraTotal = extraByTypeArr.reduce((s, x) => s + x.qty, 0);
 
-    const extraByDishArr: ProteinByDish[] = [...extraByDish.values()]
-        .sort((a, b) => {
-            if (a.category < b.category) return -1;
-            if (a.category > b.category) return 1;
-            if (a.dish < b.dish) return -1;
-            if (a.dish > b.dish) return 1;
-            return b.qty - a.qty;
-        });
+    const dessertArr: DessertItem[] = [...dessertItems.entries()]
+        .map(([itemName, qty]) => ({ itemName, qty }))
+        .sort((a, b) => b.qty - a.qty);
+    const dessertTotal = dessertArr.reduce((s, d) => s + d.qty, 0);
+
+    uncategorized.sort((a, b) => b.qty - a.qty);
 
     return NextResponse.json({
         uploadId,
@@ -163,16 +186,21 @@ export async function GET(req: NextRequest) {
         uploadedAt:   upload.uploadedAt,
         mainProtein: {
             byType:     mainByTypeArr,
-            byDish:     mainByDishArr,
+            byDish:     [...mainByDish.values()].sort(sortByDish),
             total:      mainTotal,
             groupNames: [...mainGroupNames],
         },
         extraProtein: {
             byType:     extraByTypeArr,
-            byDish:     extraByDishArr,
+            byDish:     [...extraByDish.values()].sort(sortByDish),
             total:      extraTotal,
             groupNames: [...extraGroupNames],
         },
+        desserts: {
+            byItem: dessertArr,
+            total:  dessertTotal,
+        },
+        uncategorized,
         hasProteinData: mainByTypeArr.length > 0 || extraByTypeArr.length > 0,
     });
 }

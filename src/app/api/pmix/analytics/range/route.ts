@@ -1,22 +1,18 @@
 /**
  * GET /api/pmix/analytics/range?from=YYYY-MM-DD&to=YYYY-MM-DD
  *
- * Aggregates PMIX data across all uploads whose businessDate (or uploadedAt)
- * falls within [from, to] inclusive.
+ * Aggregates PMIX data across all uploads in the date range.
+ * Hybrid protein classifier: modifier-based OR item-rule-based.
  *
  * Returns:
- *   - uploadIds[]            — which uploads are included
- *   - dayCount               — number of distinct business dates
- *   - periodFrom / periodTo  — actual date bounds found
- *   - totals: qty, sales, items, refunds
- *   - topItems[]             — top 20 by qty, with daily averages
- *   - categoryBreakdown[]    — sales + qty by category
- *   - dailyTrend[]           — per-day sales for the area chart
- *   - proteinTotals[]        — main protein usage across all days
+ *   - uploadIds[], dayCount, uploadCount, periodFrom/To
+ *   - totals, topItems[], categoryBreakdown[], dailyTrend[]
+ *   - ingredientSummary { mainProtein, extraProtein, desserts, uncategorized, hasProteinData }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -32,7 +28,6 @@ export async function GET(req: NextRequest) {
 
     const fromDate = new Date(fromStr + "T00:00:00.000Z");
     const toDate   = new Date(toStr   + "T23:59:59.999Z");
-
     if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
         return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
     }
@@ -40,72 +35,88 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = prisma as any;
 
-    // 1. Find all uploads in range (match businessDate OR fall back to uploadedAt)
+    // 1. Uploads in range
     const uploads = await db.pmixUpload.findMany({
         where: {
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
-                {
-                    businessDate: null,
-                    uploadedAt:   { gte: fromDate, lte: toDate },
-                },
+                { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
             ],
         },
-        select: {
-            id:           true,
-            businessDate: true,
-            uploadedAt:   true,
-            periodLabel:  true,
-            totalQty:     true,
-            totalSales:   true,
-        },
+        select: { id: true, businessDate: true, uploadedAt: true, periodLabel: true, totalQty: true, totalSales: true },
         orderBy: [{ businessDate: "asc" }, { uploadedAt: "asc" }],
     });
+
+    const emptyIngSum = {
+        mainProtein:    { byType: [], byDish: [], total: 0, groupNames: [] },
+        extraProtein:   { byType: [], byDish: [], total: 0, groupNames: [] },
+        desserts:       { byItem: [], total: 0 },
+        uncategorized:  [],
+        hasProteinData: false,
+    };
 
     if (uploads.length === 0) {
         return NextResponse.json({
             uploadIds: [], dayCount: 0, uploadCount: 0,
             periodFrom: fromStr, periodTo: toStr,
-            totals: {
-                qty: 0, grossSales: "0.00", netSales: "0.00",
-                refundQty: 0, refundAmount: "0.00",
-                avgSalesPerDay: 0, avgQtyPerDay: 0,
-            },
+            totals: { qty: 0, grossSales: "0.00", netSales: "0.00", refundQty: 0, refundAmount: "0.00", avgSalesPerDay: 0, avgQtyPerDay: 0 },
             topItems: [], categoryBreakdown: [], dailyTrend: [], proteinTotals: [],
-            ingredientSummary: {
-                mainProtein:  { byType: [], byDish: [], total: 0 },
-                extraProtein: { byType: [], byDish: [], total: 0 },
-                hasProteinData: false,
-            },
+            ingredientSummary: emptyIngSum,
             message: "No uploads found in this date range",
         });
     }
 
     const uploadIds = uploads.map((u: { id: string }) => u.id);
 
-    // 2. Load all items across all uploads
+    // 2. All items + modifiers
     const items = await db.pmixItem.findMany({
         where:   { uploadId: { in: uploadIds } },
         include: { modifiers: true },
     });
 
-    // 3. Aggregate top items (by itemName across all uploads)
+    // 3. Item rules (sorted priority desc)
+    const rules: RuleRow[] = await db.pmixItemRule.findMany({
+        where:   { isActive: true },
+        orderBy: [{ priority: "desc" }, { pattern: "asc" }],
+    });
+
+    // 4. Portion standards
+    const standards = await db.portionStandard.findMany({
+        where:   { type: { in: ["modifier", "base"] } },
+        include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
+    });
+    const stdByName = new Map<string, { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string }>();
+    for (const s of standards) {
+        stdByName.set(String(s.itemName).toLowerCase().trim(), {
+            portionSize:    Number(s.portionSize),
+            portionUnit:    s.portionUnit,
+            ingredientName: s.ingredient?.name ?? s.itemName,
+            ingredientId:   s.ingredientId,
+        });
+    }
+
+    const dayCount = new Set(
+        uploads.map((u: { businessDate: Date | null; uploadedAt: Date }) =>
+            (u.businessDate ?? u.uploadedAt).toISOString().slice(0, 10)
+        )
+    ).size;
+
+    // ─── Aggregate top items / category breakdown ─────────────────────────────
     const itemMap = new Map<string, {
         itemName: string; category: string;
         qtySold: number; netSales: number; grossSales: number;
         refundQty: number; refundAmount: number; discountAmount: number;
     }>();
-
     for (const item of items) {
         const key = `${item.category}|||${item.itemName}`;
-        const existing = itemMap.get(key);
-        if (existing) {
-            existing.qtySold        += Number(item.qtySold);
-            existing.netSales       += Number(item.netSales);
-            existing.grossSales     += Number(item.grossSales);
-            existing.refundQty      += Number(item.refundQty);
-            existing.refundAmount   += Number(item.refundAmount);
-            existing.discountAmount += Number(item.discountAmount);
+        const ex  = itemMap.get(key);
+        if (ex) {
+            ex.qtySold        += Number(item.qtySold);
+            ex.netSales       += Number(item.netSales);
+            ex.grossSales     += Number(item.grossSales);
+            ex.refundQty      += Number(item.refundQty);
+            ex.refundAmount   += Number(item.refundAmount);
+            ex.discountAmount += Number(item.discountAmount);
         } else {
             itemMap.set(key, {
                 itemName:       item.itemName,
@@ -120,12 +131,6 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    const dayCount = new Set(
-        uploads.map((u: { businessDate: Date | null; uploadedAt: Date }) =>
-            (u.businessDate ?? u.uploadedAt).toISOString().slice(0, 10)
-        )
-    ).size;
-
     const topItems = [...itemMap.values()]
         .sort((a, b) => b.qtySold - a.qtySold)
         .slice(0, 20)
@@ -139,7 +144,6 @@ export async function GET(req: NextRequest) {
             avgSalesPerDay: dayCount > 0 ? +(it.netSales  / dayCount).toFixed(2) : 0,
         }));
 
-    // 4. Category breakdown
     const catMap = new Map<string, { category: string; qtySold: number; netSales: number }>();
     for (const it of itemMap.values()) {
         const c = catMap.get(it.category) ?? { category: it.category, qtySold: 0, netSales: 0 };
@@ -151,7 +155,7 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.netSales - a.netSales)
         .map(c => ({ ...c, netSales: c.netSales.toFixed(2) }));
 
-    // 5. Daily trend (one row per distinct business date)
+    // ─── Daily trend ──────────────────────────────────────────────────────────
     const trendMap = new Map<string, { date: string; netSales: number; qtySold: number; uploadCount: number }>();
     for (const up of uploads) {
         const date = (up.businessDate ?? up.uploadedAt).toISOString().slice(0, 10);
@@ -165,53 +169,78 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(d => ({ ...d, netSales: +d.netSales.toFixed(2) }));
 
-    // 6. Protein totals from modifiers (main + extras + by-dish)
-    const mainByType  = new Map<string, number>();
-    const extraByType = new Map<string, number>();
-    const mainByDish  = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
-    const extraByDish = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    // ─── Protein / Dessert classification ─────────────────────────────────────
+    const mainByType   = new Map<string, number>();
+    const extraByType  = new Map<string, number>();
+    const mainByDish   = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    const extraByDish  = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    const dessertItems = new Map<string, number>();
+    const uncatMap     = new Map<string, { itemName: string; category: string; qty: number }>();
+
+    const mainGroupNames  = new Set<string>();
+    const extraGroupNames = new Set<string>();
 
     for (const item of items) {
         const dishName = item.itemName as string;
         const category = (item.category as string) ?? "";
-        for (const mod of item.modifiers) {
-            const grp  = (mod.modifierGroup ?? "").toLowerCase();
-            const name = (mod.modifier ?? "").trim();
-            const qty  = Number(mod.qtySold ?? 0);
-            if (!name) continue;
-            const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
-            const isMain  = grp.includes("protein") && !isExtra;
-            const dishKey = `${dishName}|||${name}`;
+        const qty      = Number(item.qtySold ?? 0);
+        if (qty === 0) continue;
 
-            if (isMain) {
-                mainByType.set(name, (mainByType.get(name) ?? 0) + qty);
-                const ex = mainByDish.get(dishKey);
+        const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
+
+        if (hasProteinModifier(mods)) {
+            // Modifier-based path
+            for (const mod of mods) {
+                const grp    = (mod.modifierGroup ?? "").toLowerCase();
+                const name   = (mod.modifier ?? "").trim();
+                const modQty = Number(mod.qtySold ?? 0);
+                if (!name) continue;
+                const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
+                const isMain  = grp.includes("protein") && !isExtra;
+                const dKey    = `${dishName}|||${name}`;
+                if (isMain) {
+                    mainGroupNames.add(mod.modifierGroup);
+                    mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
+                    const ex = mainByDish.get(dKey);
+                    if (ex) ex.qty += modQty;
+                    else    mainByDish.set(dKey, { category, dish: dishName, proteinType: name, qty: modQty });
+                } else if (isExtra) {
+                    extraGroupNames.add(mod.modifierGroup);
+                    extraByType.set(name, (extraByType.get(name) ?? 0) + modQty);
+                    const ex = extraByDish.get(dKey);
+                    if (ex) ex.qty += modQty;
+                    else    extraByDish.set(dKey, { category, dish: dishName, proteinType: name, qty: modQty });
+                }
+            }
+        } else {
+            // Item-rule path
+            const result = classifyItem(dishName, rules);
+            if (!result) {
+                const ex = uncatMap.get(dishName);
                 if (ex) ex.qty += qty;
-                else    mainByDish.set(dishKey, { category, dish: dishName, proteinType: name, qty });
-            } else if (isExtra) {
-                extraByType.set(name, (extraByType.get(name) ?? 0) + qty);
-                const ex = extraByDish.get(dishKey);
+                else    uncatMap.set(dishName, { itemName: dishName, category, qty });
+                continue;
+            }
+            if (result.category === "excluded") continue;
+            if (result.category === "dessert") {
+                dessertItems.set(dishName, (dessertItems.get(dishName) ?? 0) + qty);
+            } else if (result.category === "main_protein") {
+                mainByType.set(result.label, (mainByType.get(result.label) ?? 0) + qty);
+                const dKey = `${dishName}|||${result.label}`;
+                const ex   = mainByDish.get(dKey);
                 if (ex) ex.qty += qty;
-                else    extraByDish.set(dishKey, { category, dish: dishName, proteinType: name, qty });
+                else    mainByDish.set(dKey, { category, dish: dishName, proteinType: result.label, qty });
+            } else if (result.category === "extra_protein") {
+                extraByType.set(result.label, (extraByType.get(result.label) ?? 0) + qty);
+                const dKey = `${dishName}|||${result.label}`;
+                const ex   = extraByDish.get(dKey);
+                if (ex) ex.qty += qty;
+                else    extraByDish.set(dKey, { category, dish: dishName, proteinType: result.label, qty });
             }
         }
     }
 
-    // Load portion standards for totalUsed = qty × portionSize
-    const allProteinNames = [...mainByType.keys(), ...extraByType.keys()];
-    const standards = await db.portionStandard.findMany({
-        where: { type: { in: ["modifier", "base"] } },
-        include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
-    });
-    const stdByName = new Map<string, { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string }>();
-    for (const s of standards) {
-        stdByName.set(String(s.itemName).toLowerCase().trim(), {
-            portionSize:    Number(s.portionSize),
-            portionUnit:    s.portionUnit,
-            ingredientName: s.ingredient?.name ?? s.itemName,
-            ingredientId:   s.ingredientId,
-        });
-    }
+    // ─── Sort helpers ─────────────────────────────────────────────────────────
     function withPortion(proteinType: string, qty: number) {
         const std = stdByName.get(proteinType.toLowerCase().trim());
         const avg = dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0;
@@ -224,33 +253,34 @@ export async function GET(req: NextRequest) {
             ingredientName: std.ingredientName,
         };
     }
-    void allProteinNames;
-
-    const proteinTotals = [...mainByType.entries()]
-        .map(([name, qty]) => withPortion(name, qty))
-        .sort((a, b) => b.qty - a.qty);
-    const extraTotals   = [...extraByType.entries()]
-        .map(([name, qty]) => withPortion(name, qty))
-        .sort((a, b) => b.qty - a.qty);
 
     const sortByDish = (a: { category: string; dish: string; qty: number }, b: { category: string; dish: string; qty: number }) => {
         if (a.category !== b.category) return a.category.localeCompare(b.category);
         if (a.dish     !== b.dish)     return a.dish.localeCompare(b.dish);
         return b.qty - a.qty;
     };
-    const mainProteinByDish  = [...mainByDish.values()].sort(sortByDish);
-    const extraProteinByDish = [...extraByDish.values()].sort(sortByDish);
-    const mainTotal  = proteinTotals.reduce((s, p) => s + p.qty, 0);
-    const extraTotal = extraTotals.reduce((s, p) => s + p.qty, 0);
 
-    // 7. Overall totals
-    const totalQty         = [...itemMap.values()].reduce((s, i) => s + i.qtySold, 0);
-    const totalNetSales    = [...itemMap.values()].reduce((s, i) => s + i.netSales, 0);
-    const totalGrossSales  = [...itemMap.values()].reduce((s, i) => s + i.grossSales, 0);
-    const totalRefundQty   = [...itemMap.values()].reduce((s, i) => s + i.refundQty, 0);
-    const totalRefundAmt   = [...itemMap.values()].reduce((s, i) => s + i.refundAmount, 0);
+    const proteinTotals  = [...mainByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty);
+    const extraTotals    = [...extraByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty);
+    const mainTotal      = proteinTotals.reduce((s, p) => s + p.qty, 0);
+    const extraTotal     = extraTotals.reduce((s, p) => s + p.qty, 0);
 
-    const allDates = [...trendMap.keys()].sort();
+    const dessertArr     = [...dessertItems.entries()].map(([itemName, qty]) => ({
+        itemName,
+        qty,
+        avgQtyPerDay: dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0,
+    })).sort((a, b) => b.qty - a.qty);
+    const dessertTotal   = dessertArr.reduce((s, d) => s + d.qty, 0);
+
+    const uncategorized  = [...uncatMap.values()].sort((a, b) => b.qty - a.qty);
+
+    // ─── Overall totals ───────────────────────────────────────────────────────
+    const totalQty        = [...itemMap.values()].reduce((s, i) => s + i.qtySold, 0);
+    const totalNetSales   = [...itemMap.values()].reduce((s, i) => s + i.netSales, 0);
+    const totalGrossSales = [...itemMap.values()].reduce((s, i) => s + i.grossSales, 0);
+    const totalRefundQty  = [...itemMap.values()].reduce((s, i) => s + i.refundQty, 0);
+    const totalRefundAmt  = [...itemMap.values()].reduce((s, i) => s + i.refundAmount, 0);
+    const allDates        = [...trendMap.keys()].sort();
 
     return NextResponse.json({
         uploadIds,
@@ -271,10 +301,21 @@ export async function GET(req: NextRequest) {
         categoryBreakdown,
         dailyTrend,
         proteinTotals,
-        // Extended ingredient summary (CR 2.2/2.3 range-aware)
         ingredientSummary: {
-            mainProtein:  { byType: proteinTotals, byDish: mainProteinByDish,  total: mainTotal },
-            extraProtein: { byType: extraTotals,   byDish: extraProteinByDish, total: extraTotal },
+            mainProtein:  {
+                byType:     proteinTotals,
+                byDish:     [...mainByDish.values()].sort(sortByDish),
+                total:      mainTotal,
+                groupNames: [...mainGroupNames],
+            },
+            extraProtein: {
+                byType:     extraTotals,
+                byDish:     [...extraByDish.values()].sort(sortByDish),
+                total:      extraTotal,
+                groupNames: [...extraGroupNames],
+            },
+            desserts:      { byItem: dessertArr, total: dessertTotal },
+            uncategorized,
             hasProteinData: proteinTotals.length > 0 || extraTotals.length > 0,
         },
     });

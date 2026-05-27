@@ -421,7 +421,7 @@ export default function PmixDashboardPage() {
     // Ingredient Summary state
     const [ingSum,         setIngSum]         = useState<IngredientSummaryResult | null>(null);
     const [ingLoading,     setIngLoading]     = useState(false);
-    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra">("main");
+    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra" | "dessert" | "uncategorized">("main");
     const [autoFilling,    setAutoFilling]    = useState(false);
     const [autoFillResult, setAutoFillResult] = useState<{
         created: number; skipped: number; missing: string[]; portionSize: number; portionUnit: string;
@@ -2515,8 +2515,8 @@ export default function PmixDashboardPage() {
                                     sub="unique menu items" icon={ChefHat} />
                             </div>
 
-                            {/* ── Toggle: Main vs Extra ── */}
-                            <div className="flex gap-2">
+                            {/* ── Toggle: Main / Extra / Desserts / Uncategorized ── */}
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     onClick={() => setIngCatFilter("main")}
                                     className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
@@ -2537,6 +2537,30 @@ export default function PmixDashboardPage() {
                                 >
                                     ➕ Extra Add-ons ({ingSum.extraProtein.byType.length} types · {fmtN(ingSum.extraProtein.total)} total)
                                 </button>
+                                {(ingSum.desserts?.byItem.length ?? 0) > 0 && (
+                                    <button
+                                        onClick={() => setIngCatFilter("dessert")}
+                                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                            ingCatFilter === "dessert"
+                                                ? "bg-pink-600 text-white border-pink-600 shadow-sm"
+                                                : "bg-muted/30 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                        }`}
+                                    >
+                                        🍮 Desserts ({ingSum.desserts?.byItem.length ?? 0} items · {fmtN(ingSum.desserts?.total ?? 0)} orders)
+                                    </button>
+                                )}
+                                {(ingSum.uncategorized?.length ?? 0) > 0 && (
+                                    <button
+                                        onClick={() => setIngCatFilter("uncategorized")}
+                                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                            ingCatFilter === "uncategorized"
+                                                ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                                                : "bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/30 dark:border-amber-700 dark:text-amber-300"
+                                        }`}
+                                    >
+                                        ⚠ Uncategorized ({ingSum.uncategorized?.length ?? 0} items)
+                                    </button>
+                                )}
                             </div>
 
                             {ingCatFilter === "main" && (
@@ -2829,6 +2853,7 @@ export default function PmixDashboardPage() {
                                                     <Badge variant="secondary" className="text-[10px] ml-1">{ingSum.extraProtein.byDish.length} rows</Badge>
                                                 </CardTitle>
                                             </CardHeader>
+
                                             <CardContent className="p-0">
                                                 {/* Desktop */}
                                                 <div className="hidden sm:block overflow-x-auto">
@@ -2875,6 +2900,130 @@ export default function PmixDashboardPage() {
                                     )}
                                 </div>
                             )}
+
+                            {/* ══ Desserts tab ══════════════════════════════════════════ */}
+                            {ingCatFilter === "dessert" && (
+                                <div className="space-y-4">
+                                    <Card>
+                                        <CardHeader className="pb-2 pt-4 px-5">
+                                            <CardTitle className="text-sm flex items-center gap-2">
+                                                <span className="text-lg leading-none">🍮</span>
+                                                Main Desserts Totals
+                                                <Badge variant="secondary" className="text-[10px] ml-auto font-normal">{ingSum.desserts?.byItem.length ?? 0} items</Badge>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="px-5 pb-4">
+                                            {(ingSum.desserts?.byItem.length ?? 0) === 0 ? (
+                                                <p className="text-sm text-muted-foreground italic">No dessert items found. Add classification rules to tag desserts.</p>
+                                            ) : (
+                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-2 text-sm items-center">
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dessert Item</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Orders</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
+
+                                                    {(ingSum.desserts?.byItem ?? []).map((item, idx) => {
+                                                        const pct = (ingSum.desserts?.total ?? 0) > 0
+                                                            ? Math.round((item.qty / (ingSum.desserts?.total ?? 1)) * 100)
+                                                            : 0;
+                                                        const max = ingSum.desserts?.byItem[0]?.qty ?? 1;
+                                                        return (
+                                                            <div key={idx} className="contents">
+                                                                <div className="font-medium truncate flex items-center gap-2 min-w-0">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                                                                    <span className="truncate">{item.itemName}</span>
+                                                                </div>
+                                                                <div className="tabular-nums font-bold text-pink-700 dark:text-pink-300 text-right">{fmtN(item.qty)}</div>
+                                                                <div className="tabular-nums text-xs text-muted-foreground text-right">{pct}%</div>
+                                                                <div className="col-span-3 -mt-1">
+                                                                    <ProgressBar value={item.qty} max={max} color="#ec4899" />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    <div className="font-bold border-t border-border pt-2 mt-1">TOTAL</div>
+                                                    <div className="tabular-nums font-bold text-pink-700 dark:text-pink-300 border-t border-border pt-2 mt-1 text-right">{fmtN(ingSum.desserts?.total ?? 0)}</div>
+                                                    <div className="tabular-nums text-xs text-muted-foreground border-t border-border pt-2 mt-1 text-right">100%</div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="bg-pink-50/50 dark:bg-pink-950/20 border-pink-200 dark:border-pink-800">
+                                        <CardContent className="pt-4 pb-4 px-5">
+                                            <p className="text-xs text-pink-700 dark:text-pink-300 font-medium mb-1.5 flex items-center gap-1.5">
+                                                <Info className="w-3.5 h-3.5" /> How desserts are detected
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Items are classified as desserts using the <strong>Item Classification Rules</strong> engine. Any item name
+                                                matching a rule with category &quot;Dessert&quot; is counted here by number of orders (no portion standard required).
+                                            </p>
+                                            <a href="/settings/pmix-rules" className="text-xs text-pink-600 dark:text-pink-400 underline mt-2 inline-block">
+                                                Manage classification rules →
+                                            </a>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
+                            {/* ══ Uncategorized tab ═════════════════════════════════════ */}
+                            {ingCatFilter === "uncategorized" && (
+                                <div className="space-y-4">
+                                    <Card className="border-amber-300 dark:border-amber-700">
+                                        <CardHeader className="pb-2 pt-4 px-5">
+                                            <CardTitle className="text-sm flex items-center gap-2">
+                                                <span className="text-base leading-none">⚠</span>
+                                                Uncategorized Items
+                                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 border text-[10px] ml-auto font-normal">{ingSum.uncategorized?.length ?? 0} items</Badge>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="px-5 pb-4">
+                                            <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
+                                                These items had no protein modifiers and did not match any classification rule. Add a rule to automatically categorize them in future uploads.
+                                            </p>
+                                            {(ingSum.uncategorized?.length ?? 0) === 0 ? (
+                                                <p className="text-sm text-muted-foreground italic">All items are classified — nothing to review.</p>
+                                            ) : (
+                                                <div className="border rounded-md overflow-x-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="bg-muted/30">
+                                                                <TableHead className="text-xs pl-4">Item Name</TableHead>
+                                                                <TableHead className="text-xs">POS Category</TableHead>
+                                                                <TableHead className="text-xs text-right pr-4">Orders</TableHead>
+                                                                <TableHead className="text-xs text-right pr-4">Action</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {(ingSum.uncategorized ?? []).map((item, i) => (
+                                                                <TableRow key={i}>
+                                                                    <TableCell className="font-medium pl-4 text-sm">{item.itemName}</TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">{item.category || "—"}</TableCell>
+                                                                    <TableCell className="text-right font-bold tabular-nums pr-4">{fmtN(item.qty)}</TableCell>
+                                                                    <TableCell className="text-right pr-4">
+                                                                        <a
+                                                                            href={`/settings/pmix-rules`}
+                                                                            className="text-xs text-primary underline"
+                                                                        >
+                                                                            Add rule →
+                                                                        </a>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            )}
+                                            <div className="mt-4">
+                                                <a href="/settings/pmix-rules" className="text-xs text-primary underline font-medium">
+                                                    Open Classification Rules Manager →
+                                                </a>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
                         </div>
                     )}
                 </>
@@ -3068,6 +3217,42 @@ export default function PmixDashboardPage() {
                                                             </div>
                                                         </div>
                                                     ))}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    {/* Desserts — range view */}
+                                    {(rangeData.ingredientSummary.desserts?.byItem.length ?? 0) > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <span className="text-base leading-none">🍮</span>
+                                                    Main Desserts ({rangeData.dayCount}-day total)
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 sm:gap-x-4 gap-y-1.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Item</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right">Avg/Day</div>
+                                                    {(rangeData.ingredientSummary.desserts?.byItem ?? []).map((d, i) => (
+                                                        <div key={i} className="contents">
+                                                            <div className="py-1 truncate flex items-center gap-1.5">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                                                                {d.itemName}
+                                                            </div>
+                                                            <div className="font-bold text-pink-600 dark:text-pink-300 text-right py-1 tabular-nums">{d.qty.toLocaleString()}</div>
+                                                            <div className="text-muted-foreground text-right py-1 tabular-nums">{d.avgQtyPerDay ?? (rangeData.dayCount > 0 ? (d.qty / rangeData.dayCount).toFixed(1) : "—")}</div>
+                                                        </div>
+                                                    ))}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-pink-600 dark:text-pink-300 text-right tabular-nums">
+                                                        {(rangeData.ingredientSummary.desserts?.total ?? 0).toLocaleString()}
+                                                    </div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground tabular-nums">
+                                                        {rangeData.dayCount > 0 ? ((rangeData.ingredientSummary.desserts?.total ?? 0) / rangeData.dayCount).toFixed(1) : "—"}
+                                                    </div>
                                                 </div>
                                             </CardContent>
                                         </Card>

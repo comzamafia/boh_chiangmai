@@ -426,6 +426,29 @@ model PmixModifier {
   @@map("pmix_modifiers")
 }
 
+// ─── PMIX Item Classification Rules ──────────────────────────────────────────
+
+model PmixItemRule {
+  id        String   @id @default(cuid())
+  /// Text to match against itemName (case-insensitive)
+  pattern   String
+  /// "exact" | "contains" | "starts_with"
+  matchType String   @default("contains")
+  /// "main_protein" | "extra_protein" | "dessert" | "excluded"
+  category  String
+  /// Human label shown in totals (e.g. "Beef", "Soft Shell Crab"). Falls back to pattern.
+  label     String?
+  /// Higher = checked first. Exclusion rules default 100, dessert 50, proteins 0.
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category, isActive])
+  @@map("pmix_item_rules")
+}
+
 // ─── V2: RBAC & Audit Trail ───────────────────────────────────────────────────
 
 model IngredientCategory {

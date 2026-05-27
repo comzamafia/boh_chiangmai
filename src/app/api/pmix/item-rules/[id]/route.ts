@@ -11,13 +11,14 @@ const db = prisma as any;
 
 export async function PATCH(
     req: NextRequest,
-    { params }: { params: { id: string } },
+    { params }: { params: Promise<{ id: string }> },
 ) {
     const session = await getSession();
     if (!session || (session.role !== "admin" && session.role !== "manager")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const { id } = await params;
     const body = await req.json();
     const allowed = ["pattern", "matchType", "category", "label", "priority", "isActive", "notes"] as const;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,7 +33,7 @@ export async function PATCH(
     if (data.isActive !== undefined) data.isActive  = Boolean(data.isActive);
 
     const rule = await db.pmixItemRule.update({
-        where: { id: params.id },
+        where: { id },
         data,
     });
     return NextResponse.json(rule);
@@ -40,13 +41,14 @@ export async function PATCH(
 
 export async function DELETE(
     _req: NextRequest,
-    { params }: { params: { id: string } },
+    { params }: { params: Promise<{ id: string }> },
 ) {
     const session = await getSession();
     if (!session || (session.role !== "admin" && session.role !== "manager")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await db.pmixItemRule.delete({ where: { id: params.id } });
+    const { id } = await params;
+    await db.pmixItemRule.delete({ where: { id } });
     return NextResponse.json({ ok: true });
 }

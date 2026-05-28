@@ -932,6 +932,13 @@ export interface ParSuggestion {
     suggestedParMin:  number | null;
     suggestedROP:     number | null;
     suggestedParMax:  number | null;
+    // Purchase-unit conversion (1 purchaseUnit = conversionRate recipeUnits)
+    purchaseUnit?:           string;
+    conversionRate?:         number;
+    aduPurchase?:            number | null;
+    suggestedParMinPurchase?: number | null;
+    suggestedROPPurchase?:    number | null;
+    suggestedParMaxPurchase?: number | null;
     // Supplier-driven lead time
     supplierName?:           string | null;
     scheduleBasedLeadDays?:  number;
@@ -942,11 +949,12 @@ export interface ParSuggestion {
 }
 
 export interface ParSuggestionsResult {
-    days:         number;
-    cutoffDate:   string;
-    suggestions:  ParSuggestion[];
-    totalTracked: number;
-    withHistory:  number;
+    days:           number;
+    cutoffDate:     string;
+    suggestions:    ParSuggestion[];
+    totalTracked:   number;
+    withHistory:    number;
+    pmixDataExists?: boolean;
 }
 
 // ─── Portion Standards Types ──────────────────────────────────────────────────

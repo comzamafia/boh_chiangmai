@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
                     name: true,
                     sku: true,
                     recipeUnit: true,
+                    purchaseUnit: true,
+                    conversionRate: true,
                     groupId: true,
                     categoryId: true,
                     category: { select: { id: true, name: true } },
@@ -244,12 +246,19 @@ export async function GET(req: NextRequest) {
 
         const hasHistory = totalOut > 0;
 
+        // Purchase-unit conversion (1 purchaseUnit = conversionRate recipeUnits)
+        const convRate     = Number(iv.ingredient.conversionRate) || 1;
+        const purchaseUnit = iv.ingredient.purchaseUnit ?? iv.ingredient.recipeUnit;
+        const toPurchase   = (recipeQty: number) => convRate > 0 ? r(recipeQty / convRate) : null;
+
         return {
             inventoryItemId:  iv.id,
             ingredientId:     iv.ingredientId,
             ingredientName:   iv.ingredient.name,
             sku:              iv.ingredient.sku,
             unit:             iv.ingredient.recipeUnit,
+            purchaseUnit,
+            conversionRate:   convRate,
             groupId:          iv.ingredient.groupId,
             categoryId:       iv.ingredient.categoryId,
             categoryName:     iv.ingredient.category?.name ?? "Uncategorized",
@@ -277,10 +286,16 @@ export async function GET(req: NextRequest) {
             nextDeliveryDate:       lt.nextDeliveryDate?.toISOString().slice(0, 10) ?? null,
             nextOrderBy:            lt.nextOrderBy?.toISOString() ?? null,
 
-            // Suggested limits
+            // Suggested limits (recipe unit)
             suggestedParMin: hasHistory ? suggestedParMin : null,
             suggestedROP:    hasHistory ? suggestedROP    : null,
             suggestedParMax: hasHistory ? suggestedParMax : null,
+
+            // Suggested limits expressed in PURCHASE unit (for ordering decisions)
+            suggestedParMinPurchase: hasHistory ? toPurchase(suggestedParMin) : null,
+            suggestedROPPurchase:    hasHistory ? toPurchase(suggestedROP)    : null,
+            suggestedParMaxPurchase: hasHistory ? toPurchase(suggestedParMax) : null,
+            aduPurchase:             hasHistory ? toPurchase(adu)              : null,
         };
     });
 
@@ -288,8 +303,10 @@ export async function GET(req: NextRequest) {
         days,
         cutoffDate: cutoffStr,
         suggestions,
-        totalTracked: inventoryItems.length,
-        withHistory:  suggestions.filter(s => s.hasHistory).length,
+        totalTracked:    inventoryItems.length,
+        withHistory:     suggestions.filter(s => s.hasHistory).length,
+        // Diagnostic: was ANY PMIX data uploaded in the lookback window?
+        pmixDataExists:  pmixUploadIds.length > 0,
     });
 }
 

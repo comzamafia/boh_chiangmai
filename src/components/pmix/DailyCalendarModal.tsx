@@ -399,6 +399,9 @@ export default function DailyCalendarModal({
                                     </p>
                                     <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
                                         {parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{parSuggestion.adu.toFixed(2)}</strong> {parSuggestion.unit}/day
+                                        {parSuggestion.aduPurchase != null && parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && (
+                                            <> (≈ <strong>{parSuggestion.aduPurchase.toFixed(2)}</strong> {parSuggestion.purchaseUnit}/day)</>
+                                        )}
                                         {parSuggestion.usageSource === "pmix" && (
                                             <> · <span className="font-semibold">from PMIX sales</span></>
                                         )}
@@ -433,8 +436,11 @@ export default function DailyCalendarModal({
                                         {parSuggestion.currentParMax.toFixed(2)}
                                     </div>
 
-                                    {/* Suggested */}
-                                    <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">Suggest</div>
+                                    {/* Suggested (recipe unit) */}
+                                    <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">
+                                        Suggest<br />
+                                        <span className="text-[9px] font-normal text-muted-foreground">({parSuggestion.unit})</span>
+                                    </div>
                                     <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
                                         {parSuggestion.suggestedParMin?.toFixed(2) ?? "—"}
                                     </div>
@@ -444,11 +450,33 @@ export default function DailyCalendarModal({
                                     <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
                                         {parSuggestion.suggestedParMax?.toFixed(2) ?? "—"}
                                     </div>
+
+                                    {/* Suggested (purchase unit) — only when different from recipe unit */}
+                                    {parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && parSuggestion.hasHistory && (
+                                        <>
+                                            <div className="text-[10px] text-blue-700/80 dark:text-blue-400/80 font-medium self-center">
+                                                Order<br />
+                                                <span className="text-[9px] font-normal text-muted-foreground">({parSuggestion.purchaseUnit})</span>
+                                            </div>
+                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
+                                                {parSuggestion.suggestedParMinPurchase?.toFixed(2) ?? "—"}
+                                            </div>
+                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
+                                                {parSuggestion.suggestedROPPurchase?.toFixed(2) ?? "—"}
+                                            </div>
+                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
+                                                {parSuggestion.suggestedParMaxPurchase?.toFixed(2) ?? "—"}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Unit label */}
                                 <p className="text-[10px] text-muted-foreground">
-                                    All values in <strong>{parSuggestion.unit}</strong>
+                                    Recipe unit: <strong>{parSuggestion.unit}</strong>
+                                    {parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && (
+                                        <> · Order unit: <strong>{parSuggestion.purchaseUnit}</strong> (1 {parSuggestion.purchaseUnit} = {parSuggestion.conversionRate} {parSuggestion.unit})</>
+                                    )}
                                     {parSuggestion.nextDeliveryDate && !parSuggestion.scheduleFallback && (
                                         <> · Next delivery {new Date(parSuggestion.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
                                     )}
@@ -477,9 +505,17 @@ export default function DailyCalendarModal({
                                 )}
 
                                 {!parSuggestion.hasHistory && (
-                                    <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
-                                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                        No usage history — upload PMIX data or record &quot;Out&quot; entries to enable suggestions
+                                    <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2 space-y-1.5">
+                                        <div className="flex items-center gap-1.5 font-semibold">
+                                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                            No usage history for <strong>{parSuggestion.ingredientName}</strong>
+                                        </div>
+                                        <ol className="list-decimal pl-5 space-y-0.5 text-[11px]">
+                                            <li>Upload PMIX in the last {parSuggestion.daysAnalyzed} days (PMIX Analytics → Upload Report)</li>
+                                            <li>Make sure the modifier name in your POS matches (or is a prefix of) the inventory ingredient name</li>
+                                            <li>Or add a <strong>Portion Standard</strong> mapping the modifier → this ingredient (Recipes → Portion Standards)</li>
+                                            <li>Or record manual &quot;Out&quot; transactions for this ingredient (Inventory → Transactions)</li>
+                                        </ol>
                                     </div>
                                 )}
                             </div>

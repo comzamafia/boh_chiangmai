@@ -920,6 +920,8 @@ export interface ParSuggestion {
     totalOutQty:      number;
     adu:              number;
     hasHistory:       boolean;
+    /** Where the usage figure came from */
+    usageSource?:     "transactions" | "pmix" | "none";
     currentParMin:    number;
     currentParMax:    number;
     currentROP:       number;

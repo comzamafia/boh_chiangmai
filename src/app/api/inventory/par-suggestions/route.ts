@@ -1,7 +1,11 @@
 /**
  * GET  /api/inventory/par-suggestions?days=7
- *   Compute Average Daily Usage (ADU) from InventoryTransaction "Out" records
- *   and suggest PAR Min, ROP, and PAR Max for each tracked ingredient.
+ *   Compute Average Daily Usage (ADU) and suggest PAR Min, ROP, and PAR Max.
+ *
+ *   Usage source — picks the best available signal per ingredient:
+ *     1. InventoryTransaction "Out" records (preferred — actual prep/depletion)
+ *     2. PMIX Main Protein / Main Dessert totals × Portion Standard
+ *        (fallback when no inventory transactions exist — uses real sales data)
  *
  * POST /api/inventory/par-suggestions
  *   Apply selected suggestions to InventoryItem records.
@@ -12,6 +16,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { calculateLeadTime } from "@/lib/supplier-lead-time";
+import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -72,10 +77,123 @@ export async function GET(req: NextRequest) {
         outMap.set(txn.ingredientId, (outMap.get(txn.ingredientId) ?? 0) + Number(txn.qty));
     }
 
+    // ─── PMIX-based usage fallback ───────────────────────────────────────────
+    // Aggregate Main Protein and Main Dessert totals from PMIX uploads in the
+    // same date window, mapped to inventory ingredients via PortionStandard.
+    // Used when InventoryTransaction has no "Out" records for an ingredient.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = prisma as any;
+
+    const pmixUploads = await db.pmixUpload.findMany({
+        where: {
+            OR: [
+                { businessDate: { gte: cutoff } },
+                { businessDate: null, uploadedAt: { gte: cutoff } },
+            ],
+        },
+        select: { id: true },
+    });
+    const pmixUploadIds = pmixUploads.map((u: { id: string }) => u.id);
+
+    // Map: ingredientId → total qty consumed (in recipe units) from PMIX
+    const pmixUsageByIngId = new Map<string, number>();
+    // Map: lowercase protein/item name → orders count (for fuzzy fallback)
+    const pmixUsageByName  = new Map<string, number>();
+
+    if (pmixUploadIds.length > 0) {
+        const pmixItems = await db.pmixItem.findMany({
+            where:   { uploadId: { in: pmixUploadIds } },
+            include: { modifiers: true },
+        });
+        const rules: RuleRow[] = await db.pmixItemRule.findMany({
+            where:   { isActive: true },
+            orderBy: [{ priority: "desc" }, { pattern: "asc" }],
+        });
+        const standards = await db.portionStandard.findMany({
+            where:   { type: { in: ["modifier", "base"] } },
+            select:  { itemName: true, portionSize: true, ingredientId: true },
+        });
+        const stdByName = new Map<string, { ingredientId: string; portionSize: number }>();
+        for (const s of standards) {
+            stdByName.set(String(s.itemName).toLowerCase().trim(), {
+                ingredientId: s.ingredientId,
+                portionSize:  Number(s.portionSize),
+            });
+        }
+
+        const addById   = (ingId: string, qty: number) => pmixUsageByIngId.set(ingId, (pmixUsageByIngId.get(ingId) ?? 0) + qty);
+        const addByName = (name: string, qty: number) => {
+            const k = name.toLowerCase().trim();
+            if (k) pmixUsageByName.set(k, (pmixUsageByName.get(k) ?? 0) + qty);
+        };
+
+        for (const item of pmixItems) {
+            const dishName = item.itemName as string;
+            const qty      = Number(item.qtySold ?? 0);
+            if (qty === 0) continue;
+
+            const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
+
+            if (hasProteinModifier(mods)) {
+                // Modifier-based protein path
+                for (const mod of mods) {
+                    const grp    = (mod.modifierGroup ?? "").toLowerCase();
+                    const name   = (mod.modifier ?? "").trim();
+                    const modQty = Number(mod.qtySold ?? 0);
+                    if (!name || modQty === 0) continue;
+                    const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
+                    const isMain  = grp.includes("protein") && !isExtra;
+                    if (!isMain && !isExtra) continue;
+
+                    const modClass = classifyItem(name, rules);
+                    if (modClass?.category === "excluded") continue;
+
+                    const std = stdByName.get(name.toLowerCase().trim());
+                    if (std) addById(std.ingredientId, modQty * std.portionSize);
+                    else     addByName(name, modQty);
+                }
+            } else {
+                // Item-rule path (mostly desserts)
+                const result = classifyItem(dishName, rules);
+                if (!result || result.category === "excluded") continue;
+                if (result.category === "dessert" || result.category === "main_protein" || result.category === "extra_protein") {
+                    const std = stdByName.get(dishName.toLowerCase().trim());
+                    if (std) addById(std.ingredientId, qty * std.portionSize);
+                    else     addByName(dishName, qty);
+                }
+            }
+        }
+    }
+
     // Build suggestions
     const now = new Date();
     const suggestions = inventoryItems.map(iv => {
-        const totalOut = outMap.get(iv.ingredientId) ?? 0;
+        // 1. Try InventoryTransaction "Out" records first
+        let totalOut: number = outMap.get(iv.ingredientId) ?? 0;
+        let usageSource: "transactions" | "pmix" | "none" = totalOut > 0 ? "transactions" : "none";
+
+        // 2. Fall back to PMIX Main Protein / Main Dessert totals
+        if (totalOut === 0) {
+            const fromId = pmixUsageByIngId.get(iv.ingredientId) ?? 0;
+            if (fromId > 0) {
+                totalOut    = fromId;
+                usageSource = "pmix";
+            } else {
+                // Last resort: fuzzy match by ingredient name
+                const ingName = iv.ingredient.name.toLowerCase().trim();
+                let best = 0;
+                for (const [pmixName, qty] of pmixUsageByName.entries()) {
+                    if (ingName === pmixName || ingName.includes(pmixName) || pmixName.includes(ingName)) {
+                        if (qty > best) best = qty;
+                    }
+                }
+                if (best > 0) {
+                    totalOut    = best;
+                    usageSource = "pmix";
+                }
+            }
+        }
+
         const adu = totalOut / days;  // Average Daily Usage in recipe units
 
         const currentParMin = Number(iv.parMin);
@@ -124,6 +242,7 @@ export async function GET(req: NextRequest) {
             totalOutQty:      r(totalOut),
             adu:              r(adu),
             hasHistory,
+            usageSource,     // "transactions" | "pmix" | "none"
 
             // Current limits
             currentParMin,

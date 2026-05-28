@@ -399,6 +399,12 @@ export default function DailyCalendarModal({
                                     </p>
                                     <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
                                         {parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{parSuggestion.adu.toFixed(2)}</strong> {parSuggestion.unit}/day
+                                        {parSuggestion.usageSource === "pmix" && (
+                                            <> · <span className="font-semibold">from PMIX sales</span></>
+                                        )}
+                                        {parSuggestion.usageSource === "transactions" && (
+                                            <> · from inventory transactions</>
+                                        )}
                                         {parSuggestion.supplierName && (
                                             <> · {parSuggestion.supplierName} Lead {parSuggestion.scheduleBasedLeadDays ?? parSuggestion.leadTimeDays}d</>
                                         )}
@@ -473,7 +479,7 @@ export default function DailyCalendarModal({
                                 {!parSuggestion.hasHistory && (
                                     <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
                                         <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                        No inventory transactions — record &quot;Out&quot; entries to enable suggestions
+                                        No usage history — upload PMIX data or record &quot;Out&quot; entries to enable suggestions
                                     </div>
                                 )}
                             </div>

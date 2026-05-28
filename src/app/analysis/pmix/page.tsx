@@ -696,9 +696,9 @@ export default function PmixDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
-    // ── Load PAR suggestions (once per session when summary tab opens) ──
+    // ── Load PAR suggestions (once per session: on summary tab, or when any calendar opens) ──
     useEffect(() => {
-        if (activeTab === "summary" && parData.length === 0) {
+        if ((activeTab === "summary" || proteinCalOpen || dessertCalOpen) && parData.length === 0) {
             setParLoading(true);
             pmixApi.parSuggestions(7)
                 .then(r => setParData(r.suggestions))
@@ -706,9 +706,9 @@ export default function PmixDashboardPage() {
                 .finally(() => setParLoading(false));
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
+    }, [activeTab, proteinCalOpen, dessertCalOpen]);
 
-    // ── Apply PAR suggestions ──
+    // ── Apply PAR suggestions (bulk, from Summary tab) ──
     async function handleApplyPar() {
         const toApply = parData
             .filter(s => parSelected.has(s.inventoryItemId) && s.suggestedParMin !== null)
@@ -729,6 +729,23 @@ export default function PmixDashboardPage() {
             setParData(fresh.suggestions);
         } catch { /* ignore */ }
         finally { setParApplying(false); }
+    }
+
+    // ── Apply PAR suggestion for a single item (from calendar popup) ──
+    async function handleApplyParSingle(item: { inventoryItemId: string; parMin: number; parMax: number; reorderPoint: number }) {
+        await pmixApi.applyParSuggestions([item]);
+        // Refresh PAR cache so the summary tab stays in sync
+        const fresh = await pmixApi.parSuggestions(7);
+        setParData(fresh.suggestions);
+    }
+
+    // ── Fuzzy match a PAR suggestion by name (protein or dessert name ↔ ingredient name) ──
+    function findParMatch(name: string) {
+        const n = name.toLowerCase().trim();
+        return parData.find(s =>
+            s.ingredientName.toLowerCase().includes(n) ||
+            n.includes(s.ingredientName.toLowerCase())
+        ) ?? null;
     }
 
     // ── Export Daily Summary CSV ──
@@ -3351,6 +3368,8 @@ export default function PmixDashboardPage() {
                     rangeTo={rangeTo}
                     open={proteinCalOpen}
                     onClose={() => setProteinCalOpen(false)}
+                    parSuggestion={findParMatch(proteinCalTarget.protein)}
+                    onApplyPar={handleApplyParSingle}
                 />
             )}
 
@@ -3366,6 +3385,8 @@ export default function PmixDashboardPage() {
                     onClose={() => setDessertCalOpen(false)}
                     fetchFn={pmixApi.dessertDaily}
                     showLb={false}
+                    parSuggestion={findParMatch(dessertCalItem)}
+                    onApplyPar={handleApplyParSingle}
                 />
             )}
 

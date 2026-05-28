@@ -700,7 +700,7 @@ export default function PmixDashboardPage() {
     useEffect(() => {
         if (activeTab === "summary" && parData.length === 0) {
             setParLoading(true);
-            pmixApi.parSuggestions(30)
+            pmixApi.parSuggestions(7)
                 .then(r => setParData(r.suggestions))
                 .catch(() => {})
                 .finally(() => setParLoading(false));
@@ -725,7 +725,7 @@ export default function PmixDashboardPage() {
             setParApplied(r.applied);
             setParSelected(new Set());
             // Refresh PAR data
-            const fresh = await pmixApi.parSuggestions(30);
+            const fresh = await pmixApi.parSuggestions(7);
             setParData(fresh.suggestions);
         } catch { /* ignore */ }
         finally { setParApplying(false); }
@@ -1831,7 +1831,7 @@ export default function PmixDashboardPage() {
                                                     <div className="flex-1 min-w-0">
                                                         <CardTitle className="text-sm font-semibold">Automated PAR / ROP Suggestions</CardTitle>
                                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                                            Based on 30-day ADU from inventory transactions · ROP = (ADU × Lead Time) + Safety Stock
+                                                            Based on 7-day ADU from inventory transactions · ROP = (ADU × Lead Time) + Safety Stock
                                                         </p>
                                                     </div>
                                                     {parSelected.size > 0 && (

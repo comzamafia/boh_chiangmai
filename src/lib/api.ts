@@ -300,7 +300,7 @@ export const pmixApi = {
         apiFetch<PmixDailySummary>(`/pmix/daily-summary?uploadId=${uploadId}`),
     trend: (limit = 10) =>
         apiFetch<{ trend: PmixTrendPoint[] }>(`/pmix/trend?limit=${limit}`),
-    parSuggestions: (days = 30) =>
+    parSuggestions: (days = 7) =>
         apiFetch<ParSuggestionsResult>(`/inventory/par-suggestions?days=${days}`),
     applyParSuggestions: (items: { inventoryItemId: string; parMin: number; parMax: number; reorderPoint: number }[]) =>
         apiFetch<{ applied: number }>("/inventory/par-suggestions", { method: "POST", body: JSON.stringify({ items }) }),

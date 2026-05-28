@@ -1,5 +1,5 @@
 /**
- * GET  /api/inventory/par-suggestions?days=30
+ * GET  /api/inventory/par-suggestions?days=7
  *   Compute Average Daily Usage (ADU) from InventoryTransaction "Out" records
  *   and suggest PAR Min, ROP, and PAR Max for each tracked ingredient.
  *
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const days = Math.max(1, Math.min(90, Number(searchParams.get("days") ?? 30)));
+    const days = Math.max(1, Math.min(90, Number(searchParams.get("days") ?? 7)));
 
     // Date window
     const cutoff = new Date();

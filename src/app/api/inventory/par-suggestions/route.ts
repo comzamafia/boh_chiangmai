@@ -148,18 +148,21 @@ export async function GET(req: NextRequest) {
                     const modClass = classifyItem(name, rules);
                     if (modClass?.category === "excluded") continue;
 
+                    // Always record under name (raw orders) for fuzzy fallback.
+                    addByName(name, modQty);
+                    // If a Portion Standard exists, ALSO record the converted
+                    // amount under the standard's ingredientId for exact matching.
                     const std = stdByName.get(name.toLowerCase().trim());
                     if (std) addById(std.ingredientId, modQty * std.portionSize);
-                    else     addByName(name, modQty);
                 }
             } else {
                 // Item-rule path (mostly desserts)
                 const result = classifyItem(dishName, rules);
                 if (!result || result.category === "excluded") continue;
                 if (result.category === "dessert" || result.category === "main_protein" || result.category === "extra_protein") {
+                    addByName(dishName, qty);
                     const std = stdByName.get(dishName.toLowerCase().trim());
                     if (std) addById(std.ingredientId, qty * std.portionSize);
-                    else     addByName(dishName, qty);
                 }
             }
         }
@@ -179,11 +182,18 @@ export async function GET(req: NextRequest) {
                 totalOut    = fromId;
                 usageSource = "pmix";
             } else {
-                // Last resort: fuzzy match by ingredient name
+                // Last resort: fuzzy match by ingredient name (word-boundary aware
+                // so "Chicken" matches "Chicken - Boneless Breast" but not
+                // "Bbq Chicken Sauce").
                 const ingName = iv.ingredient.name.toLowerCase().trim();
+                const matches = (a: string, b: string) => {
+                    if (a === b) return true;
+                    // a is a prefix of b followed by a word separator
+                    return b.startsWith(a + " ") || b.startsWith(a + "-") || b.startsWith(a + ",");
+                };
                 let best = 0;
                 for (const [pmixName, qty] of pmixUsageByName.entries()) {
-                    if (ingName === pmixName || ingName.includes(pmixName) || pmixName.includes(ingName)) {
+                    if (matches(pmixName, ingName) || matches(ingName, pmixName)) {
                         if (qty > best) best = qty;
                     }
                 }

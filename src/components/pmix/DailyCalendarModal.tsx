@@ -10,7 +10,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronLeft, ChevronRight, Brain, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Brain, CheckCircle2, AlertCircle, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import type { ParSuggestion } from "@/lib/api";
 
 // ─── public types ─────────────────────────────────────────────────────────────
@@ -160,6 +161,70 @@ export default function DailyCalendarModal({
         ? [...dayMap.values()].reduce((s, d) => s + (d.lb ?? 0), 0)
         : [...dayMap.values()].reduce((s, d) => s + d.qty, 0);
 
+    // ── Excel export handler ─────────────────────────────────────────────────
+    function handleExport() {
+        // Build full day list across the entire range
+        const start = new Date(rangeFrom + "T00:00:00");
+        const end   = new Date(rangeTo   + "T00:00:00");
+        const dowNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+        const headerRow: (string | number)[] = showLb
+            ? ["Date", "Day", "Qty", "Lb"]
+            : ["Date", "Day", "Qty"];
+
+        const rows: (string | number)[][] = [];
+        let totalQty = 0;
+        let totalLb  = 0;
+        let daysWith = 0;
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const iso = d.toISOString().slice(0, 10);
+            const data = dayMap.get(iso);
+            const qty = data?.qty ?? 0;
+            const lb  = data?.lb  ?? 0;
+            if (qty > 0) { totalQty += qty; daysWith++; }
+            totalLb += lb;
+            rows.push(showLb
+                ? [iso, dowNames[d.getDay()], qty, Number(lb.toFixed(2))]
+                : [iso, dowNames[d.getDay()], qty]
+            );
+        }
+
+        // Summary block at the top
+        const meta: (string | number)[][] = [
+            [`Item: ${itemName}`],
+            [`Unit: ${unitLabel}`],
+            [`Range: ${rangeFrom} → ${rangeTo}`],
+            [`Days with orders: ${daysWith}`],
+            [`Total qty: ${totalQty}`],
+            ...(showLb ? [[`Total lb: ${totalLb.toFixed(2)}`]] : []),
+            [`Generated: ${new Date().toISOString().slice(0, 19).replace("T", " ")}`],
+            [],
+        ];
+
+        const aoa = [...meta, headerRow, ...rows];
+
+        // Totals row at bottom
+        aoa.push(showLb
+            ? ["Total", "", totalQty, Number(totalLb.toFixed(2))]
+            : ["Total", "", totalQty]
+        );
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Column widths
+        ws["!cols"] = showLb
+            ? [{ wch: 14 }, { wch: 6 }, { wch: 10 }, { wch: 10 }]
+            : [{ wch: 14 }, { wch: 6 }, { wch: 10 }];
+
+        const wb = XLSX.utils.book_new();
+        const safeName = itemName.replace(/[\\/:*?"<>|]/g, "_").slice(0, 28);
+        XLSX.utils.book_append_sheet(wb, ws, safeName || "Daily");
+
+        const fileName = `${safeName}_${rangeFrom}_to_${rangeTo}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+    }
+
     // ── PAR apply handler ────────────────────────────────────────────────────
     async function handleApply() {
         if (!parSuggestion || !onApplyPar) return;
@@ -305,6 +370,19 @@ export default function DailyCalendarModal({
                                 <p className="text-center text-xs text-muted-foreground py-2">
                                     No orders for <strong>{itemName}</strong> in {monthLabel}
                                 </p>
+                            )}
+
+                            {/* Export to Excel */}
+                            {dayMap.size > 0 && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleExport}
+                                    className="w-full h-9 gap-1.5 text-xs rounded-lg touch-manipulation"
+                                >
+                                    <Download className="w-3.5 h-3.5" />
+                                    Export to Excel ({rangeFrom} → {rangeTo})
+                                </Button>
                             )}
                         </>
                     )}

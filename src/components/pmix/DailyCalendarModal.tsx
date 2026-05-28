@@ -398,10 +398,12 @@ export default function DailyCalendarModal({
                                         PAR / ROP Suggestion
                                     </p>
                                     <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
-                                        {parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{parSuggestion.adu.toFixed(2)}</strong> {parSuggestion.unit}/day
-                                        {parSuggestion.aduPurchase != null && parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && (
-                                            <> (≈ <strong>{parSuggestion.aduPurchase.toFixed(2)}</strong> {parSuggestion.purchaseUnit}/day)</>
-                                        )}
+                                        {(() => {
+                                            const useP = parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && parSuggestion.aduPurchase != null;
+                                            const aduDisp = useP ? parSuggestion.aduPurchase! : parSuggestion.adu;
+                                            const unitDisp = useP ? parSuggestion.purchaseUnit! : parSuggestion.unit;
+                                            return <>{parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{aduDisp.toFixed(2)}</strong> {unitDisp}/day</>;
+                                        })()}
                                         {parSuggestion.usageSource === "pmix" && (
                                             <> · <span className="font-semibold">from PMIX sales</span></>
                                         )}
@@ -415,72 +417,75 @@ export default function DailyCalendarModal({
                                 </div>
                             </div>
 
-                            {/* PAR grid */}
+                            {/* PAR grid — values shown in the ingredient's PURCHASE unit
+                                (the unit the kitchen actually orders in: lb, kg, qty, case…)
+                                with a tiny recipe-unit row beneath for chef reference. */}
                             <div className="px-3 py-2.5 space-y-2">
-                                <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-3 gap-y-1 text-xs">
-                                    {/* Column headers */}
-                                    <div />
-                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Min</div>
-                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROP</div>
-                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Max</div>
+                                {(() => {
+                                    const hasPurchase = !!(parSuggestion.purchaseUnit
+                                        && parSuggestion.purchaseUnit !== parSuggestion.unit
+                                        && parSuggestion.conversionRate && parSuggestion.conversionRate > 0);
+                                    const displayUnit = hasPurchase ? parSuggestion.purchaseUnit! : parSuggestion.unit;
+                                    const conv = hasPurchase ? parSuggestion.conversionRate! : 1;
+                                    // Convert any recipe-unit number into the display (purchase) unit
+                                    const toDisp = (recipeVal: number | null | undefined) =>
+                                        recipeVal == null ? null : recipeVal / conv;
+                                    const fmt = (v: number | null | undefined) =>
+                                        v == null ? "—" : v.toFixed(2);
 
-                                    {/* Current */}
-                                    <div className="text-[10px] text-muted-foreground self-center">Current</div>
-                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                        {parSuggestion.currentParMin.toFixed(2)}
-                                    </div>
-                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                        {parSuggestion.currentROP.toFixed(2)}
-                                    </div>
-                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                        {parSuggestion.currentParMax.toFixed(2)}
-                                    </div>
-
-                                    {/* Suggested (recipe unit) */}
-                                    <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">
-                                        Suggest<br />
-                                        <span className="text-[9px] font-normal text-muted-foreground">({parSuggestion.unit})</span>
-                                    </div>
-                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                        {parSuggestion.suggestedParMin?.toFixed(2) ?? "—"}
-                                    </div>
-                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                        {parSuggestion.suggestedROP?.toFixed(2) ?? "—"}
-                                    </div>
-                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                        {parSuggestion.suggestedParMax?.toFixed(2) ?? "—"}
-                                    </div>
-
-                                    {/* Suggested (purchase unit) — only when different from recipe unit */}
-                                    {parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && parSuggestion.hasHistory && (
+                                    return (
                                         <>
-                                            <div className="text-[10px] text-blue-700/80 dark:text-blue-400/80 font-medium self-center">
-                                                Order<br />
-                                                <span className="text-[9px] font-normal text-muted-foreground">({parSuggestion.purchaseUnit})</span>
-                                            </div>
-                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
-                                                {parSuggestion.suggestedParMinPurchase?.toFixed(2) ?? "—"}
-                                            </div>
-                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
-                                                {parSuggestion.suggestedROPPurchase?.toFixed(2) ?? "—"}
-                                            </div>
-                                            <div className="text-center tabular-nums text-blue-700/80 dark:text-blue-300/80 bg-blue-50 dark:bg-blue-950/40 rounded py-0.5 text-[11px]">
-                                                {parSuggestion.suggestedParMaxPurchase?.toFixed(2) ?? "—"}
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
+                                            <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-3 gap-y-1 text-xs">
+                                                {/* Column headers */}
+                                                <div />
+                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Min</div>
+                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROP</div>
+                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Max</div>
 
-                                {/* Unit label */}
-                                <p className="text-[10px] text-muted-foreground">
-                                    Recipe unit: <strong>{parSuggestion.unit}</strong>
-                                    {parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && (
-                                        <> · Order unit: <strong>{parSuggestion.purchaseUnit}</strong> (1 {parSuggestion.purchaseUnit} = {parSuggestion.conversionRate} {parSuggestion.unit})</>
-                                    )}
-                                    {parSuggestion.nextDeliveryDate && !parSuggestion.scheduleFallback && (
-                                        <> · Next delivery {new Date(parSuggestion.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
-                                    )}
-                                </p>
+                                                {/* Current — converted to display unit */}
+                                                <div className="text-[10px] text-muted-foreground self-center">
+                                                    Current<br />
+                                                    <span className="text-[9px] font-normal">({displayUnit})</span>
+                                                </div>
+                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.currentParMin))}
+                                                </div>
+                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.currentROP))}
+                                                </div>
+                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.currentParMax))}
+                                                </div>
+
+                                                {/* Suggested — in display unit */}
+                                                <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">
+                                                    Suggest<br />
+                                                    <span className="text-[9px] font-normal text-muted-foreground">({displayUnit})</span>
+                                                </div>
+                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.suggestedParMin))}
+                                                </div>
+                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.suggestedROP))}
+                                                </div>
+                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                                    {fmt(toDisp(parSuggestion.suggestedParMax))}
+                                                </div>
+                                            </div>
+
+                                            {/* Unit caption + conversion note */}
+                                            <p className="text-[10px] text-muted-foreground">
+                                                All values in <strong>{displayUnit}</strong>
+                                                {hasPurchase && (
+                                                    <> · 1 {parSuggestion.purchaseUnit} = {conv} {parSuggestion.unit}</>
+                                                )}
+                                                {parSuggestion.nextDeliveryDate && !parSuggestion.scheduleFallback && (
+                                                    <> · Next delivery {new Date(parSuggestion.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
+                                                )}
+                                            </p>
+                                        </>
+                                    );
+                                })()}
 
                                 {/* Accept & Apply */}
                                 {onApplyPar && !parApplied && parSuggestion.hasHistory && (

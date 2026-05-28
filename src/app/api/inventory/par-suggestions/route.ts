@@ -18,6 +18,11 @@ import { logAudit } from "@/lib/audit";
 import { calculateLeadTime } from "@/lib/supplier-lead-time";
 import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
+// PAR suggestions are recomputed live from PMIX uploads + InventoryTransaction —
+// never serve a cached response.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

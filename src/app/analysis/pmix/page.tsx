@@ -717,15 +717,20 @@ export default function PmixDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
-    // ── Load PAR suggestions (once per session: on summary tab, or when any calendar opens) ──
+    // ── Load PAR suggestions ──
+    // Initial load when summary tab opens OR a calendar popup opens.
+    // Re-fetch every time a calendar opens so suggestions reflect the latest
+    // PMIX uploads / inventory transactions (live recompute).
     useEffect(() => {
-        if ((activeTab === "summary" || proteinCalOpen || dessertCalOpen) && parData.length === 0) {
-            setParLoading(true);
-            pmixApi.parSuggestions(7)
-                .then(r => setParData(r.suggestions))
-                .catch(() => {})
-                .finally(() => setParLoading(false));
-        }
+        const shouldLoadInitial = activeTab === "summary" && parData.length === 0;
+        const shouldRefresh     = proteinCalOpen || dessertCalOpen;
+        if (!shouldLoadInitial && !shouldRefresh) return;
+
+        setParLoading(true);
+        pmixApi.parSuggestions(7)
+            .then(r => setParData(r.suggestions))
+            .catch(() => {})
+            .finally(() => setParLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, proteinCalOpen, dessertCalOpen]);
 

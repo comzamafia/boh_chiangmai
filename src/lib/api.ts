@@ -301,7 +301,8 @@ export const pmixApi = {
     trend: (limit = 10) =>
         apiFetch<{ trend: PmixTrendPoint[] }>(`/pmix/trend?limit=${limit}`),
     parSuggestions: (days = 7) =>
-        apiFetch<ParSuggestionsResult>(`/inventory/par-suggestions?days=${days}`),
+        // Cache-bust so we always recompute against the latest PMIX + transactions
+        apiFetch<ParSuggestionsResult>(`/inventory/par-suggestions?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
     applyParSuggestions: (items: { inventoryItemId: string; parMin: number; parMax: number; reorderPoint: number }[]) =>
         apiFetch<{ applied: number }>("/inventory/par-suggestions", { method: "POST", body: JSON.stringify({ items }) }),
     portionCalc: (uploadId: string) =>

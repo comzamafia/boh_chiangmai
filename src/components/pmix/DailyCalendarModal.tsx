@@ -3,21 +3,28 @@
 /**
  * DailyCalendarModal — generic mobile-first calendar popup
  *
- * Used for both Main Protein Totals and Main Desserts.
- * Accepts a `fetchFn` that returns per-day data, so each caller
- * wires its own API without duplicating calendar UI code.
+ * Renders a monthly calendar of daily usage for one protein or dessert item,
+ * plus an optional PAR / ROP suggestion card below.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Brain, CheckCircle2, AlertCircle } from "lucide-react";
+import type { ParSuggestion } from "@/lib/api";
 
 // ─── public types ─────────────────────────────────────────────────────────────
 export interface DailyCalendarDay {
-    date: string;        // YYYY-MM-DD
+    date: string;
     qty:  number;
-    lb?:  number | null; // optional — shown when portionUnit = "oz"
+    lb?:  number | null;
+}
+
+export interface ParApplyItem {
+    inventoryItemId: string;
+    parMin:          number;
+    parMax:          number;
+    reorderPoint:    number;
 }
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -62,29 +69,39 @@ function heatBg(value: number, max: number, scheme: ColorScheme): string {
 
 // ─── component ────────────────────────────────────────────────────────────────
 interface Props {
-    itemName:  string;
-    unitLabel: string;              // e.g. "lb / day" or "orders / day"
-    color:     ColorScheme;
-    rangeFrom: string;              // YYYY-MM-DD
-    rangeTo:   string;
-    open:      boolean;
-    onClose:   () => void;
-    /** Called once on open; receives (item, from, to) and must resolve DailyCalendarDay[] */
-    fetchFn:   (item: string, from: string, to: string) => Promise<{ days: DailyCalendarDay[] }>;
-    /** If true, show the .lb value instead of .qty when available */
-    showLb?:   boolean;
+    itemName:      string;
+    unitLabel:     string;
+    color:         ColorScheme;
+    rangeFrom:     string;
+    rangeTo:       string;
+    open:          boolean;
+    onClose:       () => void;
+    fetchFn:       (item: string, from: string, to: string) => Promise<{ days: DailyCalendarDay[] }>;
+    showLb?:       boolean;
+    /** Matched PAR suggestion for this ingredient — shown below the calendar */
+    parSuggestion?: ParSuggestion | null;
+    /** Called when user presses Accept & Apply for the PAR suggestion */
+    onApplyPar?:   (item: ParApplyItem) => Promise<void>;
 }
 
 export default function DailyCalendarModal({
-    itemName, unitLabel, color, rangeFrom, rangeTo, open, onClose, fetchFn, showLb = false,
+    itemName, unitLabel, color, rangeFrom, rangeTo, open, onClose,
+    fetchFn, showLb = false, parSuggestion, onApplyPar,
 }: Props) {
     const initMonth = rangeFrom.slice(0, 7);
     const [currentMonth, setCurrentMonth] = useState(initMonth);
     const [loading,      setLoading]      = useState(false);
     const [dayMap,       setDayMap]       = useState<Map<string, DailyCalendarDay>>(new Map());
 
+    // PAR apply state
+    const [parApplying, setParApplying] = useState(false);
+    const [parApplied,  setParApplied]  = useState(false);
+
     useEffect(() => {
-        if (open) setCurrentMonth(rangeFrom.slice(0, 7));
+        if (open) {
+            setCurrentMonth(rangeFrom.slice(0, 7));
+            setParApplied(false);
+        }
     }, [open, itemName, rangeFrom]);
 
     const load = useCallback(async () => {
@@ -126,7 +143,6 @@ export default function DailyCalendarModal({
     ];
     while (cells.length % 7 !== 0) cells.push(null);
 
-    // Max value for heat-map (within this month only)
     const monthMax = Math.max(0, ...cells
         .filter((c): c is number => c !== null)
         .map(day => {
@@ -140,10 +156,28 @@ export default function DailyCalendarModal({
     const daysWithOrders = dayMap.size;
     const monthLabel = new Date(year, mon - 1, 1)
         .toLocaleString("en-US", { month: "long", year: "numeric" });
-
     const totalMonthVal = showLb
         ? [...dayMap.values()].reduce((s, d) => s + (d.lb ?? 0), 0)
         : [...dayMap.values()].reduce((s, d) => s + d.qty, 0);
+
+    // ── PAR apply handler ────────────────────────────────────────────────────
+    async function handleApply() {
+        if (!parSuggestion || !onApplyPar) return;
+        setParApplying(true);
+        try {
+            await onApplyPar({
+                inventoryItemId: parSuggestion.inventoryItemId,
+                parMin:          parSuggestion.suggestedParMin  ?? parSuggestion.currentParMin,
+                parMax:          parSuggestion.suggestedParMax  ?? parSuggestion.currentParMax,
+                reorderPoint:    parSuggestion.suggestedROP     ?? parSuggestion.currentROP,
+            });
+            setParApplied(true);
+        } catch {
+            /* ignore */
+        } finally {
+            setParApplying(false);
+        }
+    }
 
     return (
         <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -168,7 +202,7 @@ export default function DailyCalendarModal({
                 </DialogHeader>
 
                 {/* Scrollable body */}
-                <div className="px-3 sm:px-4 pb-4 pt-3 space-y-2.5 overflow-y-auto flex-1 min-h-0">
+                <div className="px-3 sm:px-4 pb-4 pt-3 space-y-3 overflow-y-auto flex-1 min-h-0">
 
                     {/* Month nav */}
                     <div className="flex items-center justify-between">
@@ -186,7 +220,7 @@ export default function DailyCalendarModal({
                     </div>
 
                     {loading ? (
-                        <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                        <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
                             <Loader2 className="w-5 h-5 animate-spin" />
                             <span className="text-sm">Loading…</span>
                         </div>
@@ -208,18 +242,14 @@ export default function DailyCalendarModal({
                                     if (day === null) {
                                         return <div key={`e-${idx}`} className="min-h-[2.5rem] sm:min-h-[3.2rem]" />;
                                     }
-                                    const iso = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                                    const iso     = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                                     const data    = dayMap.get(iso);
                                     const inRange = iso >= rangeFrom && iso <= rangeTo;
                                     const rawVal  = data ? (showLb ? (data.lb ?? data.qty) : data.qty) : 0;
                                     const heat    = data ? heatBg(rawVal, monthMax, color) : "";
-
-                                    let displayVal: string | null = null;
-                                    if (data) {
-                                        displayVal = showLb && data.lb != null
-                                            ? data.lb.toFixed(2)
-                                            : data.qty.toString();
-                                    }
+                                    const displayVal = data
+                                        ? showLb && data.lb != null ? data.lb.toFixed(2) : data.qty.toString()
+                                        : null;
 
                                     return (
                                         <div key={iso} className={`
@@ -231,22 +261,17 @@ export default function DailyCalendarModal({
                                             ${heat || "bg-muted/20"}
                                             ${data ? "shadow-sm" : ""}
                                         `}>
-                                            {/* Date */}
                                             <div className={`text-[9px] sm:text-[10px] font-semibold leading-none ${data ? "text-foreground" : "text-muted-foreground/60"}`}>
                                                 {day}
                                             </div>
-
-                                            {/* Value */}
                                             {displayVal !== null ? (
                                                 <div className="mt-0.5 px-0.5 w-full">
                                                     <div className={`text-[10px] sm:text-[11px] font-bold tabular-nums leading-tight ${scheme.val}`}>
                                                         {displayVal}
                                                     </div>
-                                                    {showLb ? (
-                                                        <div className="text-[8px] sm:text-[9px] text-muted-foreground leading-none">lb</div>
-                                                    ) : (
-                                                        <div className="text-[8px] sm:text-[9px] text-muted-foreground leading-none">qty</div>
-                                                    )}
+                                                    <div className="text-[8px] sm:text-[9px] text-muted-foreground leading-none">
+                                                        {showLb ? "lb" : "qty"}
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 inRange && <div className="text-[9px] text-muted-foreground/30 mt-0.5">·</div>
@@ -256,7 +281,7 @@ export default function DailyCalendarModal({
                                 })}
                             </div>
 
-                            {/* Summary */}
+                            {/* Calendar summary */}
                             {daysWithOrders > 0 ? (
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 border-t border-border text-xs text-muted-foreground">
                                     <span>
@@ -268,7 +293,6 @@ export default function DailyCalendarModal({
                                             {showLb ? totalMonthVal.toFixed(2) + " lb" : totalMonthVal.toLocaleString() + " orders"}
                                         </strong>
                                     </span>
-                                    {/* Heat legend */}
                                     <div className="flex items-center gap-1 ml-auto">
                                         <span className="text-[10px]">Low</span>
                                         {scheme.heat.map(c => (
@@ -278,11 +302,112 @@ export default function DailyCalendarModal({
                                     </div>
                                 </div>
                             ) : (
-                                <p className="text-center text-xs text-muted-foreground py-4">
+                                <p className="text-center text-xs text-muted-foreground py-2">
                                     No orders for <strong>{itemName}</strong> in {monthLabel}
                                 </p>
                             )}
                         </>
+                    )}
+
+                    {/* ── PAR / ROP Suggestion card ──────────────────────── */}
+                    {parSuggestion && (
+                        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/30 overflow-hidden">
+                            {/* Card header */}
+                            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-blue-200 dark:border-blue-800 bg-blue-100/50 dark:bg-blue-900/30">
+                                <Brain className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-200">
+                                        PAR / ROP Suggestion
+                                    </p>
+                                    <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
+                                        {parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{parSuggestion.adu.toFixed(2)}</strong> {parSuggestion.unit}/day
+                                        {parSuggestion.supplierName && (
+                                            <> · {parSuggestion.supplierName} Lead {parSuggestion.scheduleBasedLeadDays ?? parSuggestion.leadTimeDays}d</>
+                                        )}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* PAR grid */}
+                            <div className="px-3 py-2.5 space-y-2">
+                                <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-3 gap-y-1 text-xs">
+                                    {/* Column headers */}
+                                    <div />
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Min</div>
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROP</div>
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Max</div>
+
+                                    {/* Current */}
+                                    <div className="text-[10px] text-muted-foreground self-center">Current</div>
+                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                        {parSuggestion.currentParMin.toFixed(2)}
+                                    </div>
+                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                        {parSuggestion.currentROP.toFixed(2)}
+                                    </div>
+                                    <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
+                                        {parSuggestion.currentParMax.toFixed(2)}
+                                    </div>
+
+                                    {/* Suggested */}
+                                    <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">Suggest</div>
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {parSuggestion.suggestedParMin?.toFixed(2) ?? "—"}
+                                    </div>
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {parSuggestion.suggestedROP?.toFixed(2) ?? "—"}
+                                    </div>
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {parSuggestion.suggestedParMax?.toFixed(2) ?? "—"}
+                                    </div>
+                                </div>
+
+                                {/* Unit label */}
+                                <p className="text-[10px] text-muted-foreground">
+                                    All values in <strong>{parSuggestion.unit}</strong>
+                                    {parSuggestion.nextDeliveryDate && !parSuggestion.scheduleFallback && (
+                                        <> · Next delivery {new Date(parSuggestion.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
+                                    )}
+                                </p>
+
+                                {/* Accept & Apply */}
+                                {onApplyPar && !parApplied && parSuggestion.hasHistory && (
+                                    <Button
+                                        size="sm"
+                                        onClick={handleApply}
+                                        disabled={parApplying}
+                                        className="w-full h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg touch-manipulation"
+                                    >
+                                        {parApplying
+                                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Applying…</>
+                                            : <><CheckCircle2 className="w-3.5 h-3.5" /> Accept &amp; Apply Suggestions</>
+                                        }
+                                    </Button>
+                                )}
+
+                                {parApplied && (
+                                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg px-3 py-2">
+                                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                        PAR / ROP updated for <strong>{parSuggestion.ingredientName}</strong>
+                                    </div>
+                                )}
+
+                                {!parSuggestion.hasHistory && (
+                                    <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
+                                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                        No inventory transactions — record &quot;Out&quot; entries to enable suggestions
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* No inventory match */}
+                    {!parSuggestion && !loading && (
+                        <div className="rounded-xl border border-border bg-muted/20 px-3 py-3 flex items-start gap-2 text-xs text-muted-foreground">
+                            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>No matching inventory ingredient found for <strong>{itemName}</strong>. Add it in Inventory to enable PAR suggestions.</span>
+                        </div>
                     )}
                 </div>
             </DialogContent>

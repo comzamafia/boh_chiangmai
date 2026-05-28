@@ -10,9 +10,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronLeft, ChevronRight, Brain, CheckCircle2, AlertCircle, Download } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Brain, AlertCircle, Download } from "lucide-react";
 import * as XLSX from "xlsx";
-import type { ParSuggestion } from "@/lib/api";
 
 // ─── public types ─────────────────────────────────────────────────────────────
 export interface DailyCalendarDay {
@@ -21,6 +20,8 @@ export interface DailyCalendarDay {
     lb?:  number | null;
 }
 
+// Kept for backwards compatibility with callers that still pass the optional
+// inventory-linked props — the values are ignored by this component.
 export interface ParApplyItem {
     inventoryItemId: string;
     parMin:          number;
@@ -79,29 +80,24 @@ interface Props {
     onClose:       () => void;
     fetchFn:       (item: string, from: string, to: string) => Promise<{ days: DailyCalendarDay[] }>;
     showLb?:       boolean;
-    /** Matched PAR suggestion for this ingredient — shown below the calendar */
-    parSuggestion?: ParSuggestion | null;
-    /** Called when user presses Accept & Apply for the PAR suggestion */
-    onApplyPar?:   (item: ParApplyItem) => Promise<void>;
+    /** @deprecated — ignored. PAR/ROP is now computed from PMIX data alone. */
+    parSuggestion?: unknown;
+    /** @deprecated — ignored. PAR/ROP is now computed from PMIX data alone. */
+    onApplyPar?:    unknown;
 }
 
 export default function DailyCalendarModal({
     itemName, unitLabel, color, rangeFrom, rangeTo, open, onClose,
-    fetchFn, showLb = false, parSuggestion, onApplyPar,
+    fetchFn, showLb = false,
 }: Props) {
     const initMonth = rangeFrom.slice(0, 7);
     const [currentMonth, setCurrentMonth] = useState(initMonth);
     const [loading,      setLoading]      = useState(false);
     const [dayMap,       setDayMap]       = useState<Map<string, DailyCalendarDay>>(new Map());
 
-    // PAR apply state
-    const [parApplying, setParApplying] = useState(false);
-    const [parApplied,  setParApplied]  = useState(false);
-
     useEffect(() => {
         if (open) {
             setCurrentMonth(rangeFrom.slice(0, 7));
-            setParApplied(false);
         }
     }, [open, itemName, rangeFrom]);
 
@@ -160,6 +156,33 @@ export default function DailyCalendarModal({
     const totalMonthVal = showLb
         ? [...dayMap.values()].reduce((s, d) => s + (d.lb ?? 0), 0)
         : [...dayMap.values()].reduce((s, d) => s + d.qty, 0);
+
+    // ─── Self-contained PAR/ROP suggestion from PMIX data alone ───────────────
+    // Uses the calendar's own unit (lb for proteins with oz portions, orders
+    // otherwise). No inventory or ingredient link required.
+    const rangeDays = Math.max(
+        1,
+        Math.round(
+            (new Date(rangeTo + "T00:00:00").getTime() -
+                new Date(rangeFrom + "T00:00:00").getTime()) /
+                86_400_000,
+        ) + 1,
+    );
+    const totalUsage = showLb
+        ? [...dayMap.values()].reduce((s, d) => s + (d.lb ?? 0), 0)
+        : [...dayMap.values()].reduce((s, d) => s + d.qty, 0);
+    const aduSelf = totalUsage / rangeDays;
+
+    // Default operational assumptions (no inventory link)
+    const LEAD_TIME_DAYS = 1;
+    const HOLDING_DAYS   = 7;
+    const SAFETY_MULT    = 2;
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const selfParMin = r2(aduSelf * SAFETY_MULT);
+    const selfROP    = r2(aduSelf * LEAD_TIME_DAYS + selfParMin);
+    const selfParMax = r2(aduSelf * HOLDING_DAYS);
+    const selfUnit   = showLb ? "lb" : "orders";
+    const hasSelfData = aduSelf > 0;
 
     // ── Excel export handler ─────────────────────────────────────────────────
     function handleExport() {
@@ -223,25 +246,6 @@ export default function DailyCalendarModal({
 
         const fileName = `${safeName}_${rangeFrom}_to_${rangeTo}.xlsx`;
         XLSX.writeFile(wb, fileName);
-    }
-
-    // ── PAR apply handler ────────────────────────────────────────────────────
-    async function handleApply() {
-        if (!parSuggestion || !onApplyPar) return;
-        setParApplying(true);
-        try {
-            await onApplyPar({
-                inventoryItemId: parSuggestion.inventoryItemId,
-                parMin:          parSuggestion.suggestedParMin  ?? parSuggestion.currentParMin,
-                parMax:          parSuggestion.suggestedParMax  ?? parSuggestion.currentParMax,
-                reorderPoint:    parSuggestion.suggestedROP     ?? parSuggestion.currentROP,
-            });
-            setParApplied(true);
-        } catch {
-            /* ignore */
-        } finally {
-            setParApplying(false);
-        }
     }
 
     return (
@@ -387,8 +391,8 @@ export default function DailyCalendarModal({
                         </>
                     )}
 
-                    {/* ── PAR / ROP Suggestion card ──────────────────────── */}
-                    {parSuggestion && (
+                    {/* ── PAR / ROP Suggestion card (self-contained, PMIX-only) ─── */}
+                    {hasSelfData && (
                         <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/30 overflow-hidden">
                             {/* Card header */}
                             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-blue-200 dark:border-blue-800 bg-blue-100/50 dark:bg-blue-900/30">
@@ -398,142 +402,54 @@ export default function DailyCalendarModal({
                                         PAR / ROP Suggestion
                                     </p>
                                     <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
-                                        {(() => {
-                                            const useP = parSuggestion.purchaseUnit && parSuggestion.purchaseUnit !== parSuggestion.unit && parSuggestion.aduPurchase != null;
-                                            const aduDisp = useP ? parSuggestion.aduPurchase! : parSuggestion.adu;
-                                            const unitDisp = useP ? parSuggestion.purchaseUnit! : parSuggestion.unit;
-                                            return <>{parSuggestion.ingredientName} · {parSuggestion.daysAnalyzed}-day ADU: <strong>{aduDisp.toFixed(2)}</strong> {unitDisp}/day</>;
-                                        })()}
-                                        {parSuggestion.usageSource === "pmix" && (
-                                            <> · <span className="font-semibold">from PMIX sales</span></>
-                                        )}
-                                        {parSuggestion.usageSource === "transactions" && (
-                                            <> · from inventory transactions</>
-                                        )}
-                                        {parSuggestion.supplierName && (
-                                            <> · {parSuggestion.supplierName} Lead {parSuggestion.scheduleBasedLeadDays ?? parSuggestion.leadTimeDays}d</>
-                                        )}
+                                        {itemName} · {rangeDays}-day ADU: <strong>{aduSelf.toFixed(2)}</strong> {selfUnit}/day · from PMIX sales
                                     </p>
                                 </div>
                             </div>
 
-                            {/* PAR grid — values shown in the ingredient's PURCHASE unit
-                                (the unit the kitchen actually orders in: lb, kg, qty, case…)
-                                with a tiny recipe-unit row beneath for chef reference. */}
+                            {/* PAR grid — values in the calendar's own unit */}
                             <div className="px-3 py-2.5 space-y-2">
-                                {(() => {
-                                    const hasPurchase = !!(parSuggestion.purchaseUnit
-                                        && parSuggestion.purchaseUnit !== parSuggestion.unit
-                                        && parSuggestion.conversionRate && parSuggestion.conversionRate > 0);
-                                    const displayUnit = hasPurchase ? parSuggestion.purchaseUnit! : parSuggestion.unit;
-                                    const conv = hasPurchase ? parSuggestion.conversionRate! : 1;
-                                    // Convert any recipe-unit number into the display (purchase) unit
-                                    const toDisp = (recipeVal: number | null | undefined) =>
-                                        recipeVal == null ? null : recipeVal / conv;
-                                    const fmt = (v: number | null | undefined) =>
-                                        v == null ? "—" : v.toFixed(2);
+                                <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-3 gap-y-1 text-xs">
+                                    <div />
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Min</div>
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROP</div>
+                                    <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Max</div>
 
-                                    return (
-                                        <>
-                                            <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-3 gap-y-1 text-xs">
-                                                {/* Column headers */}
-                                                <div />
-                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Min</div>
-                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROP</div>
-                                                <div className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PAR Max</div>
-
-                                                {/* Current — converted to display unit */}
-                                                <div className="text-[10px] text-muted-foreground self-center">
-                                                    Current<br />
-                                                    <span className="text-[9px] font-normal">({displayUnit})</span>
-                                                </div>
-                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.currentParMin))}
-                                                </div>
-                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.currentROP))}
-                                                </div>
-                                                <div className="text-center tabular-nums text-muted-foreground bg-muted/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.currentParMax))}
-                                                </div>
-
-                                                {/* Suggested — in display unit */}
-                                                <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">
-                                                    Suggest<br />
-                                                    <span className="text-[9px] font-normal text-muted-foreground">({displayUnit})</span>
-                                                </div>
-                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.suggestedParMin))}
-                                                </div>
-                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.suggestedROP))}
-                                                </div>
-                                                <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
-                                                    {fmt(toDisp(parSuggestion.suggestedParMax))}
-                                                </div>
-                                            </div>
-
-                                            {/* Unit caption + conversion note */}
-                                            <p className="text-[10px] text-muted-foreground">
-                                                All values in <strong>{displayUnit}</strong>
-                                                {hasPurchase && (
-                                                    <> · 1 {parSuggestion.purchaseUnit} = {conv} {parSuggestion.unit}</>
-                                                )}
-                                                {parSuggestion.nextDeliveryDate && !parSuggestion.scheduleFallback && (
-                                                    <> · Next delivery {new Date(parSuggestion.nextDeliveryDate).toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" })}</>
-                                                )}
-                                            </p>
-                                        </>
-                                    );
-                                })()}
-
-                                {/* Accept & Apply */}
-                                {onApplyPar && !parApplied && parSuggestion.hasHistory && (
-                                    <Button
-                                        size="sm"
-                                        onClick={handleApply}
-                                        disabled={parApplying}
-                                        className="w-full h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg touch-manipulation"
-                                    >
-                                        {parApplying
-                                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Applying…</>
-                                            : <><CheckCircle2 className="w-3.5 h-3.5" /> Accept &amp; Apply Suggestions</>
-                                        }
-                                    </Button>
-                                )}
-
-                                {parApplied && (
-                                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg px-3 py-2">
-                                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                        PAR / ROP updated for <strong>{parSuggestion.ingredientName}</strong>
+                                    <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold self-center">
+                                        Suggest<br />
+                                        <span className="text-[9px] font-normal text-muted-foreground">({selfUnit})</span>
                                     </div>
-                                )}
-
-                                {!parSuggestion.hasHistory && (
-                                    <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2 space-y-1.5">
-                                        <div className="flex items-center gap-1.5 font-semibold">
-                                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                            No usage history for <strong>{parSuggestion.ingredientName}</strong>
-                                        </div>
-                                        <ol className="list-decimal pl-5 space-y-0.5 text-[11px]">
-                                            <li>Upload PMIX in the last {parSuggestion.daysAnalyzed} days (PMIX Analytics → Upload Report)</li>
-                                            <li>Make sure the modifier name in your POS matches (or is a prefix of) the inventory ingredient name</li>
-                                            <li>Or add a <strong>Portion Standard</strong> mapping the modifier → this ingredient (Recipes → Portion Standards)</li>
-                                            <li>Or record manual &quot;Out&quot; transactions for this ingredient (Inventory → Transactions)</li>
-                                        </ol>
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {selfParMin.toFixed(2)}
                                     </div>
-                                )}
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {selfROP.toFixed(2)}
+                                    </div>
+                                    <div className="text-center tabular-nums font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40 rounded py-0.5">
+                                        {selfParMax.toFixed(2)}
+                                    </div>
+                                </div>
+
+                                {/* Legend with the formula */}
+                                <div className="text-[10px] text-muted-foreground space-y-0.5">
+                                    <p>All values in <strong>{selfUnit}</strong></p>
+                                    <p className="leading-tight">
+                                        PAR Min = ADU × {SAFETY_MULT} ·
+                                        ROP = ADU × {LEAD_TIME_DAYS} + PAR Min ·
+                                        PAR Max = ADU × {HOLDING_DAYS} days
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* No inventory match */}
-                    {!parSuggestion && !loading && (
-                        <div className="rounded-xl border border-border bg-muted/20 px-3 py-3 flex items-start gap-2 text-xs text-muted-foreground">
+                    {!hasSelfData && !loading && (
+                        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-3 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
                             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                            <span>No matching inventory ingredient found for <strong>{itemName}</strong>. Add it in Inventory to enable PAR suggestions.</span>
+                            <span>No PMIX sales recorded for <strong>{itemName}</strong> in this range — PAR/ROP suggestion unavailable.</span>
                         </div>
                     )}
+
                 </div>
             </DialogContent>
         </Dialog>

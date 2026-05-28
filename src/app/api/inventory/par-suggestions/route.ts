@@ -227,12 +227,14 @@ export async function GET(req: NextRequest) {
         }, now);
 
         // PAR Min uses worst-case lead time (safety stock must cover the longest possible wait)
-        // ROP uses worst-case lead too: ROP = (ADU × worstCase) + safety stock (= parMin)
-        // PAR Max uses holdDays as before (how many days of stock to hold on hand)
+        // ROP = (ADU × lead time) + safety stock, where safety stock is the SUGGESTED PAR Min
+        //       (using currentParMin would carry over stale manual values — e.g. an old 1000
+        //       PAR Min would force ROP to always exceed 1000 regardless of actual usage)
+        // PAR Max uses holdDays (how many days of stock to hold on hand)
         const r = (n: number) => Math.round(n * 100) / 100;
         const ltForSafety = Math.max(lt.worstCaseLeadDays, 1);
         const suggestedParMin = r(adu * Math.max(ltForSafety, 2));
-        const suggestedROP    = r((adu * ltForSafety) + currentParMin);
+        const suggestedROP    = r((adu * ltForSafety) + suggestedParMin);
         const suggestedParMax = r(adu * holdDays);
 
         const hasHistory = totalOut > 0;

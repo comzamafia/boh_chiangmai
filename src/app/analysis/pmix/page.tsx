@@ -486,10 +486,31 @@ export default function PmixDashboardPage() {
         if (historyOpen) loadCalendar(calendarMonth);
     }, [historyOpen, calendarMonth, loadCalendar]);
 
+    // ── Switch between Single Day ↔ Date Range mode (clears stale state) ──
+    function changeHistoryMode(mode: "single" | "range") {
+        if (mode === historyMode) return;
+        setHistoryMode(mode);
+        if (mode === "range") {
+            // Hide any cached single-day data so it doesn't flash through
+            setIngSum(null);
+            setSummary(null);
+            setPortionCalc(null);
+            setRangeData(null);    // start with a clean empty-state until "Load Analytics"
+        } else {
+            // Switching back to single — drop any cached range data
+            setRangeData(null);
+        }
+    }
+
     // ── Load range analytics ──
     async function loadRangeAnalytics() {
         if (!rangeFrom || !rangeTo) return;
-        setRangeLoading(true); setRangeData(null);
+        setRangeLoading(true);
+        setRangeData(null);
+        // Defensive clear: ensure no single-day data is around to confuse the view
+        setIngSum(null);
+        setSummary(null);
+        setPortionCalc(null);
         try {
             setRangeData(await pmixApi.rangeAnalytics(rangeFrom, rangeTo));
         } catch (e) {
@@ -786,7 +807,7 @@ export default function PmixDashboardPage() {
             await loadUploads();
             await loadCalendar(calendarMonth);
             setSelectedId(result.uploadId);
-            setHistoryMode("single");
+            changeHistoryMode("single");
         } catch (e) {
             setError(e instanceof Error ? e.message : "Upload failed");
         } finally {
@@ -891,13 +912,19 @@ export default function PmixDashboardPage() {
                         <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-full sm:w-fit">
                             {(["single", "range"] as const).map(m => (
                                 <button key={m}
-                                    onClick={() => setHistoryMode(m)}
+                                    onClick={() => changeHistoryMode(m)}
                                     className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all
                                         ${historyMode === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                                     {m === "single" ? "📅 Single Day" : "📊 Date Range"}
                                 </button>
                             ))}
                         </div>
+                        {/* Mode hint */}
+                        <p className="text-[11px] text-muted-foreground -mt-1">
+                            {historyMode === "single"
+                                ? "Viewing analytics for one Sale Date — pick a day below."
+                                : "Viewing aggregated analytics across a date range — pick From/To then click Load Analytics."}
+                        </p>
 
                         {historyMode === "single" && (
                             <div className="space-y-3">
@@ -911,7 +938,7 @@ export default function PmixDashboardPage() {
                                     onDayClick={(day) => {
                                         // Pick the latest upload for that day
                                         const first = day.uploadIds[0];
-                                        if (first) { setSelectedId(first); setHistoryMode("single"); }
+                                        if (first) { setSelectedId(first); changeHistoryMode("single"); }
                                     }}
                                 />
                                 {/* Upload list with inline date editor */}

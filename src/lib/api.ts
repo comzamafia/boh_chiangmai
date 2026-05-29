@@ -112,6 +112,12 @@ export const inventoryApi = {
     }) => apiFetch<ReceiveGoodsResult>("/inventory/receive", { method: "POST", body: JSON.stringify(data) }),
 
     alerts: () => apiFetch<InventoryAlert[]>("/inventory/alerts"),
+
+    ingredientTrend: (days = 7, types = "Out,Waste", top = 30) =>
+        apiFetch<IngredientTrendResult>(
+            `/inventory/ingredient-trend?days=${days}&types=${encodeURIComponent(types)}&top=${top}`,
+            { cache: "no-store" },
+        ),
 };
 
 // ─── Ingredient Categories ────────────────────────────────────────────────────
@@ -551,6 +557,22 @@ export interface InventoryTransaction {
     date: string;
     recipeId?: string | null;
     createdAt?: string;
+}
+
+// ─── Ingredient 7-day usage trend ────────────────────────────────────────────
+export interface IngredientTrendRow {
+    ingredientId:   string;
+    ingredientName: string;
+    unit:           string;
+    category:       string;
+    totalQty:       number;
+    avgPerDay:      number;
+    byDate:         number[];   // parallel to IngredientTrendResult.dates
+}
+export interface IngredientTrendResult {
+    dates:  string[];           // YYYY-MM-DD, ascending
+    items:  IngredientTrendRow[];
+    days:   number;
 }
 
 export interface InventoryAlert extends InventoryItem {

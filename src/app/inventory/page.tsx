@@ -5,7 +5,9 @@ import {
     inventoryApi, ingredientsApi, suppliersApi, storageAreasApi, ingredientSuppliersApi,
     InventoryItem, InventoryTransaction, InventoryAlert,
     Ingredient, Supplier, StorageArea, IngredientSupplier,
+    type IngredientTrendResult,
 } from "@/lib/api";
+import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import { useCurrency } from "@/components/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +31,7 @@ import {
     AlertCircle, PackagePlus, Warehouse, History, Search,
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
     CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
-    DollarSign,
+    DollarSign, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -128,6 +130,11 @@ export default function InventoryPage() {
     const [search,      setSearch]      = useState("");
     const [activeTab,   setActiveTab]   = useState("stock");
 
+    // 7-day ingredient usage trend
+    const [trendData,    setTrendData]    = useState<IngredientTrendResult | null>(null);
+    const [trendLoading, setTrendLoading] = useState(false);
+    const [trendDays,    setTrendDays]    = useState(7);
+
     // Storage area drill-down (null = show area cards, id = show ingredients in area, "unassigned" = show unassigned)
     const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
 
@@ -183,6 +190,16 @@ export default function InventoryPage() {
     }, []);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    // Load trend when trend tab is opened or days changes
+    useEffect(() => {
+        if (activeTab !== "trend") return;
+        setTrendLoading(true);
+        inventoryApi.ingredientTrend(trendDays, "Out,Waste", 30)
+            .then(setTrendData)
+            .catch(() => setTrendData(null))
+            .finally(() => setTrendLoading(false));
+    }, [activeTab, trendDays]);
 
     // Untracked ingredients (not yet in InventoryItem)
     const trackedIds    = new Set(items.map(i => i.ingredientId));
@@ -440,6 +457,7 @@ export default function InventoryPage() {
                         <TabsTrigger value="waste"     className="flex-1 sm:flex-none"><TrendingDown className="mr-1.5 h-4 w-4" />Waste Log</TabsTrigger>
                         <TabsTrigger value="stocktake" className="flex-1 sm:flex-none"><ClipboardList className="mr-1.5 h-4 w-4" />Stock Count</TabsTrigger>
                         <TabsTrigger value="history"   className="flex-1 sm:flex-none"><History      className="mr-1.5 h-4 w-4" />History</TabsTrigger>
+                        <TabsTrigger value="trend"     className="flex-1 sm:flex-none"><TrendingUp   className="mr-1.5 h-4 w-4" />Usage Trend</TabsTrigger>
                     </TabsList>
                 </div>
 
@@ -1162,6 +1180,72 @@ export default function InventoryPage() {
                             </TableBody>
                         </Table>
                     </div>
+                </TabsContent>
+
+                {/* ══ USAGE TREND ═══════════════════════════════════════════════ */}
+                <TabsContent value="trend" className="mt-4 space-y-4">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <TrendingUp className="w-4 h-4 text-red-500" />
+                                        7-Day Usage Trend — Top 30 Important Ingredients
+                                    </CardTitle>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Qty used (Out + Waste transactions) per day · darker cell = higher usage · intensity is per-ingredient
+                                    </p>
+                                </div>
+                                {/* Controls: window picker + refresh */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
+                                        {[7, 14, 30].map(d => (
+                                            <button key={d}
+                                                onClick={() => setTrendDays(d)}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all
+                                                    ${trendDays === d
+                                                        ? "bg-background shadow-sm text-foreground"
+                                                        : "text-muted-foreground hover:text-foreground"}`}>
+                                                {d}d
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setTrendLoading(true);
+                                            inventoryApi.ingredientTrend(trendDays, "Out,Waste", 30)
+                                                .then(setTrendData)
+                                                .catch(() => setTrendData(null))
+                                                .finally(() => setTrendLoading(false));
+                                        }}
+                                        disabled={trendLoading}
+                                        className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                                        title="Refresh"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 ${trendLoading ? "animate-spin" : ""}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-5 pb-5">
+                            {trendLoading ? (
+                                <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading usage data…</span>
+                                </div>
+                            ) : trendData ? (
+                                <IngredientUsageHeatmap
+                                    dates={trendData.dates}
+                                    items={trendData.items}
+                                    days={trendData.days}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-12">
+                                    No usage data found. Record &quot;Out&quot; or &quot;Waste&quot; transactions to see the trend.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
 

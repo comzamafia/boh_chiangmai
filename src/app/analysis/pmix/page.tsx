@@ -423,7 +423,7 @@ export default function PmixDashboardPage() {
     // Ingredient Summary state
     const [ingSum,         setIngSum]         = useState<IngredientSummaryResult | null>(null);
     const [ingLoading,     setIngLoading]     = useState(false);
-    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra" | "dessert" | "uncategorized">("main");
+    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra" | "dessert" | "beverage" | "uncategorized">("main");
     const [autoFilling,    setAutoFilling]    = useState(false);
     const [autoFillResult, setAutoFillResult] = useState<{
         created: number; skipped: number; missing: string[]; portionSize: number; portionUnit: string;
@@ -457,6 +457,10 @@ export default function PmixDashboardPage() {
     // ── Dessert calendar modal ──
     const [dessertCalOpen,    setDessertCalOpen]    = useState(false);
     const [dessertCalItem,    setDessertCalItem]    = useState<string | null>(null);
+
+    // ── Beverage calendar modal ──
+    const [beverageCalOpen,   setBeverageCalOpen]   = useState(false);
+    const [beverageCalGroup,  setBeverageCalGroup]  = useState<string | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -2608,6 +2612,18 @@ export default function PmixDashboardPage() {
                                         🍮 Desserts ({ingSum.desserts?.byItem.length ?? 0} items · {fmtN(ingSum.desserts?.total ?? 0)} orders)
                                     </button>
                                 )}
+                                {(ingSum.beverages?.byGroup.length ?? 0) > 0 && (
+                                    <button
+                                        onClick={() => setIngCatFilter("beverage")}
+                                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                            ingCatFilter === "beverage"
+                                                ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                                                : "bg-muted/30 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                        }`}
+                                    >
+                                        🍹 Beverages ({ingSum.beverages?.byGroup.length ?? 0} groups · {fmtN(ingSum.beverages?.total ?? 0)} orders)
+                                    </button>
+                                )}
                                 {(ingSum.uncategorized?.length ?? 0) > 0 && (
                                     <button
                                         onClick={() => setIngCatFilter("uncategorized")}
@@ -3034,6 +3050,63 @@ export default function PmixDashboardPage() {
                                 </div>
                             )}
 
+                            {/* ══ Beverages tab ═════════════════════════════════════════ */}
+                            {ingCatFilter === "beverage" && (
+                                <div className="space-y-4">
+                                    <Card>
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-sm flex items-center gap-2">
+                                                <span className="text-base leading-none">🍹</span>
+                                                Beverage Totals
+                                                <Badge variant="secondary" className="text-[10px] ml-auto font-normal">{ingSum.beverages?.byGroup.length ?? 0} groups</Badge>
+                                            </CardTitle>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                Click any beverage group to view daily calendar
+                                            </p>
+                                        </CardHeader>
+                                        <CardContent className="px-3 sm:px-6">
+                                            {(ingSum.beverages?.byGroup.length ?? 0) === 0 ? (
+                                                <p className="text-sm text-muted-foreground italic">No beverage items found in this upload.</p>
+                                            ) : (
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Group</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">%</div>
+                                                    {(ingSum.beverages?.byGroup ?? []).map((b, i) => {
+                                                        const pct = (ingSum.beverages?.total ?? 0) > 0
+                                                            ? Math.round((b.qty / (ingSum.beverages?.total ?? 1)) * 100)
+                                                            : 0;
+                                                        const max = ingSum.beverages?.byGroup[0]?.qty ?? 1;
+                                                        return (
+                                                            <div key={i} className="contents group">
+                                                                <button
+                                                                    onClick={() => { setBeverageCalGroup(b.group); setBeverageCalOpen(true); }}
+                                                                    className="py-2 text-left flex items-center gap-1.5 rounded-lg active:bg-purple-50 dark:active:bg-purple-950/30 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors touch-manipulation"
+                                                                >
+                                                                    <span className="text-purple-500 text-[10px] shrink-0 sm:opacity-0 sm:group-hover:opacity-100">📅</span>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                                                                    <span className="font-medium text-foreground truncate">{b.group}</span>
+                                                                </button>
+                                                                <div className="self-center text-right py-2 tabular-nums">
+                                                                    <div className="font-bold text-purple-600 dark:text-purple-300">{fmtN(b.qty)}</div>
+                                                                    <div className="w-full bg-muted rounded-full h-1 mt-0.5">
+                                                                        <div className="bg-purple-500 h-1 rounded-full" style={{ width: `${Math.round((b.qty / max) * 100)}%` }} />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="self-center text-right py-2 tabular-nums text-muted-foreground text-[11px]">{pct}%</div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-purple-600 dark:text-purple-300 text-right tabular-nums">{fmtN(ingSum.beverages?.total ?? 0)}</div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
                             {/* ══ Uncategorized tab ═════════════════════════════════════ */}
                             {ingCatFilter === "uncategorized" && (
                                 <div className="space-y-4">
@@ -3354,6 +3427,49 @@ export default function PmixDashboardPage() {
                                         </Card>
                                     )}
 
+                                    {/* Beverages — range view */}
+                                    {(rangeData.ingredientSummary.beverages?.byGroup.length ?? 0) > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <span className="text-base leading-none">🍹</span>
+                                                    Beverages ({rangeData.dayCount}-day total)
+                                                </CardTitle>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    Click any group to view daily calendar
+                                                </p>
+                                            </CardHeader>
+                                            <CardContent className="px-3 sm:px-6">
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Group</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Avg/Day</div>
+                                                    {(rangeData.ingredientSummary.beverages?.byGroup ?? []).map((b, i) => (
+                                                        <div key={i} className="contents">
+                                                            <button
+                                                                onClick={() => { setBeverageCalGroup(b.group); setBeverageCalOpen(true); }}
+                                                                className="py-2 text-left flex items-center gap-1.5 rounded-lg active:bg-purple-50 dark:active:bg-purple-950/30 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors touch-manipulation"
+                                                            >
+                                                                <span className="text-purple-500 text-[10px] shrink-0 sm:opacity-0">📅</span>
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                                                                <span className="font-medium text-foreground truncate">{b.group}</span>
+                                                            </button>
+                                                            <div className="font-bold text-purple-600 dark:text-purple-300 text-right py-2 tabular-nums self-center">{b.qty.toLocaleString()}</div>
+                                                            <div className="text-muted-foreground text-right py-2 tabular-nums self-center">{b.avgQtyPerDay ?? (rangeData.dayCount > 0 ? (b.qty / rangeData.dayCount).toFixed(1) : "—")}</div>
+                                                        </div>
+                                                    ))}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-purple-600 dark:text-purple-300 text-right tabular-nums">
+                                                        {(rangeData.ingredientSummary.beverages?.total ?? 0).toLocaleString()}
+                                                    </div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground tabular-nums">
+                                                        {rangeData.dayCount > 0 ? ((rangeData.ingredientSummary.beverages?.total ?? 0) / rangeData.dayCount).toFixed(1) : "—"}
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
                                     {/* By-Dish breakdown */}
                                     {rangeData.ingredientSummary.mainProtein.byDish.length > 0 && (
                                         <Card>
@@ -3419,6 +3535,21 @@ export default function PmixDashboardPage() {
                     showLb={false}
                     parSuggestion={findParMatch(dessertCalItem)}
                     onApplyPar={handleApplyParSingle}
+                />
+            )}
+
+            {/* ── Beverage Daily Calendar Modal ─────────────────────── */}
+            {beverageCalGroup && (
+                <DailyCalendarModal
+                    itemName={beverageCalGroup}
+                    unitLabel="orders / day"
+                    color="pink"
+                    rangeFrom={rangeFrom}
+                    rangeTo={rangeTo}
+                    open={beverageCalOpen}
+                    onClose={() => setBeverageCalOpen(false)}
+                    fetchFn={(group, from, to) => pmixApi.beverageDaily(group, from, to).then(r => ({ days: r.days }))}
+                    showLb={false}
                 />
             )}
 

@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -70,12 +71,16 @@ export async function GET(req: NextRequest) {
     interface ByDish  { category: string; dish: string; proteinType: string; qty: number }
     interface DessertItem { itemName: string; qty: number }
 
-    const mainByType   = new Map<string, number>();
-    const mainByDish   = new Map<string, ByDish>();
-    const extraByType  = new Map<string, number>();
-    const extraByDish  = new Map<string, ByDish>();
-    const dessertItems = new Map<string, number>();      // itemName → total qty
+    const mainByType    = new Map<string, number>();
+    const mainByDish    = new Map<string, ByDish>();
+    const extraByType   = new Map<string, number>();
+    const extraByDish   = new Map<string, ByDish>();
+    const dessertItems  = new Map<string, number>();      // itemName → total qty
+    const beverageByGroup = new Map<string, number>();    // POS category → total qty
     const uncategorized: { itemName: string; category: string; qty: number }[] = [];
+
+    // Beverage category lookup (lowercase for fast matching)
+    const beverageCatSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
 
     const mainGroupNames  = new Set<string>();
     const extraGroupNames = new Set<string>();
@@ -87,6 +92,12 @@ export async function GET(req: NextRequest) {
         if (qty === 0) continue;
 
         const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
+
+        // ── Beverage items (by POS category) — skip other classification ─────
+        if (beverageCatSet.has(category.toLowerCase())) {
+            beverageByGroup.set(category, (beverageByGroup.get(category) ?? 0) + qty);
+            continue;
+        }
 
         if (hasProteinModifier(mods)) {
             // ── Modifier-based path (existing logic) ──────────────────────────
@@ -184,6 +195,18 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.qty - a.qty);
     const dessertTotal = dessertArr.reduce((s, d) => s + d.qty, 0);
 
+    // Preserve canonical ordering from BEVERAGE_CATEGORIES, then sort by qty desc
+    const beverageArr: { group: string; qty: number }[] = BEVERAGE_CATEGORIES
+        .filter(cat => beverageByGroup.has(cat))
+        .map(cat => ({ group: cat as string, qty: beverageByGroup.get(cat)! }));
+    // Also include any unrecognised spelling variants found in the data
+    for (const [cat, qty] of beverageByGroup.entries()) {
+        if (!beverageArr.find(b => b.group.toLowerCase() === cat.toLowerCase())) {
+            beverageArr.push({ group: cat, qty });
+        }
+    }
+    const beverageTotal = beverageArr.reduce((s, b) => s + b.qty, 0);
+
     uncategorized.sort((a, b) => b.qty - a.qty);
 
     return NextResponse.json({
@@ -205,6 +228,10 @@ export async function GET(req: NextRequest) {
         desserts: {
             byItem: dessertArr,
             total:  dessertTotal,
+        },
+        beverages: {
+            byGroup: beverageArr,
+            total:   beverageTotal,
         },
         uncategorized,
         hasProteinData: mainByTypeArr.length > 0 || extraByTypeArr.length > 0,

@@ -344,6 +344,11 @@ export const pmixApi = {
             `/pmix/analytics/dessert-daily?item=${encodeURIComponent(item)}&from=${from}&to=${to}`
         ),
 
+    beverageDaily: (group: string, from: string, to: string) =>
+        apiFetch<BeverageDailyResult>(
+            `/pmix/analytics/beverage-daily?group=${encodeURIComponent(group)}&from=${from}&to=${to}`
+        ),
+
     upload: (file: File, periodLabel?: string, businessDate?: string) => {
         const fd = new FormData();
         fd.append("file", file);
@@ -770,6 +775,10 @@ export interface PmixRangeResult {
             byItem: { itemName: string; qty: number; avgQtyPerDay?: number }[];
             total:  number;
         };
+        beverages?: {
+            byGroup: { group: string; qty: number; avgQtyPerDay?: number }[];
+            total:   number;
+        };
         uncategorized?: { itemName: string; category: string; qty: number }[];
         hasProteinData: boolean;
     };
@@ -1056,6 +1065,10 @@ export interface IngredientSummaryResult {
         byItem: { itemName: string; qty: number }[];
         total:  number;
     };
+    beverages?: {
+        byGroup: { group: string; qty: number }[];
+        total:   number;
+    };
     uncategorized: { itemName: string; category: string; qty: number }[];
     hasProteinData: boolean;
 }
@@ -1079,4 +1092,10 @@ export interface ProteinDailyResult {
 export interface DessertDailyResult {
     item: string;
     days: { date: string; qty: number }[];
+}
+
+// ─── Beverage daily calendar ──────────────────────────────────────────────────
+export interface BeverageDailyResult {
+    group: string;
+    days:  { date: string; qty: number }[];
 }

@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -170,15 +171,17 @@ export async function GET(req: NextRequest) {
         .map(d => ({ ...d, netSales: +d.netSales.toFixed(2) }));
 
     // ─── Protein / Dessert classification ─────────────────────────────────────
-    const mainByType   = new Map<string, number>();
-    const extraByType  = new Map<string, number>();
-    const mainByDish   = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
-    const extraByDish  = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
-    const dessertItems = new Map<string, number>();
-    const uncatMap     = new Map<string, { itemName: string; category: string; qty: number }>();
+    const mainByType      = new Map<string, number>();
+    const extraByType     = new Map<string, number>();
+    const mainByDish      = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    const extraByDish     = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
+    const dessertItems    = new Map<string, number>();
+    const beverageByGroup = new Map<string, number>();
+    const uncatMap        = new Map<string, { itemName: string; category: string; qty: number }>();
 
     const mainGroupNames  = new Set<string>();
     const extraGroupNames = new Set<string>();
+    const beverageCatSet  = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
 
     for (const item of items) {
         const dishName = item.itemName as string;
@@ -187,6 +190,11 @@ export async function GET(req: NextRequest) {
         if (qty === 0) continue;
 
         const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
+
+        if (beverageCatSet.has(category.toLowerCase())) {
+            beverageByGroup.set(category, (beverageByGroup.get(category) ?? 0) + qty);
+            continue;
+        }
 
         if (hasProteinModifier(mods)) {
             // Modifier-based path
@@ -279,6 +287,20 @@ export async function GET(req: NextRequest) {
     })).sort((a, b) => b.qty - a.qty);
     const dessertTotal   = dessertArr.reduce((s, d) => s + d.qty, 0);
 
+    const beverageArr: { group: string; qty: number; avgQtyPerDay: number }[] = BEVERAGE_CATEGORIES
+        .filter(cat => beverageByGroup.has(cat))
+        .map(cat => ({
+            group: cat as string,
+            qty:   beverageByGroup.get(cat)!,
+            avgQtyPerDay: dayCount > 0 ? +(beverageByGroup.get(cat)! / dayCount).toFixed(1) : 0,
+        }));
+    for (const [cat, qty] of beverageByGroup.entries()) {
+        if (!beverageArr.find(b => b.group.toLowerCase() === cat.toLowerCase())) {
+            beverageArr.push({ group: cat, qty, avgQtyPerDay: dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0 });
+        }
+    }
+    const beverageTotal = beverageArr.reduce((s, b) => s + b.qty, 0);
+
     const uncategorized  = [...uncatMap.values()].sort((a, b) => b.qty - a.qty);
 
     // ─── Overall totals ───────────────────────────────────────────────────────
@@ -322,6 +344,7 @@ export async function GET(req: NextRequest) {
                 groupNames: [...extraGroupNames],
             },
             desserts:      { byItem: dessertArr, total: dessertTotal },
+            beverages:     { byGroup: beverageArr, total: beverageTotal },
             uncategorized,
             hasProteinData: proteinTotals.length > 0 || extraTotals.length > 0,
         },

@@ -2,16 +2,10 @@
  * GET /api/pmix/analytics/protein-heatmap?days=7
  *
  * Returns Main Protein daily usage for the last N calendar days.
- * Uses the same hybrid classifier as the range API.
- * Quantities are in lb when a Portion Standard exists with portionUnit "oz",
- * otherwise in orders (qty sold).
+ * Also returns current inventory stock and PAR Min (in display unit)
+ * so the UI can render Flow (Ct - Sld = Bal) and Action (order qty) columns.
  *
- * Response:
- *   {
- *     dates:  string[];   // N dates ascending YYYY-MM-DD
- *     items:  ProteinHeatmapRow[];
- *     days:   number;
- *   }
+ * Response: { dates, items: ProteinHeatmapRow[], days }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -85,25 +79,37 @@ export async function GET(req: NextRequest) {
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
-    // 5. Portion standards (for lb conversion)
+    // 5. Portion standards — include ingredientId so we can look up inventory
     const standards = await db.portionStandard.findMany({
         where: { type: { in: ["modifier", "base"] } },
         select: {
             itemName: true, portionSize: true, portionUnit: true,
-            ingredient: { select: { name: true } },
+            ingredientId: true,
+            ingredient: { select: { id: true, name: true } },
         },
     });
-    const stdByName = new Map<string, { portionSize: number; portionUnit: string; ingredientName: string }>();
+    const stdByName = new Map<string, {
+        portionSize: number; portionUnit: string;
+        ingredientName: string; ingredientId: string;
+    }>();
     for (const s of standards) {
         stdByName.set(String(s.itemName).toLowerCase().trim(), {
             portionSize:    Number(s.portionSize),
             portionUnit:    s.portionUnit,
             ingredientName: s.ingredient?.name ?? s.itemName,
+            ingredientId:   s.ingredientId,
         });
     }
 
-    // 6. Accumulate main protein qty per type per date (in orders)
-    // protein label → date → orders
+    // 6. Inventory items — for currentStock + parMin
+    const inventoryItems = await prisma.inventoryItem.findMany({
+        select: { id: true, ingredientId: true, currentStock: true, parMin: true },
+    });
+    const invByIngredientId = new Map(
+        inventoryItems.map(iv => [iv.ingredientId, iv])
+    );
+
+    // 7. Accumulate main protein orders per type per date
     const proteinDay = new Map<string, Map<string, number>>();
 
     for (const item of pmixItems) {
@@ -143,15 +149,16 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // 7. Build response — convert to lb where possible
+    // 8. Build response — convert to display unit + attach inventory data
     const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
     const items = [...proteinDay.entries()]
         .map(([proteinType, dateMap]) => {
-            const std = stdByName.get(proteinType.toLowerCase().trim());
-            const useLb = std?.portionUnit === "oz";
+            const std    = stdByName.get(proteinType.toLowerCase().trim());
+            const useLb  = std?.portionUnit === "oz";
 
-            const convert = (orders: number) => {
+            // Convert recipe-qty → display qty
+            const convertSold = (orders: number) => {
                 if (!std) return orders;
                 const oz = orders * std.portionSize;
                 return useLb ? oz / 16 : oz;
@@ -160,18 +167,48 @@ export async function GET(req: NextRequest) {
 
             const byDateOrders = dates.map(d => dateMap.get(d) ?? 0);
             const totalOrders  = byDateOrders.reduce((s, q) => s + q, 0);
+            const byDate       = byDateOrders.map(q => r3(convertSold(q)));
+            const totalQty     = r3(convertSold(totalOrders));
 
-            const byDate  = byDateOrders.map(q => r3(convert(q)));
-            const totalQty = r3(convert(totalOrders));
+            // Inventory stock + PAR Min (converted to same display unit as sold qty)
+            let currentStock:   number | null = null;
+            let parMin:         number | null = null;
+            let inventoryItemId: string | null = null;
+
+            if (std?.ingredientId) {
+                const invItem = invByIngredientId.get(std.ingredientId);
+                if (invItem) {
+                    inventoryItemId = invItem.id;
+                    // Convert recipe-unit stock/parMin to display unit
+                    // currentStock is in recipeUnit (e.g. oz); we convert using the
+                    // same portionSize ratio so units are comparable with sold qty.
+                    // For lb display: stock_oz → lb (÷16)
+                    // For other display units: keep in recipe unit (already meaningful)
+                    const stockRaw  = Number(invItem.currentStock);
+                    const parMinRaw = Number(invItem.parMin);
+                    if (useLb) {
+                        currentStock = r3(stockRaw / 16);
+                        parMin       = r3(parMinRaw / 16);
+                    } else {
+                        // No unit conversion for non-lb: show in recipe unit
+                        currentStock = r3(stockRaw);
+                        parMin       = r3(parMinRaw);
+                    }
+                }
+            }
 
             return {
                 proteinType,
-                ingredientName: std?.ingredientName ?? proteinType,
-                unit:           displayUnit,
+                ingredientName:  std?.ingredientName ?? proteinType,
+                unit:            displayUnit,
                 totalOrders,
                 totalQty,
-                avgPerDay:      r3(totalQty / days),
+                avgPerDay:       r3(totalQty / days),
                 byDate,
+                // Inventory fields (null when no matching inventory item)
+                inventoryItemId,
+                currentStock,
+                parMin,
             };
         })
         .filter(r => r.totalOrders > 0)

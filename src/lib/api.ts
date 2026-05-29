@@ -578,6 +578,9 @@ export interface IngredientTrendRow {
     totalQty:       number;
     avgPerDay:      number;
     byDate:         number[];   // parallel to IngredientTrendResult.dates
+    // Optional inventory fields for Flow + Action columns
+    currentStock?:  number | null;
+    parMin?:        number | null;
 }
 export interface IngredientTrendResult {
     dates:  string[];           // YYYY-MM-DD, ascending
@@ -1130,13 +1133,17 @@ export interface DessertDailyResult {
 
 // ─── Protein usage heatmap (multi-protein, per-day) ──────────────────────────
 export interface ProteinHeatmapRow {
-    proteinType:    string;
-    ingredientName: string;
-    unit:           string;     // "lb" | "orders" | portionUnit
-    totalOrders:    number;     // raw order count (for sorting)
-    totalQty:       number;     // in display unit
-    avgPerDay:      number;
-    byDate:         number[];   // parallel to ProteinHeatmapResult.dates
+    proteinType:     string;
+    ingredientName:  string;
+    unit:            string;             // "lb" | "orders" | portionUnit
+    totalOrders:     number;             // raw order count (for sorting)
+    totalQty:        number;             // in display unit
+    avgPerDay:       number;
+    byDate:          number[];           // parallel to ProteinHeatmapResult.dates
+    // Inventory data (null when no matching InventoryItem)
+    inventoryItemId: string | null;
+    currentStock:    number | null;      // in display unit
+    parMin:          number | null;      // in display unit
 }
 export interface ProteinHeatmapResult {
     dates:  string[];

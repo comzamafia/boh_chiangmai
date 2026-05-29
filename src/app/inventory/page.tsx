@@ -1251,6 +1251,8 @@ export default function InventoryPage() {
                                         totalQty:       p.totalQty,
                                         avgPerDay:      p.avgPerDay,
                                         byDate:         p.byDate,
+                                        currentStock:   p.currentStock,
+                                        parMin:         p.parMin,
                                     }))}
                                     days={proteinHeatmap.days}
                                 />

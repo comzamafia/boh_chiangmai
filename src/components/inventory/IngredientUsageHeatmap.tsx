@@ -51,9 +51,17 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
 
     const isWeekend = (iso: string) => { const d = new Date(iso + "T00:00:00").getDay(); return d === 0 || d === 6; };
 
+    // Show Flow + Action columns only when at least one row has inventory data
+    const hasInventory = items.some(r => r.currentStock != null);
+
+    // Last date in the array = "today" (most recent)
+    const lastDateIdx = dates.length - 1;
+
+    const fmt = (n: number) => n % 1 === 0 ? String(n) : n.toFixed(2);
+
     return (
         <div className="w-full overflow-x-auto">
-            <table className="w-full text-xs border-collapse" style={{ minWidth: 480 }}>
+            <table className="w-full text-xs border-collapse" style={{ minWidth: hasInventory ? 560 : 480 }}>
                 <thead>
                     <tr className="border-b-2 border-border">
                         <th className="text-left font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-2 pr-3 w-full max-w-0">
@@ -76,6 +84,17 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                         <th className="text-center font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-2 pl-1 w-12">
                             Avg/d
                         </th>
+                        {hasInventory && (
+                            <>
+                                <th className="text-center font-semibold text-[10px] py-2 px-1 w-16 whitespace-nowrap text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                                    📦 Bal
+                                    <div className="font-normal text-[9px] text-muted-foreground">Ct−Sld</div>
+                                </th>
+                                <th className="text-center font-semibold text-[10px] py-2 pl-1 w-16 whitespace-nowrap text-orange-600 dark:text-orange-400 uppercase tracking-wide">
+                                    🛒 Order
+                                </th>
+                            </>
+                        )}
                     </tr>
                 </thead>
 
@@ -115,6 +134,43 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                                 <td className="text-center tabular-nums text-muted-foreground w-12 py-1 pl-1">
                                     {row.avgPerDay}
                                 </td>
+
+                                {/* 📦 Flow: Balance = currentStock − lastDaySold */}
+                                {hasInventory && (() => {
+                                    if (row.currentStock == null) {
+                                        return <><td className="text-center text-[10px] text-muted-foreground/30 py-1 px-1">—</td><td className="py-1 pl-1" /></>;
+                                    }
+                                    const lastSold = row.byDate[lastDateIdx] ?? 0;
+                                    const balance  = row.currentStock - lastSold;
+                                    const parMin   = row.parMin ?? 0;
+                                    const balColor = balance < 0
+                                        ? "text-red-600 dark:text-red-400 font-bold"
+                                        : balance < parMin
+                                            ? "text-orange-600 dark:text-orange-400 font-semibold"
+                                            : "text-emerald-600 dark:text-emerald-400 font-semibold";
+                                    const orderQty = parMin - balance;
+                                    return (
+                                        <>
+                                            {/* Balance */}
+                                            <td className={`text-center tabular-nums w-16 py-1 px-1 ${balColor}`}>
+                                                {fmt(balance)}
+                                                <div className="text-[9px] font-normal text-muted-foreground">
+                                                    {fmt(row.currentStock)}−{fmt(lastSold)}
+                                                </div>
+                                            </td>
+                                            {/* Order action */}
+                                            <td className="text-center tabular-nums w-16 py-1 pl-1 font-bold">
+                                                {orderQty > 0 ? (
+                                                    <span className="text-orange-600 dark:text-orange-400">
+                                                        +{fmt(Math.ceil(orderQty * 100) / 100)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                                                )}
+                                            </td>
+                                        </>
+                                    );
+                                })()}
                             </tr>
                         );
                     })}
@@ -142,6 +198,7 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                         <td className="text-center tabular-nums text-muted-foreground py-2 pl-1">
                             {days > 0 ? (items.reduce((s, r) => s + r.totalQty, 0) / days).toFixed(1) : "—"}
                         </td>
+                        {hasInventory && <><td /><td /></>}
                     </tr>
                 </tfoot>
             </table>

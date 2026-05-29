@@ -1095,7 +1095,14 @@ export interface DessertDailyResult {
 }
 
 // ─── Beverage daily calendar ──────────────────────────────────────────────────
+export interface BeverageDailyItem {
+    itemName:  string;
+    totalQty:  number;
+    avgPerDay: number;
+    days:      { date: string; qty: number }[];
+}
 export interface BeverageDailyResult {
-    group: string;
-    days:  { date: string; qty: number }[];
+    group:  string;
+    days:   { date: string; qty: number }[];
+    byItem: BeverageDailyItem[];
 }

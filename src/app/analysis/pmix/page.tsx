@@ -38,6 +38,7 @@ import {
 } from "@/lib/api";
 import ProteinCalendarModal from "@/components/pmix/ProteinCalendarModal";
 import DailyCalendarModal from "@/components/pmix/DailyCalendarModal";
+import BeverageCalendarModal from "@/components/pmix/BeverageCalendarModal";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BCG_COLORS: Record<BcgQuadrant, string> = {
@@ -3540,16 +3541,12 @@ export default function PmixDashboardPage() {
 
             {/* ── Beverage Daily Calendar Modal ─────────────────────── */}
             {beverageCalGroup && (
-                <DailyCalendarModal
-                    itemName={beverageCalGroup}
-                    unitLabel="orders / day"
-                    color="pink"
+                <BeverageCalendarModal
+                    group={beverageCalGroup}
                     rangeFrom={rangeFrom}
                     rangeTo={rangeTo}
                     open={beverageCalOpen}
                     onClose={() => setBeverageCalOpen(false)}
-                    fetchFn={(group, from, to) => pmixApi.beverageDaily(group, from, to).then(r => ({ days: r.days }))}
-                    showLb={false}
                 />
             )}
 

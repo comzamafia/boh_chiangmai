@@ -355,6 +355,11 @@ export const pmixApi = {
             `/pmix/analytics/beverage-daily?group=${encodeURIComponent(group)}&from=${from}&to=${to}`
         ),
 
+    curryDaily: (group: string, from: string, to: string) =>
+        apiFetch<CurryDailyResult>(
+            `/pmix/analytics/curry-daily?group=${encodeURIComponent(group)}&from=${from}&to=${to}`
+        ),
+
     proteinHeatmap: (days = 7) =>
         apiFetch<ProteinHeatmapResult>(
             `/pmix/analytics/protein-heatmap?days=${days}`,
@@ -816,6 +821,10 @@ export interface PmixRangeResult {
             byGroup: { group: string; qty: number; avgQtyPerDay?: number }[];
             total:   number;
         };
+        curries?: {
+            byGroup: { group: string; qty: number; avgQtyPerDay?: number }[];
+            total:   number;
+        };
         uncategorized?: { itemName: string; category: string; qty: number }[];
         hasProteinData: boolean;
     };
@@ -1106,6 +1115,10 @@ export interface IngredientSummaryResult {
         byGroup: { group: string; qty: number }[];
         total:   number;
     };
+    curries?: {
+        byGroup: { group: string; qty: number }[];
+        total:   number;
+    };
     uncategorized: { itemName: string; category: string; qty: number }[];
     hasProteinData: boolean;
 }
@@ -1163,3 +1176,7 @@ export interface BeverageDailyResult {
     days:   { date: string; qty: number }[];
     byItem: BeverageDailyItem[];
 }
+
+// ─── Curry daily calendar ─────────────────────────────────────────────────────
+export type CurryDailyItem    = BeverageDailyItem;
+export type CurryDailyResult  = BeverageDailyResult;

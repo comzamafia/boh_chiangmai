@@ -39,6 +39,7 @@ import {
 import ProteinCalendarModal from "@/components/pmix/ProteinCalendarModal";
 import DailyCalendarModal from "@/components/pmix/DailyCalendarModal";
 import BeverageCalendarModal from "@/components/pmix/BeverageCalendarModal";
+import GroupCalendarModal from "@/components/pmix/GroupCalendarModal";
 import ItemUsageHeatmap from "@/components/pmix/ItemUsageHeatmap";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -425,7 +426,7 @@ export default function PmixDashboardPage() {
     // Ingredient Summary state
     const [ingSum,         setIngSum]         = useState<IngredientSummaryResult | null>(null);
     const [ingLoading,     setIngLoading]     = useState(false);
-    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra" | "dessert" | "beverage" | "uncategorized">("main");
+    const [ingCatFilter,   setIngCatFilter]   = useState<"main" | "extra" | "dessert" | "beverage" | "curry" | "uncategorized">("main");
     const [autoFilling,    setAutoFilling]    = useState(false);
     const [autoFillResult, setAutoFillResult] = useState<{
         created: number; skipped: number; missing: string[]; portionSize: number; portionUnit: string;
@@ -463,6 +464,10 @@ export default function PmixDashboardPage() {
     // ── Beverage calendar modal ──
     const [beverageCalOpen,   setBeverageCalOpen]   = useState(false);
     const [beverageCalGroup,  setBeverageCalGroup]  = useState<string | null>(null);
+
+    // ── Curry calendar modal ──
+    const [curryCalOpen,      setCurryCalOpen]      = useState(false);
+    const [curryCalGroup,     setCurryCalGroup]     = useState<string | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -2626,6 +2631,18 @@ export default function PmixDashboardPage() {
                                         🍹 Beverages ({ingSum.beverages?.byGroup.length ?? 0} groups · {fmtN(ingSum.beverages?.total ?? 0)} orders)
                                     </button>
                                 )}
+                                {(ingSum.curries?.byGroup.length ?? 0) > 0 && (
+                                    <button
+                                        onClick={() => setIngCatFilter("curry")}
+                                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                            ingCatFilter === "curry"
+                                                ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                                                : "bg-muted/30 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                        }`}
+                                    >
+                                        🍛 Main Curry ({ingSum.curries?.byGroup.length ?? 0} groups · {fmtN(ingSum.curries?.total ?? 0)} orders)
+                                    </button>
+                                )}
                                 {(ingSum.uncategorized?.length ?? 0) > 0 && (
                                     <button
                                         onClick={() => setIngCatFilter("uncategorized")}
@@ -3109,6 +3126,63 @@ export default function PmixDashboardPage() {
                                 </div>
                             )}
 
+                            {/* ══ Curries tab ═══════════════════════════════════════════ */}
+                            {ingCatFilter === "curry" && (
+                                <div className="space-y-4">
+                                    <Card>
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-sm flex items-center gap-2">
+                                                <span className="text-base leading-none">🍛</span>
+                                                Main Curry Totals
+                                                <Badge variant="secondary" className="text-[10px] ml-auto font-normal">{ingSum.curries?.byGroup.length ?? 0} groups</Badge>
+                                            </CardTitle>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                Click any curry group to view daily calendar · Panang Curry bundles Duck Panang, Panang Curry &amp; Malay Curry
+                                            </p>
+                                        </CardHeader>
+                                        <CardContent className="px-3 sm:px-6">
+                                            {(ingSum.curries?.byGroup.length ?? 0) === 0 ? (
+                                                <p className="text-sm text-muted-foreground italic">No curry items found in this upload.</p>
+                                            ) : (
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Group</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">%</div>
+                                                    {(ingSum.curries?.byGroup ?? []).map((c, i) => {
+                                                        const pct = (ingSum.curries?.total ?? 0) > 0
+                                                            ? Math.round((c.qty / (ingSum.curries?.total ?? 1)) * 100)
+                                                            : 0;
+                                                        const max = ingSum.curries?.byGroup[0]?.qty ?? 1;
+                                                        return (
+                                                            <div key={i} className="contents group">
+                                                                <button
+                                                                    onClick={() => { setCurryCalGroup(c.group); setCurryCalOpen(true); }}
+                                                                    className="py-2 text-left flex items-center gap-1.5 rounded-lg active:bg-amber-50 dark:active:bg-amber-950/30 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors touch-manipulation"
+                                                                >
+                                                                    <span className="text-amber-500 text-[10px] shrink-0 sm:opacity-0 sm:group-hover:opacity-100">📅</span>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                                                    <span className="font-medium text-foreground truncate">{c.group}</span>
+                                                                </button>
+                                                                <div className="self-center text-right py-2 tabular-nums">
+                                                                    <div className="font-bold text-amber-600 dark:text-amber-300">{fmtN(c.qty)}</div>
+                                                                    <div className="w-full bg-muted rounded-full h-1 mt-0.5">
+                                                                        <div className="bg-amber-500 h-1 rounded-full" style={{ width: `${Math.round((c.qty / max) * 100)}%` }} />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="self-center text-right py-2 tabular-nums text-muted-foreground text-[11px]">{pct}%</div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-amber-600 dark:text-amber-300 text-right tabular-nums">{fmtN(ingSum.curries?.total ?? 0)}</div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
                             {/* ══ Uncategorized tab ═════════════════════════════════════ */}
                             {ingCatFilter === "uncategorized" && (
                                 <div className="space-y-4">
@@ -3464,6 +3538,49 @@ export default function PmixDashboardPage() {
                                         </Card>
                                     )}
 
+                                    {/* Curries — range view */}
+                                    {(rangeData.ingredientSummary.curries?.byGroup.length ?? 0) > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <span className="text-base leading-none">🍛</span>
+                                                    Main Curry ({rangeData.dayCount}-day total)
+                                                </CardTitle>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    Click any group to view daily calendar
+                                                </p>
+                                            </CardHeader>
+                                            <CardContent className="px-3 sm:px-6">
+                                                <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] gap-x-3 sm:gap-x-5 gap-y-0.5 text-xs">
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] py-1">Group</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Orders</div>
+                                                    <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] text-right py-1">Avg/Day</div>
+                                                    {(rangeData.ingredientSummary.curries?.byGroup ?? []).map((c, i) => (
+                                                        <div key={i} className="contents">
+                                                            <button
+                                                                onClick={() => { setCurryCalGroup(c.group); setCurryCalOpen(true); }}
+                                                                className="py-2 text-left flex items-center gap-1.5 rounded-lg active:bg-amber-50 dark:active:bg-amber-950/30 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors touch-manipulation"
+                                                            >
+                                                                <span className="text-amber-500 text-[10px] shrink-0 sm:opacity-0">📅</span>
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                                                <span className="font-medium text-foreground truncate">{c.group}</span>
+                                                            </button>
+                                                            <div className="font-bold text-amber-600 dark:text-amber-300 text-right py-2 tabular-nums self-center">{c.qty.toLocaleString()}</div>
+                                                            <div className="text-muted-foreground text-right py-2 tabular-nums self-center">{c.avgQtyPerDay ?? (rangeData.dayCount > 0 ? (c.qty / rangeData.dayCount).toFixed(1) : "—")}</div>
+                                                        </div>
+                                                    ))}
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-xs">TOTAL</div>
+                                                    <div className="border-t border-border pt-2 mt-1 font-bold text-amber-600 dark:text-amber-300 text-right tabular-nums">
+                                                        {(rangeData.ingredientSummary.curries?.total ?? 0).toLocaleString()}
+                                                    </div>
+                                                    <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground tabular-nums">
+                                                        {rangeData.dayCount > 0 ? ((rangeData.ingredientSummary.curries?.total ?? 0) / rangeData.dayCount).toFixed(1) : "—"}
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
                                     {/* By-Dish breakdown */}
                                     {rangeData.ingredientSummary.mainProtein.byDish.length > 0 && (
                                         <Card>
@@ -3540,6 +3657,20 @@ export default function PmixDashboardPage() {
                     rangeTo={rangeTo}
                     open={beverageCalOpen}
                     onClose={() => setBeverageCalOpen(false)}
+                />
+            )}
+
+            {/* ── Curry Daily Calendar Modal ────────────────────────── */}
+            {curryCalGroup && (
+                <GroupCalendarModal
+                    group={curryCalGroup}
+                    rangeFrom={rangeFrom}
+                    rangeTo={rangeTo}
+                    open={curryCalOpen}
+                    onClose={() => setCurryCalOpen(false)}
+                    fetchFn={pmixApi.curryDaily}
+                    color="amber"
+                    exportPrefix="curry"
                 />
             )}
 

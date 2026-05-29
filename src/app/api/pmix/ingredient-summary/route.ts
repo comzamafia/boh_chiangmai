@@ -17,6 +17,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
     const extraByDish   = new Map<string, ByDish>();
     const dessertItems  = new Map<string, number>();      // itemName → total qty
     const beverageByGroup = new Map<string, number>();    // POS category → total qty
+    const curryByGroup    = new Map<string, number>();    // curry group label → total qty
     const uncategorized: { itemName: string; category: string; qty: number }[] = [];
 
     // Beverage category lookup (lowercase for fast matching)
@@ -97,6 +99,13 @@ export async function GET(req: NextRequest) {
         if (beverageCatSet.has(category.toLowerCase())) {
             beverageByGroup.set(category, (beverageByGroup.get(category) ?? 0) + qty);
             continue;
+        }
+
+        // ── Curry detection runs in PARALLEL — same item can also count as
+        //    protein/extra/dessert downstream (e.g. "Green Curry - Chicken")
+        const curryGroup = matchCurryGroup(dishName);
+        if (curryGroup) {
+            curryByGroup.set(curryGroup, (curryByGroup.get(curryGroup) ?? 0) + qty);
         }
 
         if (hasProteinModifier(mods)) {
@@ -207,6 +216,12 @@ export async function GET(req: NextRequest) {
     }
     const beverageTotal = beverageArr.reduce((s, b) => s + b.qty, 0);
 
+    // Curry totals — preserve canonical order from CURRY_GROUPS
+    const curryArr: { group: string; qty: number }[] = CURRY_GROUPS
+        .filter(g => curryByGroup.has(g.label))
+        .map(g => ({ group: g.label, qty: curryByGroup.get(g.label)! }));
+    const curryTotal = curryArr.reduce((s, c) => s + c.qty, 0);
+
     uncategorized.sort((a, b) => b.qty - a.qty);
 
     return NextResponse.json({
@@ -232,6 +247,10 @@ export async function GET(req: NextRequest) {
         beverages: {
             byGroup: beverageArr,
             total:   beverageTotal,
+        },
+        curries: {
+            byGroup: curryArr,
+            total:   curryTotal,
         },
         uncategorized,
         hasProteinData: mainByTypeArr.length > 0 || extraByTypeArr.length > 0,

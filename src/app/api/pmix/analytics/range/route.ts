@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -192,6 +193,7 @@ export async function GET(req: NextRequest) {
     const extraByDish     = new Map<string, { category: string; dish: string; proteinType: string; qty: number }>();
     const dessertItems    = new Map<string, number>();
     const beverageByGroup = new Map<string, number>();
+    const curryByGroup    = new Map<string, number>();
     const uncatMap        = new Map<string, { itemName: string; category: string; qty: number }>();
 
     const mainGroupNames  = new Set<string>();
@@ -209,6 +211,12 @@ export async function GET(req: NextRequest) {
         if (beverageCatSet.has(category.toLowerCase())) {
             beverageByGroup.set(category, (beverageByGroup.get(category) ?? 0) + qty);
             continue;
+        }
+
+        // Curry detection runs in parallel with protein/dessert classification
+        const curryGroup = matchCurryGroup(dishName);
+        if (curryGroup) {
+            curryByGroup.set(curryGroup, (curryByGroup.get(curryGroup) ?? 0) + qty);
         }
 
         if (hasProteinModifier(mods)) {
@@ -316,6 +324,16 @@ export async function GET(req: NextRequest) {
     }
     const beverageTotal = beverageArr.reduce((s, b) => s + b.qty, 0);
 
+    // Curry totals — preserve canonical order from CURRY_GROUPS
+    const curryArr: { group: string; qty: number; avgQtyPerDay: number }[] = CURRY_GROUPS
+        .filter(g => curryByGroup.has(g.label))
+        .map(g => ({
+            group:        g.label,
+            qty:          curryByGroup.get(g.label)!,
+            avgQtyPerDay: dayCount > 0 ? +(curryByGroup.get(g.label)! / dayCount).toFixed(1) : 0,
+        }));
+    const curryTotal = curryArr.reduce((s, c) => s + c.qty, 0);
+
     const uncategorized  = [...uncatMap.values()].sort((a, b) => b.qty - a.qty);
 
     // ─── Overall totals ───────────────────────────────────────────────────────
@@ -360,6 +378,7 @@ export async function GET(req: NextRequest) {
             },
             desserts:      { byItem: dessertArr, total: dessertTotal },
             beverages:     { byGroup: beverageArr, total: beverageTotal },
+            curries:       { byGroup: curryArr,   total: curryTotal },
             uncategorized,
             hasProteinData: proteinTotals.length > 0 || extraTotals.length > 0,
         },

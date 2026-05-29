@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     inventoryApi, ingredientsApi, suppliersApi, storageAreasApi, ingredientSuppliersApi,
+    pmixApi,
     InventoryItem, InventoryTransaction, InventoryAlert,
     Ingredient, Supplier, StorageArea, IngredientSupplier,
-    type IngredientTrendResult,
+    type IngredientTrendResult, type ProteinHeatmapResult,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import { useCurrency } from "@/components/currency-context";
@@ -130,10 +131,14 @@ export default function InventoryPage() {
     const [search,      setSearch]      = useState("");
     const [activeTab,   setActiveTab]   = useState("stock");
 
-    // 7-day ingredient usage trend
+    // 7-day ingredient usage trend (from inventory transactions)
     const [trendData,    setTrendData]    = useState<IngredientTrendResult | null>(null);
     const [trendLoading, setTrendLoading] = useState(false);
     const [trendDays,    setTrendDays]    = useState(7);
+
+    // Main Protein heatmap (from PMIX sales)
+    const [proteinHeatmap,        setProteinHeatmap]        = useState<ProteinHeatmapResult | null>(null);
+    const [proteinHeatmapLoading, setProteinHeatmapLoading] = useState(false);
 
     // Storage area drill-down (null = show area cards, id = show ingredients in area, "unassigned" = show unassigned)
     const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -200,6 +205,16 @@ export default function InventoryPage() {
             .catch(() => setTrendData(null))
             .finally(() => setTrendLoading(false));
     }, [activeTab, trendDays]);
+
+    // Load protein heatmap when trend tab opens (always 7 days = Mon–Sun latest)
+    useEffect(() => {
+        if (activeTab !== "trend") return;
+        setProteinHeatmapLoading(true);
+        pmixApi.proteinHeatmap(7)
+            .then(setProteinHeatmap)
+            .catch(() => setProteinHeatmap(null))
+            .finally(() => setProteinHeatmapLoading(false));
+    }, [activeTab]);
 
     // Untracked ingredients (not yet in InventoryItem)
     const trackedIds    = new Set(items.map(i => i.ingredientId));
@@ -1184,6 +1199,71 @@ export default function InventoryPage() {
 
                 {/* ══ USAGE TREND ═══════════════════════════════════════════════ */}
                 <TabsContent value="trend" className="mt-4 space-y-4">
+
+                    {/* ── Main Protein Usage (from PMIX, last 7 days) ─────────── */}
+                    <Card className="border-teal-200 dark:border-teal-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <span className="text-base leading-none">🥩</span>
+                                        Main Protein Usage — Last 7 Days (from PMIX Sales)
+                                    </CardTitle>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Orders classified as Main Protein from PMIX · lb for oz-portioned items · orders otherwise
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setProteinHeatmapLoading(true);
+                                        pmixApi.proteinHeatmap(7)
+                                            .then(setProteinHeatmap)
+                                            .catch(() => setProteinHeatmap(null))
+                                            .finally(() => setProteinHeatmapLoading(false));
+                                    }}
+                                    disabled={proteinHeatmapLoading}
+                                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                                    title="Refresh"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${proteinHeatmapLoading ? "animate-spin" : ""}`} />
+                                </button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-5 pb-5">
+                            {proteinHeatmapLoading ? (
+                                <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading protein data…</span>
+                                </div>
+                            ) : proteinHeatmap && proteinHeatmap.items.length > 0 ? (
+                                <IngredientUsageHeatmap
+                                    dates={proteinHeatmap.dates}
+                                    items={proteinHeatmap.items.map(p => ({
+                                        ingredientId:   p.proteinType,
+                                        ingredientName: p.proteinType,
+                                        unit:           p.unit,
+                                        recipeUnit:     p.unit,
+                                        purchaseUnit:   p.unit,
+                                        conversionRate: 1,
+                                        category:       p.ingredientName !== p.proteinType
+                                            ? p.ingredientName
+                                            : "Main Protein",
+                                        totalQty:       p.totalQty,
+                                        avgPerDay:      p.avgPerDay,
+                                        byDate:         p.byDate,
+                                    }))}
+                                    days={proteinHeatmap.days}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-10">
+                                    No PMIX data found for the last 7 days.
+                                    Upload a PMIX report in <a href="/analysis/pmix" className="underline text-primary">PMIX Analytics</a>.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Inventory Transaction Trend ─────────────────────────── */}
                     <Card>
                         <CardHeader className="pb-3">
                             <div className="flex flex-wrap items-start justify-between gap-3">

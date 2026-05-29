@@ -355,6 +355,12 @@ export const pmixApi = {
             `/pmix/analytics/beverage-daily?group=${encodeURIComponent(group)}&from=${from}&to=${to}`
         ),
 
+    proteinHeatmap: (days = 7) =>
+        apiFetch<ProteinHeatmapResult>(
+            `/pmix/analytics/protein-heatmap?days=${days}`,
+            { cache: "no-store" },
+        ),
+
     upload: (file: File, periodLabel?: string, businessDate?: string) => {
         const fd = new FormData();
         fd.append("file", file);
@@ -1120,6 +1126,22 @@ export interface ProteinDailyResult {
 export interface DessertDailyResult {
     item: string;
     days: { date: string; qty: number }[];
+}
+
+// ─── Protein usage heatmap (multi-protein, per-day) ──────────────────────────
+export interface ProteinHeatmapRow {
+    proteinType:    string;
+    ingredientName: string;
+    unit:           string;     // "lb" | "orders" | portionUnit
+    totalOrders:    number;     // raw order count (for sorting)
+    totalQty:       number;     // in display unit
+    avgPerDay:      number;
+    byDate:         number[];   // parallel to ProteinHeatmapResult.dates
+}
+export interface ProteinHeatmapResult {
+    dates:  string[];
+    items:  ProteinHeatmapRow[];
+    days:   number;
 }
 
 // ─── Beverage daily calendar ──────────────────────────────────────────────────

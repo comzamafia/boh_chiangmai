@@ -1298,6 +1298,7 @@ export default function InventoryPage() {
                                         inventoryTracked: p.inventoryTracked,
                                     }))}
                                     days={proteinHeatmap.days}
+                                    latestDataDate={proteinHeatmap.latestDataDate}
                                 />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-10">
@@ -1328,6 +1329,7 @@ export default function InventoryPage() {
                                             subtitle: "from PMIX Sales",
                                             dates:    dessertHeatmap.dates,
                                             days:     dessertHeatmap.days,
+                                            latestDataDate: dessertHeatmap.latestDataDate,
                                             items:    dessertHeatmap.items.map(d => ({
                                                 name: d.itemName, subLabel: `(${d.unit})`, unit: d.unit,
                                                 byDate: d.byDate, totalQty: d.totalQty, avgPerDay: d.avgPerDay,
@@ -1368,6 +1370,7 @@ export default function InventoryPage() {
                                 <IngredientUsageHeatmap
                                     dates={dessertHeatmap.dates}
                                     days={dessertHeatmap.days}
+                                    latestDataDate={dessertHeatmap.latestDataDate}
                                     items={dessertHeatmap.items.map(d => ({
                                         ingredientId:   d.inventoryItemId ?? d.itemName,
                                         ingredientName: d.itemName,
@@ -1412,6 +1415,7 @@ export default function InventoryPage() {
                                             subtitle: "every menu item · from PMIX Sales",
                                             dates:    beverageHeatmap.dates,
                                             days:     beverageHeatmap.days,
+                                            latestDataDate: beverageHeatmap.latestDataDate,
                                             items:    beverageHeatmap.items.map(b => ({
                                                 name: b.itemName, subLabel: b.category, unit: b.unit,
                                                 byDate: b.byDate, totalQty: b.totalQty, avgPerDay: b.avgPerDay,
@@ -1452,6 +1456,7 @@ export default function InventoryPage() {
                                 <IngredientUsageHeatmap
                                     dates={beverageHeatmap.dates}
                                     days={beverageHeatmap.days}
+                                    latestDataDate={beverageHeatmap.latestDataDate}
                                     items={beverageHeatmap.items.map(b => ({
                                         ingredientId:   b.inventoryItemId ?? b.itemName,
                                         ingredientName: b.itemName,
@@ -1496,6 +1501,7 @@ export default function InventoryPage() {
                                             subtitle: "by group · from PMIX Sales",
                                             dates:    curryHeatmap.dates,
                                             days:     curryHeatmap.days,
+                                            latestDataDate: curryHeatmap.latestDataDate,
                                             items:    curryHeatmap.items.map(c => ({
                                                 name: c.group, subLabel: `(${c.unit})`, unit: c.unit,
                                                 byDate: c.byDate, totalQty: c.totalQty, avgPerDay: c.avgPerDay,
@@ -1536,6 +1542,7 @@ export default function InventoryPage() {
                                 <IngredientUsageHeatmap
                                     dates={curryHeatmap.dates}
                                     days={curryHeatmap.days}
+                                    latestDataDate={curryHeatmap.latestDataDate}
                                     items={curryHeatmap.items.map(c => ({
                                         ingredientId:   c.inventoryItemId ?? c.group,
                                         ingredientName: c.group,

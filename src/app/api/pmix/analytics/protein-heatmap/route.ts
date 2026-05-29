@@ -53,16 +53,18 @@ export async function GET(req: NextRequest) {
     });
 
     if (uploads.length === 0) {
-        return NextResponse.json({ dates, items: [], days });
+        return NextResponse.json({ dates, items: [], days, latestDataDate: null });
     }
 
-    // 2. Map upload → date
+    // 2. Map upload → date + find the most recent date that has any PMIX data
     const uploadDateMap = new Map<string, string>();
+    let latestDataDate: string | null = null;
     for (const u of uploads) {
         const date = ((u.businessDate ?? u.uploadedAt) as Date).toISOString().slice(0, 10);
         if (!uploadDateMap.has(u.id as string)) {
             uploadDateMap.set(u.id as string, date);
         }
+        if (!latestDataDate || date > latestDataDate) latestDataDate = date;
     }
 
     const uploadIds = uploads.map((u: { id: string }) => u.id);
@@ -214,5 +216,5 @@ export async function GET(req: NextRequest) {
         .filter(r => r.totalOrders > 0)
         .sort((a, b) => b.totalOrders - a.totalOrders);
 
-    return NextResponse.json({ dates, items, days });
+    return NextResponse.json({ dates, items, days, latestDataDate });
 }

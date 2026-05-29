@@ -51,6 +51,9 @@ export interface HeatmapPdfData {
     days:     number;
     /** File-name prefix (e.g. "MainProteinUsage"). */
     filenamePrefix: string;
+    /** Most recent date with actual PMIX data — used as the "last-day sold"
+     *  reference for the Bal column. Defaults to the rightmost date. */
+    latestDataDate?: string | null;
 }
 
 export function exportHeatmapToPDF(data: HeatmapPdfData) {
@@ -82,7 +85,13 @@ export function exportHeatmapToPDF(data: HeatmapPdfData) {
 
     // ── Table data ───────────────────────────────────────────────────────────
     const hasInventory = data.items.some(r => r.currentStock != null);
-    const lastDateIdx  = data.dates.length - 1;
+    const lastDateIdx  = (() => {
+        if (data.latestDataDate) {
+            const idx = data.dates.indexOf(data.latestDataDate);
+            if (idx >= 0) return idx;
+        }
+        return data.dates.length - 1;
+    })();
     const peaks        = data.items.map(r => Math.max(...r.byDate, 1));
     const dynColCount  = data.dates.length;
 

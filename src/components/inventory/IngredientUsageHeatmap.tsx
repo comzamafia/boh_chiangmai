@@ -61,10 +61,14 @@ interface Props {
     dates:   string[];
     items:   IngredientTrendRow[];
     days:    number;
+    /** Most recent date with actual PMIX data. When supplied, Bal is computed
+     *  as currentStock − sold_on_that_date instead of using the rightmost
+     *  calendar position (which may have no PMIX uploaded yet). */
+    latestDataDate?: string | null;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
+export default function IngredientUsageHeatmap({ dates, items, days, latestDataDate }: Props) {
     if (!items.length) return (
         <p className="text-sm text-muted-foreground py-8 text-center">
             No transactions found in the last {days} days.
@@ -72,7 +76,15 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
     );
 
     const hasInventory = items.some(r => r.currentStock != null);
-    const lastDateIdx  = dates.length - 1;
+    // Prefer the API-supplied latest-data-date for the Bal calculation.
+    // Falls back to the rightmost calendar position when no override given.
+    const lastDateIdx = (() => {
+        if (latestDataDate) {
+            const idx = dates.indexOf(latestDataDate);
+            if (idx >= 0) return idx;
+        }
+        return dates.length - 1;
+    })();
 
     // ── Shared: balance status colour ────────────────────────────────────────
     function balColour(balance: number, parMin: number) {
@@ -209,6 +221,11 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                     <span>High</span>
                     <span className="ml-1 text-rose-500 dark:text-rose-400">Sa/Su highlighted</span>
                 </div>
+                {hasInventory && (
+                    <p className="text-[10px] text-muted-foreground italic pt-0.5">
+                        📦 Bal = currentStock − sold on <strong>{dates[lastDateIdx]}</strong> (latest PMIX day)
+                    </p>
+                )}
             </div>
 
             {/* ══════════════════════════════════════════════════════════════
@@ -332,6 +349,11 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                     <span className="ml-2 text-rose-500 dark:text-rose-400 font-medium">Weekends highlighted</span>
                     <span className="ml-2">Intensity per ingredient&apos;s own peak</span>
                 </div>
+                {hasInventory && (
+                    <p className="text-[10px] text-muted-foreground italic mt-1">
+                        📦 Bal = currentStock − sold on <strong className="text-foreground">{dates[lastDateIdx]}</strong> (latest day with PMIX data)
+                    </p>
+                )}
             </div>
         </div>
     );

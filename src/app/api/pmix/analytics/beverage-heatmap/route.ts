@@ -46,12 +46,14 @@ export async function GET(req: NextRequest) {
         },
         select: { id: true, businessDate: true, uploadedAt: true },
     });
-    if (uploads.length === 0) return NextResponse.json({ dates, items: [], days });
+    if (uploads.length === 0) return NextResponse.json({ dates, items: [], days, latestDataDate: null });
 
     const uploadDateMap = new Map<string, string>();
+    let latestDataDate: string | null = null;
     for (const u of uploads) {
         const date = ((u.businessDate ?? u.uploadedAt) as Date).toISOString().slice(0, 10);
         uploadDateMap.set(u.id as string, date);
+        if (!latestDataDate || date > latestDataDate) latestDataDate = date;
     }
     const uploadIds = uploads.map((u: { id: string }) => u.id);
     const bevCatSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
@@ -118,5 +120,5 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.totalOrders - a.totalOrders)
         .slice(0, top);
 
-    return NextResponse.json({ dates, items, days });
+    return NextResponse.json({ dates, items, days, latestDataDate });
 }

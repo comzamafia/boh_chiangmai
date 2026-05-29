@@ -1187,6 +1187,10 @@ export interface ProteinHeatmapResult {
     dates:  string[];
     items:  ProteinHeatmapRow[];
     days:   number;
+    /** Most recent date that has any PMIX upload in the window, or null when
+     *  the window is empty. Used by the UI as the "last-day sold" reference
+     *  for the Bal column instead of just dates[dates.length-1]. */
+    latestDataDate?: string | null;
 }
 
 // ─── Dessert / Beverage / Curry heatmap (parallel to ProteinHeatmap) ─────────
@@ -1206,6 +1210,7 @@ export interface DessertHeatmapResult {
     dates: string[];
     items: DessertHeatmapRow[];
     days:  number;
+    latestDataDate?: string | null;
 }
 
 export interface BeverageHeatmapRow extends DessertHeatmapRow {
@@ -1215,6 +1220,7 @@ export interface BeverageHeatmapResult {
     dates: string[];
     items: BeverageHeatmapRow[];
     days:  number;
+    latestDataDate?: string | null;
 }
 
 export interface CurryHeatmapRow {
@@ -1233,6 +1239,7 @@ export interface CurryHeatmapResult {
     dates: string[];
     items: CurryHeatmapRow[];
     days:  number;
+    latestDataDate?: string | null;
 }
 
 // ─── Beverage daily calendar ──────────────────────────────────────────────────

@@ -11,6 +11,7 @@ export function exportProteinHeatmapToPDF(data: ProteinHeatmapResult) {
         subtitle: "from PMIX Sales",
         dates:    data.dates,
         days:     data.days,
+        latestDataDate: data.latestDataDate,
         items:    data.items.map(p => ({
             name:         p.proteinType,
             subLabel:     `(${p.unit})`,

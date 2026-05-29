@@ -563,7 +563,11 @@ export interface InventoryTransaction {
 export interface IngredientTrendRow {
     ingredientId:   string;
     ingredientName: string;
+    /** Display unit — purchaseUnit when it differs from recipeUnit, else recipeUnit */
     unit:           string;
+    recipeUnit:     string;
+    purchaseUnit:   string;
+    conversionRate: number;
     category:       string;
     totalQty:       number;
     avgPerDay:      number;

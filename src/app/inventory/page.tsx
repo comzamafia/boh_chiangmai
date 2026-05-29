@@ -7,9 +7,11 @@ import {
     InventoryItem, InventoryTransaction, InventoryAlert,
     Ingredient, Supplier, StorageArea, IngredientSupplier,
     type IngredientTrendResult, type ProteinHeatmapResult,
+    type DessertHeatmapResult, type BeverageHeatmapResult, type CurryHeatmapResult,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
+import { exportHeatmapToPDF } from "@/lib/heatmap-pdf-export";
 import { useCurrency } from "@/components/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,6 +143,18 @@ export default function InventoryPage() {
     const [proteinHeatmap,        setProteinHeatmap]        = useState<ProteinHeatmapResult | null>(null);
     const [proteinHeatmapLoading, setProteinHeatmapLoading] = useState(false);
 
+    // Dessert heatmap
+    const [dessertHeatmap,        setDessertHeatmap]        = useState<DessertHeatmapResult | null>(null);
+    const [dessertHeatmapLoading, setDessertHeatmapLoading] = useState(false);
+
+    // Beverage heatmap (each menu item)
+    const [beverageHeatmap,        setBeverageHeatmap]        = useState<BeverageHeatmapResult | null>(null);
+    const [beverageHeatmapLoading, setBeverageHeatmapLoading] = useState(false);
+
+    // Curry heatmap (by group)
+    const [curryHeatmap,        setCurryHeatmap]        = useState<CurryHeatmapResult | null>(null);
+    const [curryHeatmapLoading, setCurryHeatmapLoading] = useState(false);
+
     // Storage area drill-down (null = show area cards, id = show ingredients in area, "unassigned" = show unassigned)
     const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
 
@@ -207,14 +221,30 @@ export default function InventoryPage() {
             .finally(() => setTrendLoading(false));
     }, [activeTab, trendDays]);
 
-    // Load protein heatmap when trend tab opens (always 7 days = Mon–Sun latest)
+    // Load PMIX heatmaps (protein/dessert/beverage/curry) when trend tab opens.
+    // Always 7-day window = Mon–Sun latest.
     useEffect(() => {
         if (activeTab !== "trend") return;
+
         setProteinHeatmapLoading(true);
         pmixApi.proteinHeatmap(7)
-            .then(setProteinHeatmap)
-            .catch(() => setProteinHeatmap(null))
+            .then(setProteinHeatmap).catch(() => setProteinHeatmap(null))
             .finally(() => setProteinHeatmapLoading(false));
+
+        setDessertHeatmapLoading(true);
+        pmixApi.dessertHeatmap(7)
+            .then(setDessertHeatmap).catch(() => setDessertHeatmap(null))
+            .finally(() => setDessertHeatmapLoading(false));
+
+        setBeverageHeatmapLoading(true);
+        pmixApi.beverageHeatmap(7, 30)
+            .then(setBeverageHeatmap).catch(() => setBeverageHeatmap(null))
+            .finally(() => setBeverageHeatmapLoading(false));
+
+        setCurryHeatmapLoading(true);
+        pmixApi.curryHeatmap(7)
+            .then(setCurryHeatmap).catch(() => setCurryHeatmap(null))
+            .finally(() => setCurryHeatmapLoading(false));
     }, [activeTab]);
 
     // Untracked ingredients (not yet in InventoryItem)
@@ -1272,6 +1302,255 @@ export default function InventoryPage() {
                                 <p className="text-sm text-muted-foreground text-center py-10">
                                     No PMIX data found for the last 7 days.
                                     Upload a PMIX report in <a href="/analysis/pmix" className="underline text-primary">PMIX Analytics</a>.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Main Dessert Usage (from PMIX, last 7 days) ─────────── */}
+                    <Card className="border-pink-200 dark:border-pink-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <span className="text-base leading-none">🍮</span>
+                                        Main Dessert Usage — Last 7 Days (from PMIX Sales)
+                                    </CardTitle>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Orders classified as Dessert in PMIX · qty in purchase unit when inventory linked
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        onClick={() => dessertHeatmap && exportHeatmapToPDF({
+                                            title:    "Main Dessert Usage — Last 7 Days",
+                                            subtitle: "from PMIX Sales",
+                                            dates:    dessertHeatmap.dates,
+                                            days:     dessertHeatmap.days,
+                                            items:    dessertHeatmap.items.map(d => ({
+                                                name: d.itemName, subLabel: `(${d.unit})`, unit: d.unit,
+                                                byDate: d.byDate, totalQty: d.totalQty, avgPerDay: d.avgPerDay,
+                                                currentStock: d.currentStock, parMin: d.parMin,
+                                            })),
+                                            filenamePrefix: "MainDessertUsage",
+                                        })}
+                                        disabled={!dessertHeatmap || dessertHeatmap.items.length === 0 || dessertHeatmapLoading}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-pink-300 dark:border-pink-700 text-pink-700 dark:text-pink-300 hover:bg-pink-50 dark:hover:bg-pink-950/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium touch-manipulation"
+                                        title="Export to PDF"
+                                    >
+                                        <FileDown className="w-4 h-4" />
+                                        <span className="hidden sm:inline">Export PDF</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setDessertHeatmapLoading(true);
+                                            pmixApi.dessertHeatmap(7)
+                                                .then(setDessertHeatmap).catch(() => setDessertHeatmap(null))
+                                                .finally(() => setDessertHeatmapLoading(false));
+                                        }}
+                                        disabled={dessertHeatmapLoading}
+                                        className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                                        title="Refresh"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 ${dessertHeatmapLoading ? "animate-spin" : ""}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-5 pb-5">
+                            {dessertHeatmapLoading ? (
+                                <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading dessert data…</span>
+                                </div>
+                            ) : dessertHeatmap && dessertHeatmap.items.length > 0 ? (
+                                <IngredientUsageHeatmap
+                                    dates={dessertHeatmap.dates}
+                                    days={dessertHeatmap.days}
+                                    items={dessertHeatmap.items.map(d => ({
+                                        ingredientId:   d.inventoryItemId ?? d.itemName,
+                                        ingredientName: d.itemName,
+                                        unit:           d.unit,
+                                        recipeUnit:     d.unit,
+                                        purchaseUnit:   d.unit,
+                                        conversionRate: 1,
+                                        category:       "Dessert",
+                                        totalQty:       d.totalQty,
+                                        avgPerDay:      d.avgPerDay,
+                                        byDate:         d.byDate,
+                                        currentStock:   d.currentStock,
+                                        parMin:         d.parMin,
+                                    }))}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-10">
+                                    No dessert sales found in the last 7 days.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Beverages Usage (every menu item, from PMIX) ────────── */}
+                    <Card className="border-purple-200 dark:border-purple-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <span className="text-base leading-none">🍹</span>
+                                        Beverages Usage — Last 7 Days (every menu item)
+                                    </CardTitle>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Top 30 individual beverage items (not group totals) · POS categories: Beer / Wine / Spirits / Cocktails
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        onClick={() => beverageHeatmap && exportHeatmapToPDF({
+                                            title:    "Beverages Usage — Last 7 Days",
+                                            subtitle: "every menu item · from PMIX Sales",
+                                            dates:    beverageHeatmap.dates,
+                                            days:     beverageHeatmap.days,
+                                            items:    beverageHeatmap.items.map(b => ({
+                                                name: b.itemName, subLabel: b.category, unit: b.unit,
+                                                byDate: b.byDate, totalQty: b.totalQty, avgPerDay: b.avgPerDay,
+                                                currentStock: b.currentStock, parMin: b.parMin,
+                                            })),
+                                            filenamePrefix: "BeveragesUsage",
+                                        })}
+                                        disabled={!beverageHeatmap || beverageHeatmap.items.length === 0 || beverageHeatmapLoading}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium touch-manipulation"
+                                        title="Export to PDF"
+                                    >
+                                        <FileDown className="w-4 h-4" />
+                                        <span className="hidden sm:inline">Export PDF</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setBeverageHeatmapLoading(true);
+                                            pmixApi.beverageHeatmap(7, 30)
+                                                .then(setBeverageHeatmap).catch(() => setBeverageHeatmap(null))
+                                                .finally(() => setBeverageHeatmapLoading(false));
+                                        }}
+                                        disabled={beverageHeatmapLoading}
+                                        className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                                        title="Refresh"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 ${beverageHeatmapLoading ? "animate-spin" : ""}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-5 pb-5">
+                            {beverageHeatmapLoading ? (
+                                <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading beverage data…</span>
+                                </div>
+                            ) : beverageHeatmap && beverageHeatmap.items.length > 0 ? (
+                                <IngredientUsageHeatmap
+                                    dates={beverageHeatmap.dates}
+                                    days={beverageHeatmap.days}
+                                    items={beverageHeatmap.items.map(b => ({
+                                        ingredientId:   b.inventoryItemId ?? b.itemName,
+                                        ingredientName: b.itemName,
+                                        unit:           b.unit,
+                                        recipeUnit:     b.unit,
+                                        purchaseUnit:   b.unit,
+                                        conversionRate: 1,
+                                        category:       b.category,
+                                        totalQty:       b.totalQty,
+                                        avgPerDay:      b.avgPerDay,
+                                        byDate:         b.byDate,
+                                        currentStock:   b.currentStock,
+                                        parMin:         b.parMin,
+                                    }))}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-10">
+                                    No beverage sales found in the last 7 days.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Main Curry Usage (by group, from PMIX) ──────────────── */}
+                    <Card className="border-amber-200 dark:border-amber-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <span className="text-base leading-none">🍛</span>
+                                        Main Curry Usage — Last 7 Days (by group)
+                                    </CardTitle>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Khao Soi · Green / Panang / Massaman / Tom Kha · Islamic Noodles · Panang group bundles Duck Panang + Malay Curry
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        onClick={() => curryHeatmap && exportHeatmapToPDF({
+                                            title:    "Main Curry Usage — Last 7 Days",
+                                            subtitle: "by group · from PMIX Sales",
+                                            dates:    curryHeatmap.dates,
+                                            days:     curryHeatmap.days,
+                                            items:    curryHeatmap.items.map(c => ({
+                                                name: c.group, subLabel: `(${c.unit})`, unit: c.unit,
+                                                byDate: c.byDate, totalQty: c.totalQty, avgPerDay: c.avgPerDay,
+                                                currentStock: c.currentStock, parMin: c.parMin,
+                                            })),
+                                            filenamePrefix: "MainCurryUsage",
+                                        })}
+                                        disabled={!curryHeatmap || curryHeatmap.items.length === 0 || curryHeatmapLoading}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium touch-manipulation"
+                                        title="Export to PDF"
+                                    >
+                                        <FileDown className="w-4 h-4" />
+                                        <span className="hidden sm:inline">Export PDF</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setCurryHeatmapLoading(true);
+                                            pmixApi.curryHeatmap(7)
+                                                .then(setCurryHeatmap).catch(() => setCurryHeatmap(null))
+                                                .finally(() => setCurryHeatmapLoading(false));
+                                        }}
+                                        disabled={curryHeatmapLoading}
+                                        className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                                        title="Refresh"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 ${curryHeatmapLoading ? "animate-spin" : ""}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-3 sm:px-5 pb-5">
+                            {curryHeatmapLoading ? (
+                                <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading curry data…</span>
+                                </div>
+                            ) : curryHeatmap && curryHeatmap.items.length > 0 ? (
+                                <IngredientUsageHeatmap
+                                    dates={curryHeatmap.dates}
+                                    days={curryHeatmap.days}
+                                    items={curryHeatmap.items.map(c => ({
+                                        ingredientId:   c.inventoryItemId ?? c.group,
+                                        ingredientName: c.group,
+                                        unit:           c.unit,
+                                        recipeUnit:     c.unit,
+                                        purchaseUnit:   c.unit,
+                                        conversionRate: 1,
+                                        category:       "Main Curry",
+                                        totalQty:       c.totalQty,
+                                        avgPerDay:      c.avgPerDay,
+                                        byDate:         c.byDate,
+                                        currentStock:   c.currentStock,
+                                        parMin:         c.parMin,
+                                    }))}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-10">
+                                    No curry sales found in the last 7 days.
                                 </p>
                             )}
                         </CardContent>

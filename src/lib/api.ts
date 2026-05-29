@@ -366,6 +366,24 @@ export const pmixApi = {
             { cache: "no-store" },
         ),
 
+    dessertHeatmap: (days = 7) =>
+        apiFetch<DessertHeatmapResult>(
+            `/pmix/analytics/dessert-heatmap?days=${days}`,
+            { cache: "no-store" },
+        ),
+
+    beverageHeatmap: (days = 7, top = 30) =>
+        apiFetch<BeverageHeatmapResult>(
+            `/pmix/analytics/beverage-heatmap?days=${days}&top=${top}`,
+            { cache: "no-store" },
+        ),
+
+    curryHeatmap: (days = 7) =>
+        apiFetch<CurryHeatmapResult>(
+            `/pmix/analytics/curry-heatmap?days=${days}`,
+            { cache: "no-store" },
+        ),
+
     upload: (file: File, periodLabel?: string, businessDate?: string) => {
         const fd = new FormData();
         fd.append("file", file);
@@ -1162,6 +1180,50 @@ export interface ProteinHeatmapResult {
     dates:  string[];
     items:  ProteinHeatmapRow[];
     days:   number;
+}
+
+// ─── Dessert / Beverage / Curry heatmap (parallel to ProteinHeatmap) ─────────
+export interface DessertHeatmapRow {
+    itemName:        string;
+    unit:            string;
+    totalOrders:     number;
+    totalQty:        number;
+    avgPerDay:       number;
+    byDate:          number[];
+    inventoryItemId: string | null;
+    currentStock:    number | null;
+    parMin:          number | null;
+}
+export interface DessertHeatmapResult {
+    dates: string[];
+    items: DessertHeatmapRow[];
+    days:  number;
+}
+
+export interface BeverageHeatmapRow extends DessertHeatmapRow {
+    category: string;   // POS group ("Beer", "Red Wine", …)
+}
+export interface BeverageHeatmapResult {
+    dates: string[];
+    items: BeverageHeatmapRow[];
+    days:  number;
+}
+
+export interface CurryHeatmapRow {
+    group:           string;
+    unit:            string;
+    totalOrders:     number;
+    totalQty:        number;
+    avgPerDay:       number;
+    byDate:          number[];
+    inventoryItemId: string | null;
+    currentStock:    number | null;
+    parMin:          number | null;
+}
+export interface CurryHeatmapResult {
+    dates: string[];
+    items: CurryHeatmapRow[];
+    days:  number;
 }
 
 // ─── Beverage daily calendar ──────────────────────────────────────────────────

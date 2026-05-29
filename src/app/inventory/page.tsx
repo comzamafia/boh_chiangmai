@@ -1295,6 +1295,7 @@ export default function InventoryPage() {
                                         byDate:         p.byDate,
                                         currentStock:   p.currentStock,
                                         parMin:         p.parMin,
+                                        inventoryTracked: p.inventoryTracked,
                                     }))}
                                     days={proteinHeatmap.days}
                                 />
@@ -1380,6 +1381,7 @@ export default function InventoryPage() {
                                         byDate:         d.byDate,
                                         currentStock:   d.currentStock,
                                         parMin:         d.parMin,
+                                        inventoryTracked: d.inventoryTracked,
                                     }))}
                                 />
                             ) : (
@@ -1463,6 +1465,7 @@ export default function InventoryPage() {
                                         byDate:         b.byDate,
                                         currentStock:   b.currentStock,
                                         parMin:         b.parMin,
+                                        inventoryTracked: b.inventoryTracked,
                                     }))}
                                 />
                             ) : (
@@ -1546,6 +1549,7 @@ export default function InventoryPage() {
                                         byDate:         c.byDate,
                                         currentStock:   c.currentStock,
                                         parMin:         c.parMin,
+                                        inventoryTracked: c.inventoryTracked,
                                     }))}
                                 />
                             ) : (

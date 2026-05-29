@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
             const conv = (q: number) => inv ? toDisplayQty(q, inv).qty : q;
 
             const totalQty = r3(conv(totalRaw));
+            const tracked  = !!inv;
             return {
                 itemName,
                 unit,
@@ -105,8 +106,11 @@ export async function GET(req: NextRequest) {
                 avgPerDay:      r3(totalQty / days),
                 byDate:         byDateRaw.map(q => r3(conv(q))),
                 inventoryItemId: inv?.inventoryItemId ?? null,
-                currentStock:    inv ? r3(inv.currentStock / (inv.conversionRate > 0 ? inv.conversionRate : 1)) : null,
-                parMin:          inv ? r3(inv.parMin       / (inv.conversionRate > 0 ? inv.conversionRate : 1)) : null,
+                inventoryTracked: tracked,
+                // Default to 0 (not null) so the UI computes Bal = 0 - sold
+                // and Order = +sold when the item isn't tracked yet.
+                currentStock:    inv ? r3(inv.currentStock / (inv.conversionRate > 0 ? inv.conversionRate : 1)) : 0,
+                parMin:          inv ? r3(inv.parMin       / (inv.conversionRate > 0 ? inv.conversionRate : 1)) : 0,
             };
         })
         .filter(r => r.totalOrders > 0)

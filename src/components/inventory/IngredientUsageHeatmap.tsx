@@ -40,14 +40,20 @@ function fmt(n: number) {
     return n % 1 === 0 ? String(n) : n.toFixed(2);
 }
 
-// Compute balance + order action for a row
+// Compute balance + order action for a row. Returns null only when the row
+// has no inventory data at all (currentStock undefined — e.g. the inventory-
+// transaction-based trend doesn't supply stock fields).
+// When currentStock is 0 (no InventoryItem exists yet), we STILL return the
+// computation so the UI shows Bal = 0 − sold and Order = +sold, flagging the
+// shortage and prompting the user to set up tracking.
 function flowAction(row: IngredientTrendRow, lastDateIdx: number) {
     if (row.currentStock == null) return null;
-    const lastSold = row.byDate[lastDateIdx] ?? 0;
-    const balance  = row.currentStock - lastSold;
-    const parMin   = row.parMin ?? 0;
-    const orderQty = parMin - balance;
-    return { balance, lastSold, parMin, orderQty };
+    const lastSold  = row.byDate[lastDateIdx] ?? 0;
+    const balance   = row.currentStock - lastSold;
+    const parMin    = row.parMin ?? 0;
+    const orderQty  = parMin - balance;
+    const tracked   = row.inventoryTracked !== false; // default true when omitted
+    return { balance, lastSold, parMin, orderQty, tracked };
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -164,13 +170,20 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                                             <div className="text-[8px] text-muted-foreground/60">
                                                 {fmt(row.currentStock!)}−{fmt(fa.lastSold)}
                                             </div>
+                                            {!fa.tracked && (
+                                                <div className="text-[8px] text-amber-600 dark:text-amber-400 italic mt-0.5">
+                                                    not tracked
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="text-center py-2 px-1">
                                             <div className="text-[10px] text-muted-foreground">🛒 Order</div>
                                             <div className="text-xs font-bold tabular-nums">
                                                 {fa.orderQty > 0 ? (
-                                                    <span className="text-orange-600 dark:text-orange-400">
-                                                        +{fmt(Math.ceil(fa.orderQty * 100) / 100)}
+                                                    <span className={fa.tracked
+                                                        ? "text-orange-600 dark:text-orange-400"
+                                                        : "text-amber-600 dark:text-amber-400"}>
+                                                        Buy +{fmt(Math.ceil(fa.orderQty * 100) / 100)}
                                                     </span>
                                                 ) : (
                                                     <span className="text-emerald-600 dark:text-emerald-400">✓</span>
@@ -264,10 +277,17 @@ export default function IngredientUsageHeatmap({ dates, items, days }: Props) {
                                                 <td className={`text-center tabular-nums w-16 py-1 px-1 ${bc} font-semibold`}>
                                                     {fmt(fa.balance)}
                                                     <div className="text-[9px] font-normal text-muted-foreground">{fmt(row.currentStock!)}−{fmt(fa.lastSold)}</div>
+                                                    {!fa.tracked && (
+                                                        <div className="text-[8px] text-amber-600 dark:text-amber-400 italic">not tracked</div>
+                                                    )}
                                                 </td>
                                                 <td className="text-center tabular-nums w-16 py-1 pl-1 font-bold">
                                                     {fa.orderQty > 0
-                                                        ? <span className="text-orange-600 dark:text-orange-400">+{fmt(Math.ceil(fa.orderQty * 100) / 100)}</span>
+                                                        ? <span className={fa.tracked
+                                                              ? "text-orange-600 dark:text-orange-400"
+                                                              : "text-amber-600 dark:text-amber-400"}>
+                                                              Buy +{fmt(Math.ceil(fa.orderQty * 100) / 100)}
+                                                          </span>
                                                         : <span className="text-emerald-600 dark:text-emerald-400">✓</span>}
                                                 </td>
                                             </>

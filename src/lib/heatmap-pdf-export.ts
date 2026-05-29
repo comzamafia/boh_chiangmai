@@ -114,7 +114,7 @@ export function exportHeatmapToPDF(data: HeatmapPdfData) {
                 const orderQty = parMin - balance;
                 r.push(`${fmt(balance)}\n(${fmt(row.currentStock)}-${fmt(lastSold)})`);
                 r.push(orderQty > 0
-                    ? `+${fmt(Math.ceil(orderQty * 100) / 100)}`
+                    ? `Buy +${fmt(Math.ceil(orderQty * 100) / 100)}`
                     : "OK");
             }
         }

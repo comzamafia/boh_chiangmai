@@ -171,26 +171,26 @@ export async function GET(req: NextRequest) {
             const totalQty     = r3(convertSold(totalOrders));
 
             // Inventory stock + PAR Min (converted to same display unit as sold qty)
-            let currentStock:   number | null = null;
-            let parMin:         number | null = null;
+            // When no InventoryItem exists, we treat stock as 0 so the user sees:
+            //   Bal   = 0 - last-day sold  → flags shortage
+            //   Order = + last-day sold    → suggests to order that qty
+            // inventoryTracked tells the UI whether to style as "not tracked".
+            let currentStock    = 0;
+            let parMin          = 0;
             let inventoryItemId: string | null = null;
+            let inventoryTracked = false;
 
             if (std?.ingredientId) {
                 const invItem = invByIngredientId.get(std.ingredientId);
                 if (invItem) {
-                    inventoryItemId = invItem.id;
-                    // Convert recipe-unit stock/parMin to display unit
-                    // currentStock is in recipeUnit (e.g. oz); we convert using the
-                    // same portionSize ratio so units are comparable with sold qty.
-                    // For lb display: stock_oz → lb (÷16)
-                    // For other display units: keep in recipe unit (already meaningful)
+                    inventoryItemId  = invItem.id;
+                    inventoryTracked = true;
                     const stockRaw  = Number(invItem.currentStock);
                     const parMinRaw = Number(invItem.parMin);
                     if (useLb) {
                         currentStock = r3(stockRaw / 16);
                         parMin       = r3(parMinRaw / 16);
                     } else {
-                        // No unit conversion for non-lb: show in recipe unit
                         currentStock = r3(stockRaw);
                         parMin       = r3(parMinRaw);
                     }
@@ -205,8 +205,8 @@ export async function GET(req: NextRequest) {
                 totalQty,
                 avgPerDay:       r3(totalQty / days),
                 byDate,
-                // Inventory fields (null when no matching inventory item)
                 inventoryItemId,
+                inventoryTracked,
                 currentStock,
                 parMin,
             };

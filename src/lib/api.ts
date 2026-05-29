@@ -601,9 +601,13 @@ export interface IngredientTrendRow {
     totalQty:       number;
     avgPerDay:      number;
     byDate:         number[];   // parallel to IngredientTrendResult.dates
-    // Optional inventory fields for Flow + Action columns
-    currentStock?:  number | null;
-    parMin?:        number | null;
+    // Inventory fields for Flow + Action columns.
+    // currentStock = 0 (not null) when no InventoryItem exists, so the UI
+    // computes Bal = 0 − last-day sold and Order = +last-day sold.
+    currentStock?:    number | null;
+    parMin?:          number | null;
+    /** True when there's an actual InventoryItem in the system. */
+    inventoryTracked?: boolean;
 }
 export interface IngredientTrendResult {
     dates:  string[];           // YYYY-MM-DD, ascending
@@ -1166,15 +1170,18 @@ export interface DessertDailyResult {
 export interface ProteinHeatmapRow {
     proteinType:     string;
     ingredientName:  string;
-    unit:            string;             // "lb" | "orders" | portionUnit
-    totalOrders:     number;             // raw order count (for sorting)
-    totalQty:        number;             // in display unit
+    unit:            string;
+    totalOrders:     number;
+    totalQty:        number;
     avgPerDay:       number;
-    byDate:          number[];           // parallel to ProteinHeatmapResult.dates
-    // Inventory data (null when no matching InventoryItem)
+    byDate:          number[];
     inventoryItemId: string | null;
-    currentStock:    number | null;      // in display unit
-    parMin:          number | null;      // in display unit
+    /** True when an InventoryItem exists for this protein. */
+    inventoryTracked?: boolean;
+    /** In display unit. 0 (not null) when no matching InventoryItem — the UI
+     *  then shows Bal = 0 − sold and Order = +sold to flag the shortage. */
+    currentStock:    number;
+    parMin:          number;
 }
 export interface ProteinHeatmapResult {
     dates:  string[];
@@ -1191,8 +1198,9 @@ export interface DessertHeatmapRow {
     avgPerDay:       number;
     byDate:          number[];
     inventoryItemId: string | null;
-    currentStock:    number | null;
-    parMin:          number | null;
+    inventoryTracked?: boolean;
+    currentStock:    number;   // 0 when not tracked
+    parMin:          number;   // 0 when not tracked
 }
 export interface DessertHeatmapResult {
     dates: string[];
@@ -1217,8 +1225,9 @@ export interface CurryHeatmapRow {
     avgPerDay:       number;
     byDate:          number[];
     inventoryItemId: string | null;
-    currentStock:    number | null;
-    parMin:          number | null;
+    inventoryTracked?: boolean;
+    currentStock:    number;   // 0 when not tracked
+    parMin:          number;   // 0 when not tracked
 }
 export interface CurryHeatmapResult {
     dates: string[];

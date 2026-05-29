@@ -36,6 +36,7 @@ export const ALL_SLUGS = [
     "pmix-dashboard",
     "admin-notifications",
     "settings-pmix-rules",
+    "reports",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -48,7 +49,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
         "purchases", "purchase-orders", "analysis", "batch-calculation",
         "batch-scaling", "sales-simulation", "production", "admin-audit",
         "recipes-manage-categories", "settings-portion-standards", "pmix-dashboard",
-        "admin-notifications", "settings-pmix-rules",
+        "admin-notifications", "settings-pmix-rules", "reports",
     ],
     chef: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
@@ -56,7 +57,7 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
     ],
     analyst: [
         "home", "dashboard", "daily-sales", "analysis", "batch-calculation",
-        "batch-scaling", "sales-simulation", "pmix-dashboard",
+        "batch-scaling", "sales-simulation", "pmix-dashboard", "reports",
     ],
     staff: [
         "home", "dashboard", "daily-sales", "recipes", "production",
@@ -107,6 +108,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "pmix-dashboard": "/analysis/pmix",
     "admin-notifications": "/admin/notifications",
     "settings-pmix-rules": "/settings/pmix-rules",
+    "reports": "/reports",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

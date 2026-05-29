@@ -42,6 +42,7 @@ const navItems: NavItem[] = [
     { name: "Batch Calc",     href: "/batch-calculation",  icon: Calculator,    slug: "batch-calculation",group: "insights" },
     { name: "Batch Scaling",  href: "/batch-scaling",      icon: Scale,         slug: "batch-scaling",    group: "insights" },
     { name: "Sales Sim",      href: "/sales-simulation",   icon: PieChart,      slug: "sales-simulation", group: "insights" },
+    { name: "Reports",        href: "/reports",            icon: FileText,      slug: "reports",          group: "insights" },
     { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",                    group: "admin" },
     { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",              group: "admin" },
     { name: "Notifications",  href: "/admin/notifications",icon: Bell,          slug: "admin-notifications",      group: "admin" },

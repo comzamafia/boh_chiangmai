@@ -173,10 +173,13 @@ export default function DailyCalendarModal({
         : [...dayMap.values()].reduce((s, d) => s + d.qty, 0);
     const aduSelf = totalUsage / rangeDays;
 
-    // Default operational assumptions (no inventory link)
+    // Lean PAR — supplier delivers almost daily so we keep minimal buffer
+    //   PAR Min  = ADU × 1   (1-day safety stock — enough for a single missed delivery)
+    //   ROP      = ADU × 1 + PAR Min = ADU × 2   (reorder when 2 days of stock remain)
+    //   PAR Max  = ADU × 3   (3-day max on hand — no need to hold a full week)
     const LEAD_TIME_DAYS = 1;
-    const HOLDING_DAYS   = 7;
-    const SAFETY_MULT    = 2;
+    const HOLDING_DAYS   = 3;
+    const SAFETY_MULT    = 1;
     const r2 = (n: number) => Math.round(n * 100) / 100;
     const selfParMin = r2(aduSelf * SAFETY_MULT);
     const selfROP    = r2(aduSelf * LEAD_TIME_DAYS + selfParMin);

@@ -96,45 +96,60 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    const dayCount = new Set(
+    const dateSet = new Set(
         uploads.map((u: { businessDate: Date | null; uploadedAt: Date }) =>
             (u.businessDate ?? u.uploadedAt).toISOString().slice(0, 10)
         )
-    ).size;
+    );
+    const dayCount = dateSet.size;
+
+    // Pre-build uploadId → day-of-week (Mon=0 … Sun=6) from the uploads list
+    const uploadDowMap = new Map<string, number>();
+    for (const u of uploads) {
+        const date = (u.businessDate ?? u.uploadedAt) as Date;
+        uploadDowMap.set(u.id as string, (date.getDay() + 6) % 7); // Sun=0 → Mon=0
+    }
 
     // ─── Aggregate top items / category breakdown ─────────────────────────────
     const itemMap = new Map<string, {
         itemName: string; category: string;
         qtySold: number; netSales: number; grossSales: number;
         refundQty: number; refundAmount: number; discountAmount: number;
+        byDow: number[]; // [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
     }>();
     for (const item of items) {
         const key = `${item.category}|||${item.itemName}`;
         const ex  = itemMap.get(key);
+        const qty = Number(item.qtySold);
+        const dow = uploadDowMap.get(item.uploadId as string) ?? 0;
         if (ex) {
-            ex.qtySold        += Number(item.qtySold);
+            ex.qtySold        += qty;
             ex.netSales       += Number(item.netSales);
             ex.grossSales     += Number(item.grossSales);
             ex.refundQty      += Number(item.refundQty);
             ex.refundAmount   += Number(item.refundAmount);
             ex.discountAmount += Number(item.discountAmount);
+            ex.byDow[dow]     += qty;
         } else {
+            const byDow = [0, 0, 0, 0, 0, 0, 0];
+            byDow[dow] = qty;
             itemMap.set(key, {
-                itemName:       item.itemName,
-                category:       item.category,
-                qtySold:        Number(item.qtySold),
+                itemName:       item.itemName as string,
+                category:       item.category  as string,
+                qtySold:        qty,
                 netSales:       Number(item.netSales),
                 grossSales:     Number(item.grossSales),
                 refundQty:      Number(item.refundQty),
                 refundAmount:   Number(item.refundAmount),
                 discountAmount: Number(item.discountAmount),
+                byDow,
             });
         }
     }
 
     const topItems = [...itemMap.values()]
         .sort((a, b) => b.qtySold - a.qtySold)
-        .slice(0, 20)
+        .slice(0, 30)
         .map(it => ({
             ...it,
             netSales:       it.netSales.toFixed(2),

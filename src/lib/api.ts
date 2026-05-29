@@ -722,6 +722,8 @@ export interface PmixRangeTopItem {
     discountAmount: string;
     avgQtyPerDay:   number;
     avgSalesPerDay: number;
+    /** Qty sold per day-of-week: index 0=Mon … 6=Sun */
+    byDow?:         number[];
 }
 
 export interface PmixRangeDailyTrend {

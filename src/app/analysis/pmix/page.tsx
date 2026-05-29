@@ -39,6 +39,7 @@ import {
 import ProteinCalendarModal from "@/components/pmix/ProteinCalendarModal";
 import DailyCalendarModal from "@/components/pmix/DailyCalendarModal";
 import BeverageCalendarModal from "@/components/pmix/BeverageCalendarModal";
+import ItemUsageHeatmap from "@/components/pmix/ItemUsageHeatmap";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BCG_COLORS: Record<BcgQuadrant, string> = {
@@ -3229,61 +3230,53 @@ export default function PmixDashboardPage() {
                                 </Card>
                             )}
 
-                            <div className="grid md:grid-cols-2 gap-4">
-                                {/* Top items */}
+                            {/* ── 7-Day Usage Heatmap ────────────────────────────── */}
+                            {rangeData.topItems.length > 0 && (
                                 <Card>
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm flex items-center gap-2">
                                             <Star className="w-4 h-4 text-amber-500" />
-                                            Top Items by Qty
+                                            7-Day Usage Trend — Top {rangeData.topItems.length} Important Items
                                         </CardTitle>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                            Qty sold by day of week · aggregated across the selected date range · darker cell = higher volume
+                                        </p>
                                     </CardHeader>
-                                    <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
-                                        {rangeData.topItems.map((item, i) => {
-                                            const maxQty = rangeData.topItems[0]?.qtySold ?? 1;
-                                            return (
-                                                <div key={i} className="space-y-0.5">
-                                                    <div className="flex items-center justify-between gap-2 text-xs">
-                                                        <span className="truncate font-medium">{item.itemName}</span>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-muted-foreground">{item.avgQtyPerDay}/day</span>
-                                                            <span className="font-bold text-foreground w-10 text-right">{item.qtySold}</span>
-                                                        </div>
-                                                    </div>
-                                                    <ProgressBar value={item.qtySold} max={maxQty} color="#f59e0b" />
-                                                </div>
-                                            );
-                                        })}
+                                    <CardContent className="px-3 sm:px-5 pb-4">
+                                        <ItemUsageHeatmap
+                                            items={rangeData.topItems}
+                                            dayCount={rangeData.dayCount}
+                                        />
                                     </CardContent>
                                 </Card>
+                            )}
 
-                                {/* Category breakdown */}
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <Layers className="w-4 h-4 text-indigo-500" />
-                                            Sales by Category
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
-                                        {rangeData.categoryBreakdown.map((cat, i) => {
-                                            const maxSales = Number(rangeData.categoryBreakdown[0]?.netSales ?? 1);
-                                            return (
-                                                <div key={i} className="space-y-0.5">
-                                                    <div className="flex items-center justify-between text-xs gap-2">
-                                                        <span className="truncate">{cat.category}</span>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-muted-foreground">{cat.qtySold} sold</span>
-                                                            <span className="font-bold">${Number(cat.netSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                                                        </div>
+                            {/* ── Category breakdown ─────────────────────────────── */}
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <Layers className="w-4 h-4 text-indigo-500" />
+                                        Sales by Category
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
+                                    {rangeData.categoryBreakdown.map((cat, i) => {
+                                        const maxSales = Number(rangeData.categoryBreakdown[0]?.netSales ?? 1);
+                                        return (
+                                            <div key={i} className="space-y-0.5">
+                                                <div className="flex items-center justify-between text-xs gap-2">
+                                                    <span className="truncate">{cat.category}</span>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <span className="text-muted-foreground">{cat.qtySold} sold</span>
+                                                        <span className="font-bold">${Number(cat.netSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                                                     </div>
-                                                    <ProgressBar value={Number(cat.netSales)} max={maxSales} color="#6366f1" />
                                                 </div>
-                                            );
-                                        })}
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                                <ProgressBar value={Number(cat.netSales)} max={maxSales} color="#6366f1" />
+                                            </div>
+                                        );
+                                    })}
+                                </CardContent>
+                            </Card>
 
                             {/* Ingredient Use Summary — Range-aware */}
                             {rangeData.ingredientSummary?.hasProteinData && (

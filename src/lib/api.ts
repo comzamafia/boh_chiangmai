@@ -360,6 +360,12 @@ export const pmixApi = {
             `/pmix/analytics/curry-daily?group=${encodeURIComponent(group)}&from=${from}&to=${to}`
         ),
 
+    dashboard: (uploadId: string) =>
+        apiFetch<PmixDashboardResult>(
+            `/pmix/dashboard?uploadId=${encodeURIComponent(uploadId)}`,
+            { cache: "no-store" },
+        ),
+
     proteinHeatmap: (days = 7) =>
         apiFetch<ProteinHeatmapResult>(
             `/pmix/analytics/protein-heatmap?days=${days}`,
@@ -1164,6 +1170,33 @@ export interface ProteinDailyResult {
 export interface DessertDailyResult {
     item: string;
     days: { date: string; qty: number }[];
+}
+
+// ─── PMIX daily dashboard ────────────────────────────────────────────────────
+export interface PmixDashboardResult {
+    uploadId:      string;
+    periodLabel:   string | null;
+    businessDate:  string;
+    totalSales:    number;
+    totalQty:      number;
+    macros: {
+        FOOD:     { sales: number; qty: number; pct: number };
+        LIQUOR:   { sales: number; qty: number; pct: number };
+        BEVERAGE: { sales: number; qty: number; pct: number };
+        DESSERT:  { sales: number; qty: number; pct: number };
+    };
+    topByCategory: {
+        category: string;
+        items:    { itemName: string; qty: number }[];
+    }[];
+    bar: {
+        cocktails: { itemName: string; qty: number }[];
+        mocktails: { itemName: string; qty: number }[];
+        beer:      { itemName: string; qty: number }[];
+    };
+    desserts: { itemName: string; qty: number }[];
+    insights: string[];
+    focus:    { title: string; emoji: string; body: string }[];
 }
 
 // ─── Protein usage heatmap (multi-protein, per-day) ──────────────────────────

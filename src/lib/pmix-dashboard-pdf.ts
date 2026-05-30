@@ -52,27 +52,40 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     doc.setFontSize(16);
     doc.setTextColor(...C.purple);
 
-    const titleMain = `${locationLabel.toUpperCase()} · ${formatDateMonDay(isoDateOnly(data.businessDate))}`;
-    const titleSub  = "PRODUCT MIX DASHBOARD";
+    // Title: single-day shows "MAY 29", range shows "MAY 22 — MAY 29"
+    const isRange = !!(data.rangeFrom && data.rangeTo);
+    const dateLabel = isRange
+        ? `${formatDateMonDay(data.rangeFrom!)} – ${formatDateMonDay(data.rangeTo!)}`
+        : formatDateMonDay(isoDateOnly(data.businessDate));
+    const titleMain = `${locationLabel.toUpperCase()} · ${dateLabel}`;
     doc.text(titleMain, M, y + 4);
 
+    // Subtitle: when range, show "PRODUCT MIX DASHBOARD · N-day aggregate (M uploads)"
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...C.muted);
-    doc.text(titleSub, M, y + 20);
+    const subParts: string[] = ["PRODUCT MIX DASHBOARD"];
+    if (isRange && data.dayCount != null) {
+        const dc = data.dayCount;
+        const uc = data.uploadCount ?? 0;
+        subParts.push(`${dc}-day aggregate · ${uc} upload${uc === 1 ? "" : "s"}`);
+    }
+    doc.text(subParts.join("  ·  "), M, y + 20);
 
-    // Date badge (right) — display only the YYYY-MM-DD portion
-    const dateOnly = isoDateOnly(data.businessDate);
-    const badgeW = 110;
+    // Date badge (right)
+    const badgeText = isRange
+        ? `${data.rangeFrom} → ${data.rangeTo}`
+        : formatLongDate(isoDateOnly(data.businessDate));
+    const badgeW = isRange ? 170 : 110;
     const badgeH = 26;
     const badgeX = pageW - M - badgeW;
     doc.setDrawColor(...C.border);
     doc.setLineWidth(0.8);
     doc.roundedRect(badgeX, y - 6, badgeW, badgeH, 5, 5, "S");
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(isRange ? 8.5 : 9);
     doc.setTextColor(...C.text);
-    doc.text(formatLongDate(dateOnly), badgeX + badgeW / 2, y + 10, { align: "center" });
+    doc.text(badgeText, badgeX + badgeW / 2, y + 10, { align: "center" });
 
     y += 38;
 
@@ -254,7 +267,10 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         doc.text(`Page ${p}/${totalPages} · BOH Chiang Mai`, pageW - M, pageH - 18, { align: "right" });
     }
 
-    doc.save(`PMIX_Dashboard_${isoDateOnly(data.businessDate)}.pdf`);
+    const fileLabel = data.rangeFrom && data.rangeTo
+        ? `${data.rangeFrom}_to_${data.rangeTo}`
+        : isoDateOnly(data.businessDate);
+    doc.save(`PMIX_Dashboard_${fileLabel}.pdf`);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

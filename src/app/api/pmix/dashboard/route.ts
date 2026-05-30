@@ -45,20 +45,88 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
-    if (!uploadId) return NextResponse.json({ error: "uploadId required" }, { status: 400 });
+    const fromStr  = searchParams.get("from");
+    const toStr    = searchParams.get("to");
+
+    if (!uploadId && !(fromStr && toStr)) {
+        return NextResponse.json(
+            { error: "Either uploadId or from+to (YYYY-MM-DD) is required" },
+            { status: 400 },
+        );
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = prisma as any;
 
-    const upload = await db.pmixUpload.findUnique({
-        where:  { id: uploadId },
-        select: { id: true, periodLabel: true, businessDate: true, uploadedAt: true },
-    });
-    if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
+    // ── Resolve which uploads contribute, plus the display date(s) ──────────
+    interface UploadRow { id: string; periodLabel: string | null; businessDate: Date | null; uploadedAt: Date }
+    let uploadIds: string[];
+    let periodLabel: string | null;
+    let displayDate: Date;
+    let rangeFrom: string | null = null;
+    let rangeTo:   string | null = null;
+    let dayCount  = 1;
+    let uploadCount = 1;
+
+    if (uploadId) {
+        const upload: UploadRow | null = await db.pmixUpload.findUnique({
+            where:  { id: uploadId },
+            select: { id: true, periodLabel: true, businessDate: true, uploadedAt: true },
+        });
+        if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
+        uploadIds   = [upload.id];
+        periodLabel = upload.periodLabel;
+        displayDate = (upload.businessDate ?? upload.uploadedAt) as Date;
+    } else {
+        const from = new Date(fromStr + "T00:00:00.000Z");
+        const to   = new Date(toStr   + "T23:59:59.999Z");
+        if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+            return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+        }
+        const uploads: UploadRow[] = await db.pmixUpload.findMany({
+            where: {
+                OR: [
+                    { businessDate: { gte: from, lte: to } },
+                    { businessDate: null, uploadedAt: { gte: from, lte: to } },
+                ],
+            },
+            select: { id: true, periodLabel: true, businessDate: true, uploadedAt: true },
+            orderBy: [{ businessDate: "asc" }, { uploadedAt: "asc" }],
+        });
+        uploadIds   = uploads.map(u => u.id);
+        periodLabel = `${fromStr} → ${toStr}`;
+        displayDate = uploads[0]
+            ? (uploads[0].businessDate ?? uploads[0].uploadedAt) as Date
+            : from;
+        rangeFrom = fromStr;
+        rangeTo   = toStr;
+        // Distinct calendar days that have at least one upload
+        const dateSet = new Set(
+            uploads.map(u => ((u.businessDate ?? u.uploadedAt) as Date).toISOString().slice(0, 10))
+        );
+        dayCount    = Math.max(1, dateSet.size);
+        uploadCount = uploads.length;
+    }
+
+    if (uploadIds.length === 0) {
+        return NextResponse.json({
+            uploadId: null, periodLabel, businessDate: displayDate,
+            rangeFrom, rangeTo, dayCount: 0, uploadCount: 0,
+            totalSales: 0, totalQty: 0,
+            macros: {
+                FOOD:     { sales: 0, qty: 0, pct: 0 },
+                LIQUOR:   { sales: 0, qty: 0, pct: 0 },
+                BEVERAGE: { sales: 0, qty: 0, pct: 0 },
+                DESSERT:  { sales: 0, qty: 0, pct: 0 },
+            },
+            topByCategory: [], bar: { cocktails: [], mocktails: [], beer: [] },
+            desserts: [], insights: ["No PMIX data in the selected range."], focus: [],
+        });
+    }
 
     const pmixItems: Array<{ itemName: string; category: string; qtySold: number; netSales: unknown }> =
         await db.pmixItem.findMany({
-            where:   { uploadId },
+            where:   { uploadId: { in: uploadIds } },
             select:  { itemName: true, category: true, qtySold: true, netSales: true },
         });
 
@@ -203,9 +271,13 @@ export async function GET(req: NextRequest) {
 
     // ── Response ─────────────────────────────────────────────────────────────
     return NextResponse.json({
-        uploadId,
-        periodLabel:  upload.periodLabel,
-        businessDate: (upload.businessDate ?? upload.uploadedAt) as Date,
+        uploadId:     uploadId ?? null,
+        periodLabel,
+        businessDate: displayDate,
+        rangeFrom,
+        rangeTo,
+        dayCount,
+        uploadCount,
         totalSales:   +totalSales.toFixed(2),
         totalQty:     rows.reduce((s, r) => s + r.qty, 0),
 

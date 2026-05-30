@@ -366,6 +366,12 @@ export const pmixApi = {
             { cache: "no-store" },
         ),
 
+    dashboardRange: (from: string, to: string) =>
+        apiFetch<PmixDashboardResult>(
+            `/pmix/dashboard?from=${from}&to=${to}`,
+            { cache: "no-store" },
+        ),
+
     proteinHeatmap: (days = 7) =>
         apiFetch<ProteinHeatmapResult>(
             `/pmix/analytics/protein-heatmap?days=${days}`,
@@ -1174,9 +1180,17 @@ export interface DessertDailyResult {
 
 // ─── PMIX daily dashboard ────────────────────────────────────────────────────
 export interface PmixDashboardResult {
-    uploadId:      string;
+    /** Set when this dashboard was loaded for a single upload. Null for range mode. */
+    uploadId:      string | null;
     periodLabel:   string | null;
+    /** ISO timestamp of the first business date in the window. */
     businessDate:  string;
+    /** Date range params when in range mode (null for single-upload mode). */
+    rangeFrom?:    string | null;
+    rangeTo?:      string | null;
+    /** Distinct calendar days that contributed data. */
+    dayCount?:     number;
+    uploadCount?:  number;
     totalSales:    number;
     totalQty:      number;
     macros: {

@@ -17,13 +17,15 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { PmixDashboardResult } from "@/lib/api";
 
-// ─── Layout constants (tuned to fit one page) ────────────────────────────────
-const M           = 28;            // outer margin
-const GAP         = 6;             // gap between columns
-const ROW_H       = 12;            // item row height
-const KPI_H       = 64;            // KPI card height
-const BAR_H       = 18;            // section bar height
-const SECTION_GAP = 8;             // gap below each section
+// ─── Layout constants (tuned to fill one page comfortably) ───────────────────
+// Sized to use the whole A4 portrait page without crowding. Bigger KPI cards
+// + bigger rows = important figures are easy to read at a glance.
+const M           = 30;
+const GAP         = 8;
+const ROW_H       = 15;            // item row height (more readable)
+const KPI_H       = 86;            // taller KPI cards
+const BAR_H       = 22;            // section bar
+const SECTION_GAP = 12;
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
@@ -54,17 +56,17 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
 
     // ── HEADER ───────────────────────────────────────────────────────────────
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
+    doc.setFontSize(16);
     doc.setTextColor(...C.purple);
 
     const isRange = !!(data.rangeFrom && data.rangeTo);
     const dateLabel = isRange
         ? `${formatDateMonDay(data.rangeFrom!)} – ${formatDateMonDay(data.rangeTo!)}`
         : formatDateMonDay(isoDateOnly(data.businessDate));
-    doc.text(`${locationLabel.toUpperCase()} · ${dateLabel} PRODUCT MIX DASHBOARD`, M, y + 4);
+    doc.text(`${locationLabel.toUpperCase()} · ${dateLabel} PRODUCT MIX DASHBOARD`, M, y + 6);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(9.5);
     doc.setTextColor(...C.muted);
     const sub: string[] = [];
     if (isRange && data.dayCount != null) {
@@ -73,9 +75,9 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     }
     sub.push(`Total Sales ${fmtMoney(data.totalSales)}`);
     sub.push(`Total Qty ${data.totalQty.toLocaleString()}`);
-    doc.text(sub.join("  ·  "), M, y + 17);
+    doc.text(sub.join("  ·  "), M, y + 20);
 
-    y += 28;
+    y += 34;
 
     // ── KPI ROW ──────────────────────────────────────────────────────────────
     const kpis: { label: string; pct: number; sales: number; colour: RGB }[] = [
@@ -88,39 +90,52 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
 
     kpis.forEach((k, i) => {
         const x = M + i * (kpiW + GAP);
+
+        // Card body
         doc.setFillColor(255, 255, 255);
         doc.setDrawColor(...C.border);
         doc.setLineWidth(0.8);
-        doc.roundedRect(x, y, kpiW, KPI_H, 5, 5, "FD");
+        doc.roundedRect(x, y, kpiW, KPI_H, 6, 6, "FD");
 
-        // Coloured left stripe
+        // Coloured left stripe (taller / bolder for visual prominence)
         doc.setFillColor(...k.colour);
-        doc.roundedRect(x, y, 4, KPI_H, 2, 2, "F");
-        doc.rect(x + 2, y, 2, KPI_H, "F");
+        doc.roundedRect(x, y, 5, KPI_H, 2.5, 2.5, "F");
+        doc.rect(x + 2.5, y, 2.5, KPI_H, "F");
 
-        const px = x + 12;
+        const px = x + 14;
+
+        // Label
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(8.5);
+        doc.setFontSize(9.5);
         doc.setTextColor(...k.colour);
-        doc.text(k.label, px, y + 14);
+        doc.text(k.label, px, y + 18);
 
-        doc.setFontSize(22);
-        doc.setTextColor(...C.text);
-        const pctText = String(k.pct);
-        doc.text(pctText, px, y + 38);
-        doc.setFontSize(11);
-        doc.setTextColor(...C.muted);
-        doc.text("%", px + doc.getTextWidth(pctText) + 2, y + 38);
-
+        // Big % — measure width AT THE BIG SIZE before resizing
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
+        doc.setFontSize(30);                 // bigger headline number
         doc.setTextColor(...C.text);
-        doc.text(fmtMoney(k.sales), px, y + 53);
+        const pctText  = String(k.pct);
+        const pctWidth = doc.getTextWidth(pctText);
+        doc.text(pctText, px, y + 50);
 
+        // % glyph — sized down but still prominent, positioned using the
+        // pre-measured width so it never overlaps the number.
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(15);
+        doc.setTextColor(...k.colour);
+        doc.text("%", px + pctWidth + 3, y + 50);
+
+        // Sales amount — bold and dark for prominence
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(...C.text);
+        doc.text(fmtMoney(k.sales), px, y + 68);
+
+        // Sub-label
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.5);
+        doc.setFontSize(7.5);
         doc.setTextColor(...C.muted);
-        doc.text("of Total Sales", px, y + 61);
+        doc.text("of Total Sales", px, y + 78);
     });
 
     y += KPI_H + SECTION_GAP;
@@ -133,7 +148,7 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     const colCount = Math.max(cats.length, 1);
     const topColW = (contentW - GAP * (colCount - 1)) / colCount;
     const topMaxItems = Math.max(...cats.map(c => c.items.length), 1);
-    const topColH = 24 + topMaxItems * ROW_H + 6;
+    const topColH = 32 + topMaxItems * ROW_H + 8;
     cats.forEach((cat, i) => {
         const cx = M + i * (topColW + GAP);
         drawItemColumn(doc, cx, y, topColW, topColH, cat.category, cat.items, C.rose);
@@ -153,7 +168,7 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     ];
     const bw = (contentW - GAP * (barCols.length - 1)) / barCols.length;
     const barMaxItems = Math.max(...barCols.map(b => b.items.length), 1);
-    const barColH = 24 + barMaxItems * ROW_H + 6;
+    const barColH = 32 + barMaxItems * ROW_H + 8;
     barCols.forEach((bc, i) => {
         const cx = M + i * (bw + GAP);
         drawItemColumn(doc, cx, y, bw, barColH, bc.label, bc.items, bc.colour);
@@ -172,17 +187,17 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     y += BAR_H + 4;
 
     // Insights body
-    const insightStart = y;
+    const insightStart = y + 2;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(9.5);
     let iy = insightStart;
     for (const line of data.insights) {
-        const wrapped = doc.splitTextToSize(line, insightsW - 18) as string[];
+        const wrapped = doc.splitTextToSize(line, insightsW - 22) as string[];
         doc.setFillColor(...C.emerald);
-        doc.circle(insightsX + 6, iy + 4, 2.2, "F");
+        doc.circle(insightsX + 7, iy + 5, 2.8, "F");
         doc.setTextColor(...C.text);
-        doc.text(wrapped, insightsX + 14, iy + 6);
-        iy += wrapped.length * 11 + 3;
+        doc.text(wrapped, insightsX + 16, iy + 7);
+        iy += wrapped.length * 13 + 5;
     }
 
     // Focus body
@@ -191,21 +206,21 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     for (const f of focus) {
         // Title row
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7.5);
+        doc.setFontSize(8.5);
         doc.setTextColor(...C.purple);
-        doc.text(f.title.toUpperCase(), focusX + 4, fy + 6);
+        doc.text(f.title.toUpperCase(), focusX + 4, fy + 7);
 
         // Body wrapped
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
+        doc.setFontSize(8);
         doc.setTextColor(...C.text);
         const wrapped = doc.splitTextToSize(f.body, focusW - 8) as string[];
-        doc.text(wrapped, focusX + 4, fy + 15);
+        doc.text(wrapped, focusX + 4, fy + 18);
 
-        fy += 18 + wrapped.length * 9;
+        fy += 22 + wrapped.length * 10;
     }
 
-    y = Math.max(iy, fy) + 6;
+    y = Math.max(iy, fy) + 10;
 
     // ── Footer ───────────────────────────────────────────────────────────────
     doc.setDrawColor(...C.border);
@@ -227,11 +242,11 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function drawSectionBar(doc: jsPDF, label: string, x: number, y: number, width: number) {
     doc.setFillColor(...C.purple);
-    doc.roundedRect(x, y, width, BAR_H, 3, 3, "F");
+    doc.roundedRect(x, y, width, BAR_H, 4, 4, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(10);
     doc.setTextColor(255);
-    doc.text(label, x + 10, y + 12);
+    doc.text(label, x + 12, y + 14.5);
 }
 
 function drawItemColumn(
@@ -245,60 +260,60 @@ function drawItemColumn(
     colour: RGB,
 ) {
     doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.5);
+    doc.setLineWidth(0.6);
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(x, y, w, h, 4, 4, "FD");
+    doc.roundedRect(x, y, w, h, 5, 5, "FD");
 
-    // Title (coloured)
+    // Title (coloured + bigger)
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
+    doc.setFontSize(8.5);
     doc.setTextColor(...colour);
-    doc.text(truncate(doc, title.toUpperCase(), w - 12), x + 8, y + 11);
+    doc.text(truncate(doc, title.toUpperCase(), w - 12), x + 9, y + 13);
 
     // Sub-header
-    doc.setFontSize(5.5);
+    doc.setFontSize(6.5);
     doc.setTextColor(...C.muted);
-    doc.text("ITEM", x + 8,     y + 20);
-    doc.text("SOLD", x + w - 8, y + 20, { align: "right" });
+    doc.text("ITEM", x + 9,     y + 24);
+    doc.text("SOLD", x + w - 9, y + 24, { align: "right" });
 
     // Divider
     doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.3);
-    doc.line(x + 6, y + 22, x + w - 6, y + 22);
+    doc.setLineWidth(0.4);
+    doc.line(x + 7, y + 27, x + w - 7, y + 27);
 
     if (items.length === 0) {
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(6.5);
+        doc.setFontSize(7.5);
         doc.setTextColor(...C.muted);
-        doc.text("No data", x + 8, y + 34);
+        doc.text("No data", x + 9, y + 42);
         return;
     }
 
     items.forEach((it, idx) => {
-        const ry = y + 22 + (idx + 1) * ROW_H;
+        const ry = y + 27 + (idx + 1) * ROW_H;
 
-        // Rank dot
-        const dotX = x + 11;
-        const dotY = ry - 3.5;
+        // Rank dot (bigger)
+        const dotX = x + 13;
+        const dotY = ry - 4;
         doc.setFillColor(...colour);
-        doc.circle(dotX, dotY, 4.2, "F");
+        doc.circle(dotX, dotY, 5.2, "F");
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(6);
+        doc.setFontSize(7);
         doc.setTextColor(255);
-        doc.text(String(idx + 1), dotX, dotY + 2.1, { align: "center" });
+        doc.text(String(idx + 1), dotX, dotY + 2.4, { align: "center" });
 
         // Item name
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFontSize(8);
         doc.setTextColor(...C.text);
-        const nameMaxW = w - 44;
-        doc.text(truncate(doc, it.itemName, nameMaxW), x + 19, ry);
+        const nameMaxW = w - 50;
+        doc.text(truncate(doc, it.itemName, nameMaxW), x + 23, ry);
 
         // Qty
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7.5);
+        doc.setFontSize(8.5);
         doc.setTextColor(...C.text);
-        doc.text(String(it.qty), x + w - 8, ry, { align: "right" });
+        doc.text(String(it.qty), x + w - 9, ry, { align: "right" });
     });
 }
 

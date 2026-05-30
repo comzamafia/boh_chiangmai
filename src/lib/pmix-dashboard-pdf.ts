@@ -1,25 +1,31 @@
 /**
- * Single-page PMIX Daily Dashboard PDF export.
+ * PMIX Daily Dashboard PDF — single page A4 portrait.
  *
- * Design principles:
- *   - No emojis (jsPDF default fonts can't render them — they appear as boxes).
- *     Visual interest comes from colour, shapes, and typography.
- *   - Strict margin discipline: every drawn element fits inside the printable area.
- *   - Long item names are truncated with an ellipsis to keep columns aligned.
- *   - Cards have left colour stripes to distinguish categories at a glance.
+ * Compact layout that fits everything on ONE page:
+ *   Header  (20pt)                       title + subtitle
+ *   KPI strip (70pt)                     FOOD · LIQUOR · BEVERAGE · DESSERT
+ *   Top Selling Items by Category        4 cols × 5 items
+ *   Bar Performance · Dessert            5 cols (Cocktails / Mocktails /
+ *                                        Beer / Beverage / Desserts)
+ *   Key Insights + Management Focus      side-by-side, 50/50
+ *   Footer                               page number + totals
+ *
+ * No emojis (jsPDF default fonts render them as squares). Visual interest
+ * comes from colour stripes, coloured rank dots, and section bars.
  */
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { PmixDashboardResult } from "@/lib/api";
 
-// ─── Layout constants ────────────────────────────────────────────────────────
-const M           = 32;            // outer margin (pt)
-const GAP         = 8;             // gap between columns
-const SECTION_GAP = 14;            // vertical gap before a new section
-const ROW_H       = 14;            // row height inside columns
-const KPI_H       = 78;            // KPI card height
+// ─── Layout constants (tuned to fit one page) ────────────────────────────────
+const M           = 28;            // outer margin
+const GAP         = 6;             // gap between columns
+const ROW_H       = 12;            // item row height
+const KPI_H       = 64;            // KPI card height
+const BAR_H       = 18;            // section bar height
+const SECTION_GAP = 8;             // gap below each section
 
-// ─── Palette (matches on-screen) ─────────────────────────────────────────────
+// ─── Palette ─────────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
 const C: Record<string, RGB> = {
     rose:    [225,  29,  72],
@@ -27,7 +33,6 @@ const C: Record<string, RGB> = {
     blue:    [37,   99, 235],
     orange: [234,   88,  12],
     purple: [109,  40, 217],
-    teal:   [13,  148, 136],
     grey:   [55,   65,  81],
     soft:   [248, 250, 252],
     border: [228, 231, 235],
@@ -45,229 +50,174 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     const pageH = doc.internal.pageSize.height;
     const contentW = pageW - M * 2;
 
-    let y = M + 6;
+    let y = M;
 
-    // ── HEADER: title left + date badge right ────────────────────────────────
+    // ── HEADER ───────────────────────────────────────────────────────────────
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
+    doc.setFontSize(14);
     doc.setTextColor(...C.purple);
 
-    // Title: single-day shows "MAY 29", range shows "MAY 22 — MAY 29"
     const isRange = !!(data.rangeFrom && data.rangeTo);
     const dateLabel = isRange
         ? `${formatDateMonDay(data.rangeFrom!)} – ${formatDateMonDay(data.rangeTo!)}`
         : formatDateMonDay(isoDateOnly(data.businessDate));
-    const titleMain = `${locationLabel.toUpperCase()} · ${dateLabel}`;
-    doc.text(titleMain, M, y + 4);
+    doc.text(`${locationLabel.toUpperCase()} · ${dateLabel} PRODUCT MIX DASHBOARD`, M, y + 4);
 
-    // Subtitle: when range, show "PRODUCT MIX DASHBOARD · N-day aggregate (M uploads)"
-    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(...C.muted);
-    const subParts: string[] = ["PRODUCT MIX DASHBOARD"];
+    const sub: string[] = [];
     if (isRange && data.dayCount != null) {
-        const dc = data.dayCount;
         const uc = data.uploadCount ?? 0;
-        subParts.push(`${dc}-day aggregate · ${uc} upload${uc === 1 ? "" : "s"}`);
+        sub.push(`${data.dayCount}-day aggregate · ${uc} upload${uc === 1 ? "" : "s"}`);
     }
-    doc.text(subParts.join("  ·  "), M, y + 20);
+    sub.push(`Total Sales ${fmtMoney(data.totalSales)}`);
+    sub.push(`Total Qty ${data.totalQty.toLocaleString()}`);
+    doc.text(sub.join("  ·  "), M, y + 17);
 
-    // (Date badge removed per UX feedback — date already appears in the
-    // title block above and in the footer below.)
+    y += 28;
 
-    y += 38;
-
-    // ── KPI ROW (4 cards with coloured side stripe) ──────────────────────────
-    const kpis: { label: string; pct: number; sales: number; colour: RGB; footnote?: string }[] = [
-        { label: "FOOD",       pct: data.macros.FOOD.pct,       sales: data.macros.FOOD.sales,       colour: C.rose },
-        { label: "LIQUOR",     pct: data.macros.LIQUOR.pct,     sales: data.macros.LIQUOR.sales,     colour: C.emerald },
-        // FRIED RICE is a subset of FOOD — labelled accordingly.
-        { label: "FRIED RICE", pct: data.macros.FRIED_RICE.pct, sales: data.macros.FRIED_RICE.sales, colour: [217, 119, 6], footnote: "subset of Food" },
-        { label: "DESSERT",    pct: data.macros.DESSERT.pct,    sales: data.macros.DESSERT.sales,    colour: C.orange },
+    // ── KPI ROW ──────────────────────────────────────────────────────────────
+    const kpis: { label: string; pct: number; sales: number; colour: RGB }[] = [
+        { label: "FOOD",     pct: data.macros.FOOD.pct,     sales: data.macros.FOOD.sales,     colour: C.rose },
+        { label: "LIQUOR",   pct: data.macros.LIQUOR.pct,   sales: data.macros.LIQUOR.sales,   colour: C.emerald },
+        { label: "BEVERAGE", pct: data.macros.BEVERAGE.pct, sales: data.macros.BEVERAGE.sales, colour: C.blue },
+        { label: "DESSERT",  pct: data.macros.DESSERT.pct,  sales: data.macros.DESSERT.sales,  colour: C.orange },
     ];
-    const kpiCount = kpis.length;
-    const kpiW = (contentW - GAP * (kpiCount - 1)) / kpiCount;
+    const kpiW = (contentW - GAP * (kpis.length - 1)) / kpis.length;
 
     kpis.forEach((k, i) => {
         const x = M + i * (kpiW + GAP);
-
-        // Card body
         doc.setFillColor(255, 255, 255);
         doc.setDrawColor(...C.border);
         doc.setLineWidth(0.8);
-        doc.roundedRect(x, y, kpiW, KPI_H, 6, 6, "FD");
+        doc.roundedRect(x, y, kpiW, KPI_H, 5, 5, "FD");
 
-        // Left coloured stripe
+        // Coloured left stripe
         doc.setFillColor(...k.colour);
-        doc.roundedRect(x, y, 5, KPI_H, 2.5, 2.5, "F");
-        // (square off the right edge of the stripe by drawing over it)
-        doc.rect(x + 2.5, y, 2.5, KPI_H, "F");
+        doc.roundedRect(x, y, 4, KPI_H, 2, 2, "F");
+        doc.rect(x + 2, y, 2, KPI_H, "F");
 
-        const px = x + 14;
-
-        // Label
+        const px = x + 12;
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
+        doc.setFontSize(8.5);
         doc.setTextColor(...k.colour);
-        doc.text(k.label, px, y + 16);
+        doc.text(k.label, px, y + 14);
 
-        // Big %
-        doc.setFontSize(26);
+        doc.setFontSize(22);
         doc.setTextColor(...C.text);
         const pctText = String(k.pct);
-        doc.text(pctText, px, y + 44);
-        const pctW = doc.getTextWidth(pctText);
-        doc.setFontSize(13);
-        doc.setTextColor(...C.muted);
-        doc.text("%", px + pctW + 2, y + 44);
-
-        // Sales
-        doc.setFont("helvetica", "bold");
+        doc.text(pctText, px, y + 38);
         doc.setFontSize(11);
-        doc.setTextColor(...C.text);
-        doc.text(fmtMoney(k.sales), px, y + 62);
-
-        // Sub-label (custom footnote for spotlight KPIs, else default)
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
         doc.setTextColor(...C.muted);
-        doc.text(k.footnote ?? "of Total Sales", px, y + 72);
+        doc.text("%", px + doc.getTextWidth(pctText) + 2, y + 38);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(...C.text);
+        doc.text(fmtMoney(k.sales), px, y + 53);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(...C.muted);
+        doc.text("of Total Sales", px, y + 61);
     });
 
     y += KPI_H + SECTION_GAP;
 
-    // ── SECTION: Top Selling Items by Category ───────────────────────────────
+    // ── SECTION: Top Selling Items by Category (4 pinned cols) ───────────────
     drawSectionBar(doc, "TOP SELLING ITEMS BY CATEGORY", M, y, contentW);
-    y += 22 + 4;
+    y += BAR_H + 4;
 
-    if (data.topByCategory.length > 0) {
-        const cats = data.topByCategory.slice(0, 4);
-        const colCount = cats.length;
-        const colW     = (contentW - GAP * (colCount - 1)) / colCount;
+    const cats = (data.topByCategory ?? []).slice(0, 4);
+    const colCount = Math.max(cats.length, 1);
+    const topColW = (contentW - GAP * (colCount - 1)) / colCount;
+    const topMaxItems = Math.max(...cats.map(c => c.items.length), 1);
+    const topColH = 24 + topMaxItems * ROW_H + 6;
+    cats.forEach((cat, i) => {
+        const cx = M + i * (topColW + GAP);
+        drawItemColumn(doc, cx, y, topColW, topColH, cat.category, cat.items, C.rose);
+    });
+    y += topColH + SECTION_GAP;
 
-        const maxItems  = Math.max(...cats.map(c => c.items.length), 0);
-        const colHeight = 30 + maxItems * ROW_H + 8;
-
-        cats.forEach((cat, i) => {
-            const cx = M + i * (colW + GAP);
-            drawItemColumn(doc, cx, y, colW, colHeight, cat.category, cat.items, C.rose);
-        });
-        y += colHeight + SECTION_GAP;
-    }
-
-    // ── SECTION: Bar Performance (4 cols) ────────────────────────────────────
-    drawSectionBar(doc, "BAR PERFORMANCE", M, y, contentW);
-    y += 22 + 4;
+    // ── SECTION: Bar Performance + Dessert (5 cols combined for compactness) ─
+    drawSectionBar(doc, "BAR PERFORMANCE  ·  DESSERT PERFORMANCE", M, y, contentW);
+    y += BAR_H + 4;
 
     const barCols: { label: string; items: { itemName: string; qty: number }[]; colour: RGB }[] = [
         { label: "COCKTAILS", items: data.bar.cocktails, colour: C.rose },
         { label: "MOCKTAILS", items: data.bar.mocktails, colour: C.rose },
         { label: "BEER",      items: data.bar.beer,      colour: C.blue },
         { label: "BEVERAGE",  items: data.bar.beverage,  colour: C.blue },
+        { label: "DESSERTS",  items: data.desserts,      colour: C.orange },
     ];
     const bw = (contentW - GAP * (barCols.length - 1)) / barCols.length;
-    const maxBarItems  = Math.max(...barCols.map(b => b.items.length), 1);
-    const barHeight    = 30 + maxBarItems * ROW_H + 8;
+    const barMaxItems = Math.max(...barCols.map(b => b.items.length), 1);
+    const barColH = 24 + barMaxItems * ROW_H + 6;
     barCols.forEach((bc, i) => {
         const cx = M + i * (bw + GAP);
-        drawItemColumn(doc, cx, y, bw, barHeight, bc.label, bc.items, bc.colour);
+        drawItemColumn(doc, cx, y, bw, barColH, bc.label, bc.items, bc.colour);
     });
-    y += barHeight + SECTION_GAP;
+    y += barColH + SECTION_GAP;
 
-    // ── SECTION: Dessert Performance (single col, sits flush-left) ───────────
-    if (y > pageH - 200) { doc.addPage(); y = M + 6; }
-    drawSectionBar(doc, "DESSERT PERFORMANCE", M, y, contentW);
-    y += 22 + 4;
+    // ── SECTION: Key Insights + Management Focus (side-by-side 50/50) ────────
+    const insightsW = (contentW - GAP) * 0.55;
+    const focusW    = (contentW - GAP) * 0.45;
+    const insightsX = M;
+    const focusX    = M + insightsW + GAP;
 
-    // Reuse the same column geometry as the bar row so widths line up.
-    const dessertColW = bw;
-    const dessertItems = Math.max(data.desserts.length, 1);
-    const dessertHeight = 30 + dessertItems * ROW_H + 8;
-    drawItemColumn(doc, M, y, dessertColW, dessertHeight, "DESSERTS", data.desserts, C.orange);
-    y += dessertHeight + SECTION_GAP;
+    // Section bars
+    drawSectionBar(doc, "KEY INSIGHTS",      insightsX, y, insightsW);
+    drawSectionBar(doc, "MANAGEMENT FOCUS",  focusX,    y, focusW);
+    y += BAR_H + 4;
 
-    // Page-break check before insights
-    if (y > pageH - 220) {
-        doc.addPage();
-        y = M + 6;
-    }
-
-    // ── SECTION: Key Insights ────────────────────────────────────────────────
-    drawSectionBar(doc, "KEY INSIGHTS", M, y, contentW);
-    y += 22 + 6;
-
+    // Insights body
+    const insightStart = y;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    const insightWrapW = contentW - 22;
-    data.insights.forEach((line) => {
-        // Wrap long lines so they never overflow
-        const wrapped = doc.splitTextToSize(line, insightWrapW) as string[];
-        // Bullet
+    doc.setFontSize(8.5);
+    let iy = insightStart;
+    for (const line of data.insights) {
+        const wrapped = doc.splitTextToSize(line, insightsW - 18) as string[];
         doc.setFillColor(...C.emerald);
-        doc.circle(M + 6, y + 4, 2.6, "F");
+        doc.circle(insightsX + 6, iy + 4, 2.2, "F");
         doc.setTextColor(...C.text);
-        doc.text(wrapped, M + 16, y + 7);
-        y += wrapped.length * 12 + 4;
-    });
-
-    y += 8;
-
-    // Page-break check before focus
-    if (y > pageH - 160) {
-        doc.addPage();
-        y = M + 6;
+        doc.text(wrapped, insightsX + 14, iy + 6);
+        iy += wrapped.length * 11 + 3;
     }
 
-    // ── SECTION: Management Focus ────────────────────────────────────────────
-    drawSectionBar(doc, "MANAGEMENT FOCUS", M, y, contentW);
-    y += 22 + 4;
+    // Focus body
+    let fy = insightStart;
+    const focus = data.focus.slice(0, 5);
+    for (const f of focus) {
+        // Title row
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...C.purple);
+        doc.text(f.title.toUpperCase(), focusX + 4, fy + 6);
 
-    // Use autoTable so wrapping + column widths are handled cleanly
-    const focusItems = data.focus.slice(0, 5);
-    const cellWidth  = (contentW - GAP * (focusItems.length - 1)) / focusItems.length;
-    autoTable(doc, {
-        startY: y,
-        head: [focusItems.map(f => f.title)],
-        body: [focusItems.map(f => f.body)],
-        margin: { left: M, right: M },
-        tableWidth: contentW,
-        theme: "plain",
-        styles: {
-            fontSize: 8.5,
-            cellPadding: { top: 8, bottom: 8, left: 9, right: 9 },
-            valign: "top",
-            lineColor: C.border,
-            lineWidth: 0.6,
-            textColor: C.text,
-        },
-        headStyles: {
-            fillColor: C.soft,
-            textColor: C.purple,
-            fontStyle: "bold",
-            halign: "left",
-            fontSize: 8.5,
-        },
-        columnStyles: focusItems.reduce<Record<number, { cellWidth: number }>>((m, _f, i) => {
-            m[i] = { cellWidth };
-            return m;
-        }, {}),
-    });
-
-    // ── FOOTER (every page) ──────────────────────────────────────────────────
-    const totalPages = doc.getNumberOfPages();
-    for (let p = 1; p <= totalPages; p++) {
-        doc.setPage(p);
-        doc.setDrawColor(...C.border);
-        doc.setLineWidth(0.5);
-        doc.line(M, pageH - 32, pageW - M, pageH - 32);
-
+        // Body wrapped
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7.5);
-        doc.setTextColor(...C.muted);
-        doc.text(`Total Sales ${fmtMoney(data.totalSales)} · Total Qty ${data.totalQty.toLocaleString()}`, M, pageH - 18);
-        doc.text(`Page ${p}/${totalPages} · BOH Chiang Mai`, pageW - M, pageH - 18, { align: "right" });
+        doc.setTextColor(...C.text);
+        const wrapped = doc.splitTextToSize(f.body, focusW - 8) as string[];
+        doc.text(wrapped, focusX + 4, fy + 15);
+
+        fy += 18 + wrapped.length * 9;
     }
 
+    y = Math.max(iy, fy) + 6;
+
+    // ── Footer ───────────────────────────────────────────────────────────────
+    doc.setDrawColor(...C.border);
+    doc.setLineWidth(0.5);
+    doc.line(M, pageH - 28, pageW - M, pageH - 28);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...C.muted);
+    doc.text(`Generated ${new Date().toLocaleString("en-CA")}`, M, pageH - 14);
+    doc.text("BOH Chiang Mai · Single-page report", pageW - M, pageH - 14, { align: "right" });
+
+    // Filename
     const fileLabel = data.rangeFrom && data.rangeTo
         ? `${data.rangeFrom}_to_${data.rangeTo}`
         : isoDateOnly(data.businessDate);
@@ -277,11 +227,11 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function drawSectionBar(doc: jsPDF, label: string, x: number, y: number, width: number) {
     doc.setFillColor(...C.purple);
-    doc.roundedRect(x, y, width, 22, 4, 4, "F");
+    doc.roundedRect(x, y, width, BAR_H, 3, 3, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(8.5);
     doc.setTextColor(255);
-    doc.text(label, x + 12, y + 14);
+    doc.text(label, x + 10, y + 12);
 }
 
 function drawItemColumn(
@@ -294,67 +244,66 @@ function drawItemColumn(
     items:  { itemName: string; qty: number }[],
     colour: RGB,
 ) {
-    // Card
     doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.6);
+    doc.setLineWidth(0.5);
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(x, y, w, h, 5, 5, "FD");
+    doc.roundedRect(x, y, w, h, 4, 4, "FD");
 
-    // Title (colour)
+    // Title (coloured)
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(7.5);
     doc.setTextColor(...colour);
-    const titleText = title.toUpperCase();
-    const titleY    = y + 14;
-    doc.text(truncate(doc, titleText, w - 16), x + 10, titleY);
+    doc.text(truncate(doc, title.toUpperCase(), w - 12), x + 8, y + 11);
 
-    // Sub-header row
-    doc.setFontSize(6.5);
+    // Sub-header
+    doc.setFontSize(5.5);
     doc.setTextColor(...C.muted);
-    doc.text("ITEM",  x + 10,     y + 26);
-    doc.text("SOLD",  x + w - 10, y + 26, { align: "right" });
+    doc.text("ITEM", x + 8,     y + 20);
+    doc.text("SOLD", x + w - 8, y + 20, { align: "right" });
 
-    // Separator
+    // Divider
     doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.4);
-    doc.line(x + 8, y + 30, x + w - 8, y + 30);
+    doc.setLineWidth(0.3);
+    doc.line(x + 6, y + 22, x + w - 6, y + 22);
 
     if (items.length === 0) {
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(7.5);
+        doc.setFontSize(6.5);
         doc.setTextColor(...C.muted);
-        doc.text("No data", x + 10, y + 44);
+        doc.text("No data", x + 8, y + 34);
         return;
     }
 
-    // Rows
     items.forEach((it, idx) => {
-        const ry = y + 30 + (idx + 1) * ROW_H;
+        const ry = y + 22 + (idx + 1) * ROW_H;
 
         // Rank dot
-        const dotX = x + 14;
-        const dotY = ry - 4;
+        const dotX = x + 11;
+        const dotY = ry - 3.5;
         doc.setFillColor(...colour);
-        doc.circle(dotX, dotY, 5.2, "F");
+        doc.circle(dotX, dotY, 4.2, "F");
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7);
+        doc.setFontSize(6);
         doc.setTextColor(255);
-        doc.text(String(idx + 1), dotX, dotY + 2.4, { align: "center" });
+        doc.text(String(idx + 1), dotX, dotY + 2.1, { align: "center" });
 
-        // Item name (truncated)
+        // Item name
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(...C.text);
-        const nameMaxW = w - 56;   // reserve space for rank + qty
-        doc.text(truncate(doc, it.itemName, nameMaxW), x + 24, ry);
+        const nameMaxW = w - 44;
+        doc.text(truncate(doc, it.itemName, nameMaxW), x + 19, ry);
 
-        // Qty (right-aligned, bold)
+        // Qty
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(8.5);
+        doc.setFontSize(7.5);
         doc.setTextColor(...C.text);
-        doc.text(String(it.qty), x + w - 10, ry, { align: "right" });
+        doc.text(String(it.qty), x + w - 8, ry, { align: "right" });
     });
 }
+
+// Silence the unused-import warning while keeping autotable available for future use
+void autoTable;
 
 function truncate(doc: jsPDF, text: string, maxWidth: number): string {
     if (doc.getTextWidth(text) <= maxWidth) return text;
@@ -373,4 +322,3 @@ function formatDateMonDay(iso: string): string {
     const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
     return `${months[d.getMonth()]} ${d.getDate()}`;
 }
-

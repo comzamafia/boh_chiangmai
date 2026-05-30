@@ -18,23 +18,30 @@ export const dynamic   = "force-dynamic";
 export const revalidate = 0;
 
 // ─── Macro bucket helpers ────────────────────────────────────────────────────
+// Exact POS-category names that are alcoholic spirits / wine.
 const LIQUOR_CATS = new Set([
     "cocktails", "classic cocktails", "shots & spirits",
     "red wine", "white wine",
 ]);
-const BEVERAGE_CATS = new Set([
-    "beer", "mocktails", "soft drinks", "soda", "juice", "tea", "coffee", "water",
-]);
+// Substring patterns that mark an item as non-alcoholic beverage.
+// Broad on purpose so "Beverages", "Iced Tea", "Soft Drinks", "Juices",
+// "Bottled Water", etc. all land in the BEVERAGE bucket.
+const BEVERAGE_PATTERNS = [
+    "beverage", "soft drink", "soda", "juice", "tea", "coffee",
+    "water", "non-alcoholic", "non alcoholic",
+];
 
-// Internal bucket — BEVERAGE is no longer a KPI but is still used to populate
-// the new "Beverage" column under Bar Performance.
 type Bucket = "FOOD" | "LIQUOR" | "BEVERAGE" | "DESSERT";
 
 function macroBucket(category: string, isDessert: boolean): Bucket {
     if (isDessert) return "DESSERT";
     const lower = category.toLowerCase().trim();
-    if (LIQUOR_CATS.has(lower))   return "LIQUOR";
-    if (BEVERAGE_CATS.has(lower)) return "BEVERAGE";
+    if (LIQUOR_CATS.has(lower)) return "LIQUOR";
+    // Beer + Mocktails are explicit
+    if (lower === "beer" || lower === "mocktails" || lower === "mocktail") return "BEVERAGE";
+    // Anything else matching a beverage pattern
+    if (BEVERAGE_PATTERNS.some(p => lower.includes(p))) return "BEVERAGE";
+    // Categories in the shared BEVERAGE_CATEGORIES list that aren't liquor
     const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
     if (bevSet.has(lower) && !LIQUOR_CATS.has(lower)) return "BEVERAGE";
     return "FOOD";
@@ -329,13 +336,14 @@ export async function GET(req: NextRequest) {
         totalQty:     rows.reduce((s, r) => s + r.qty, 0),
 
         macros: {
-            FOOD:       { sales: +macros.FOOD.sales.toFixed(2),     qty: macros.FOOD.qty,     pct: macroPct("FOOD") },
-            LIQUOR:     { sales: +macros.LIQUOR.sales.toFixed(2),   qty: macros.LIQUOR.qty,   pct: macroPct("LIQUOR") },
-            // FRIED_RICE is a spotlight KPI — it's a subset of FOOD so the
-            // four KPIs don't sum to 100%, which is intentional.
-            FRIED_RICE: { sales: +friedRiceSales.toFixed(2),        qty: friedRiceQty,        pct: friedRicePct },
-            DESSERT:    { sales: +macros.DESSERT.sales.toFixed(2),  qty: macros.DESSERT.qty,  pct: macroPct("DESSERT") },
+            FOOD:     { sales: +macros.FOOD.sales.toFixed(2),     qty: macros.FOOD.qty,     pct: macroPct("FOOD") },
+            LIQUOR:   { sales: +macros.LIQUOR.sales.toFixed(2),   qty: macros.LIQUOR.qty,   pct: macroPct("LIQUOR") },
+            BEVERAGE: { sales: +macros.BEVERAGE.sales.toFixed(2), qty: macros.BEVERAGE.qty, pct: macroPct("BEVERAGE") },
+            DESSERT:  { sales: +macros.DESSERT.sales.toFixed(2),  qty: macros.DESSERT.qty,  pct: macroPct("DESSERT") },
         },
+        // Friend Rice retained as a separate spotlight figure (used by the
+        // pinned "FRIED RICE" column in Top Selling Items; not a KPI card).
+        friedRice: { sales: +friedRiceSales.toFixed(2), qty: friedRiceQty, pct: friedRicePct },
 
         topByCategory,
         bar,

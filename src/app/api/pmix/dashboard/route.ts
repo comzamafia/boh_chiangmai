@@ -135,7 +135,10 @@ export async function GET(req: NextRequest) {
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
-    // ── Classify + bucket ────────────────────────────────────────────────────
+    // ── Classify + GROUP by itemName + category across all uploads ───────────
+    // Range mode pulls many uploads — the same menu item appears once per day.
+    // We MUST aggregate so each menu item is one row in the dashboard,
+    // otherwise the same name shows up multiple times in the top lists.
     interface ItemRow {
         itemName: string;
         category: string;
@@ -143,18 +146,35 @@ export async function GET(req: NextRequest) {
         sales:    number;
         bucket:   Bucket;
     }
-    const rows: ItemRow[] = pmixItems.map(it => {
-        const cat       = (it.category ?? "").trim();
-        const cls       = classifyItem(it.itemName, rules);
-        const isDessert = cls?.category === "dessert";
-        return {
-            itemName: it.itemName,
-            category: cat || "Uncategorized",
-            qty:      Number(it.qtySold),
-            sales:    Number(it.netSales),
-            bucket:   macroBucket(cat, isDessert),
-        };
-    }).filter(r => r.qty > 0 || r.sales > 0);
+    const groupKey = (name: string, cat: string) =>
+        `${name.toLowerCase().trim()}|||${cat.toLowerCase().trim()}`;
+
+    const grouped = new Map<string, ItemRow>();
+    for (const it of pmixItems) {
+        const cat       = (it.category ?? "").trim() || "Uncategorized";
+        const name      = it.itemName;
+        const qty       = Number(it.qtySold);
+        const sales     = Number(it.netSales);
+        if (qty === 0 && sales === 0) continue;
+
+        const key = groupKey(name, cat);
+        const existing = grouped.get(key);
+        if (existing) {
+            existing.qty   += qty;
+            existing.sales += sales;
+        } else {
+            const cls       = classifyItem(name, rules);
+            const isDessert = cls?.category === "dessert";
+            grouped.set(key, {
+                itemName: name,
+                category: cat,
+                qty,
+                sales,
+                bucket: macroBucket(cat, isDessert),
+            });
+        }
+    }
+    const rows: ItemRow[] = [...grouped.values()];
 
     // ── Macro bucket totals ──────────────────────────────────────────────────
     const macros: Record<Bucket, { sales: number; qty: number }> = {

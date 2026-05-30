@@ -90,11 +90,12 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     y += 38;
 
     // ── KPI ROW (4 cards with coloured side stripe) ──────────────────────────
-    const kpis: { label: string; pct: number; sales: number; colour: RGB }[] = [
-        { label: "FOOD",     pct: data.macros.FOOD.pct,     sales: data.macros.FOOD.sales,     colour: C.rose },
-        { label: "LIQUOR",   pct: data.macros.LIQUOR.pct,   sales: data.macros.LIQUOR.sales,   colour: C.emerald },
-        { label: "BEVERAGE", pct: data.macros.BEVERAGE.pct, sales: data.macros.BEVERAGE.sales, colour: C.blue },
-        { label: "DESSERT",  pct: data.macros.DESSERT.pct,  sales: data.macros.DESSERT.sales,  colour: C.orange },
+    const kpis: { label: string; pct: number; sales: number; colour: RGB; footnote?: string }[] = [
+        { label: "FOOD",       pct: data.macros.FOOD.pct,       sales: data.macros.FOOD.sales,       colour: C.rose },
+        { label: "LIQUOR",     pct: data.macros.LIQUOR.pct,     sales: data.macros.LIQUOR.sales,     colour: C.emerald },
+        // FRIED RICE is a subset of FOOD — labelled accordingly.
+        { label: "FRIED RICE", pct: data.macros.FRIED_RICE.pct, sales: data.macros.FRIED_RICE.sales, colour: [217, 119, 6], footnote: "subset of Food" },
+        { label: "DESSERT",    pct: data.macros.DESSERT.pct,    sales: data.macros.DESSERT.sales,    colour: C.orange },
     ];
     const kpiCount = kpis.length;
     const kpiW = (contentW - GAP * (kpiCount - 1)) / kpiCount;
@@ -138,11 +139,11 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         doc.setTextColor(...C.text);
         doc.text(fmtMoney(k.sales), px, y + 62);
 
-        // Sub-label
+        // Sub-label (custom footnote for spotlight KPIs, else default)
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7);
         doc.setTextColor(...C.muted);
-        doc.text("of Total Sales", px, y + 72);
+        doc.text(k.footnote ?? "of Total Sales", px, y + 72);
     });
 
     y += KPI_H + SECTION_GAP;
@@ -174,6 +175,7 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         { label: "COCKTAILS", items: data.bar.cocktails, colour: C.rose },
         { label: "MOCKTAILS", items: data.bar.mocktails, colour: C.rose },
         { label: "BEER",      items: data.bar.beer,      colour: C.blue },
+        { label: "BEVERAGE",  items: data.bar.beverage,  colour: C.blue },
         { label: "DESSERTS",  items: data.desserts,      colour: C.orange },
     ];
     const bw = (contentW - GAP * (barCols.length - 1)) / barCols.length;

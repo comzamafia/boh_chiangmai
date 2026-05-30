@@ -1194,10 +1194,13 @@ export interface PmixDashboardResult {
     totalSales:    number;
     totalQty:      number;
     macros: {
-        FOOD:     { sales: number; qty: number; pct: number };
-        LIQUOR:   { sales: number; qty: number; pct: number };
-        BEVERAGE: { sales: number; qty: number; pct: number };
-        DESSERT:  { sales: number; qty: number; pct: number };
+        FOOD:       { sales: number; qty: number; pct: number };
+        LIQUOR:     { sales: number; qty: number; pct: number };
+        /** Spotlight subcategory of FOOD — items whose POS category contains
+         *  "Fried Rice". The four KPIs intentionally don't sum to 100% because
+         *  FRIED_RICE overlaps with FOOD. */
+        FRIED_RICE: { sales: number; qty: number; pct: number };
+        DESSERT:    { sales: number; qty: number; pct: number };
     };
     topByCategory: {
         category: string;
@@ -1207,6 +1210,9 @@ export interface PmixDashboardResult {
         cocktails: { itemName: string; qty: number }[];
         mocktails: { itemName: string; qty: number }[];
         beer:      { itemName: string; qty: number }[];
+        /** Non-alcoholic beverages that aren't already in Beer / Mocktails
+         *  (sodas, juice, tea, coffee, water). */
+        beverage:  { itemName: string; qty: number }[];
     };
     desserts: { itemName: string; qty: number }[];
     insights: string[];

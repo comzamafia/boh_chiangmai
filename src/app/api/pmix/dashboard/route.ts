@@ -26,6 +26,8 @@ const BEVERAGE_CATS = new Set([
     "beer", "mocktails", "soft drinks", "soda", "juice", "tea", "coffee", "water",
 ]);
 
+// Internal bucket — BEVERAGE is no longer a KPI but is still used to populate
+// the new "Beverage" column under Bar Performance.
 type Bucket = "FOOD" | "LIQUOR" | "BEVERAGE" | "DESSERT";
 
 function macroBucket(category: string, isDessert: boolean): Bucket {
@@ -33,10 +35,16 @@ function macroBucket(category: string, isDessert: boolean): Bucket {
     const lower = category.toLowerCase().trim();
     if (LIQUOR_CATS.has(lower))   return "LIQUOR";
     if (BEVERAGE_CATS.has(lower)) return "BEVERAGE";
-    // Beverage cats list from BEVERAGE_CATEGORIES — but split: alcoholic → liquor
     const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
     if (bevSet.has(lower) && !LIQUOR_CATS.has(lower)) return "BEVERAGE";
     return "FOOD";
+}
+
+// Fried Rice is detected by POS category. Restaurant POS systems typically
+// have "Fried Rice" as a dedicated category; we match case-insensitive
+// substring so variations like "Fried Rice / Noodles" still count.
+function isFriedRiceCategory(category: string): boolean {
+    return category.toLowerCase().includes("fried rice");
 }
 
 export async function GET(req: NextRequest) {
@@ -183,12 +191,21 @@ export async function GET(req: NextRequest) {
         BEVERAGE: { sales: 0, qty: 0 },
         DESSERT:  { sales: 0, qty: 0 },
     };
+    // Fried Rice is a *subset* of FOOD (a spotlight KPI), so we count it
+    // separately. Total sales still comes from FOOD + LIQUOR + BEVERAGE + DESSERT.
+    let friedRiceSales = 0;
+    let friedRiceQty   = 0;
     for (const r of rows) {
         macros[r.bucket].sales += r.sales;
         macros[r.bucket].qty   += r.qty;
+        if (isFriedRiceCategory(r.category)) {
+            friedRiceSales += r.sales;
+            friedRiceQty   += r.qty;
+        }
     }
     const totalSales = macros.FOOD.sales + macros.LIQUOR.sales + macros.BEVERAGE.sales + macros.DESSERT.sales;
     const macroPct = (b: Bucket) => totalSales > 0 ? +((macros[b].sales / totalSales) * 100).toFixed(1) : 0;
+    const friedRicePct = totalSales > 0 ? +((friedRiceSales / totalSales) * 100).toFixed(1) : 0;
 
     // ── Top items by FOOD category (group by category, top 4 cats, top 5 items each) ─
     const foodByCategory = new Map<string, ItemRow[]>();
@@ -221,10 +238,22 @@ export async function GET(req: NextRequest) {
             .slice(0, 5)
             .map(r => ({ itemName: r.itemName, qty: r.qty }));
     }
+    // BEVERAGE column = items in the BEVERAGE bucket that aren't already
+    // listed in Beer / Mocktails (so the column shows sodas, juice, tea,
+    // coffee, water, and anything else non-alcoholic). When there is no
+    // such "other" beverage, fall back to all BEVERAGE-bucket items.
+    const ALREADY_LISTED = new Set(["beer", "mocktails", "mocktail"]);
+    const otherBeverage = rows
+        .filter(r => r.bucket === "BEVERAGE" && !ALREADY_LISTED.has(r.category.toLowerCase()))
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 5)
+        .map(r => ({ itemName: r.itemName, qty: r.qty }));
+
     const bar = {
         cocktails: pickByCat(["Cocktails", "Classic Cocktails"]),
         mocktails: pickByCat(["Mocktails", "Mocktail"]),
         beer:      pickByCat(["Beer"]),
+        beverage:  otherBeverage,
     };
 
     // ── Dessert performance ──────────────────────────────────────────────────
@@ -302,10 +331,12 @@ export async function GET(req: NextRequest) {
         totalQty:     rows.reduce((s, r) => s + r.qty, 0),
 
         macros: {
-            FOOD:     { sales: +macros.FOOD.sales.toFixed(2),     qty: macros.FOOD.qty,     pct: macroPct("FOOD") },
-            LIQUOR:   { sales: +macros.LIQUOR.sales.toFixed(2),   qty: macros.LIQUOR.qty,   pct: macroPct("LIQUOR") },
-            BEVERAGE: { sales: +macros.BEVERAGE.sales.toFixed(2), qty: macros.BEVERAGE.qty, pct: macroPct("BEVERAGE") },
-            DESSERT:  { sales: +macros.DESSERT.sales.toFixed(2),  qty: macros.DESSERT.qty,  pct: macroPct("DESSERT") },
+            FOOD:       { sales: +macros.FOOD.sales.toFixed(2),     qty: macros.FOOD.qty,     pct: macroPct("FOOD") },
+            LIQUOR:     { sales: +macros.LIQUOR.sales.toFixed(2),   qty: macros.LIQUOR.qty,   pct: macroPct("LIQUOR") },
+            // FRIED_RICE is a spotlight KPI — it's a subset of FOOD so the
+            // four KPIs don't sum to 100%, which is intentional.
+            FRIED_RICE: { sales: +friedRiceSales.toFixed(2),        qty: friedRiceQty,        pct: friedRicePct },
+            DESSERT:    { sales: +macros.DESSERT.sales.toFixed(2),  qty: macros.DESSERT.qty,  pct: macroPct("DESSERT") },
         },
 
         topByCategory,

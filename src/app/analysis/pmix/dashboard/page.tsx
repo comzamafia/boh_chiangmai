@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import {
     Loader2, FileDown, RefreshCw, CalendarDays,
-    UtensilsCrossed, Wine, GlassWater, Cake, Star, Sparkles, BarChart3,
+    UtensilsCrossed, Wine, Cake, Star, Sparkles, BarChart3, Soup,
 } from "lucide-react";
 import { pmixApi, type PmixDashboardResult, type PmixUpload } from "@/lib/api";
 import { exportPmixDashboardToPDF } from "@/lib/pmix-dashboard-pdf";
@@ -20,10 +20,10 @@ type Mode = "single" | "range";
 
 // ─── KPI card colour tokens ──────────────────────────────────────────────────
 const KPI = {
-    food:     { border: "border-rose-300/70 dark:border-rose-700",       bg: "bg-rose-50/40 dark:bg-rose-950/20",       label: "text-rose-600 dark:text-rose-400",       big: "text-rose-600 dark:text-rose-400",       icon: UtensilsCrossed },
-    liquor:   { border: "border-emerald-300/70 dark:border-emerald-700", bg: "bg-emerald-50/40 dark:bg-emerald-950/20", label: "text-emerald-600 dark:text-emerald-400", big: "text-emerald-600 dark:text-emerald-400", icon: Wine },
-    beverage: { border: "border-blue-300/70 dark:border-blue-700",       bg: "bg-blue-50/40 dark:bg-blue-950/20",       label: "text-blue-600 dark:text-blue-400",       big: "text-blue-600 dark:text-blue-400",       icon: GlassWater },
-    dessert:  { border: "border-orange-300/70 dark:border-orange-700",   bg: "bg-orange-50/40 dark:bg-orange-950/20",   label: "text-orange-600 dark:text-orange-400",   big: "text-orange-600 dark:text-orange-400",   icon: Cake },
+    food:      { border: "border-rose-300/70 dark:border-rose-700",       bg: "bg-rose-50/40 dark:bg-rose-950/20",       label: "text-rose-600 dark:text-rose-400",       big: "text-rose-600 dark:text-rose-400",       icon: UtensilsCrossed },
+    liquor:    { border: "border-emerald-300/70 dark:border-emerald-700", bg: "bg-emerald-50/40 dark:bg-emerald-950/20", label: "text-emerald-600 dark:text-emerald-400", big: "text-emerald-600 dark:text-emerald-400", icon: Wine },
+    friedRice: { border: "border-amber-300/70 dark:border-amber-700",     bg: "bg-amber-50/40 dark:bg-amber-950/20",     label: "text-amber-600 dark:text-amber-400",     big: "text-amber-600 dark:text-amber-400",     icon: Soup },
+    dessert:   { border: "border-orange-300/70 dark:border-orange-700",   bg: "bg-orange-50/40 dark:bg-orange-950/20",   label: "text-orange-600 dark:text-orange-400",   big: "text-orange-600 dark:text-orange-400",   icon: Cake },
 };
 
 function fmtMoney(n: number) {
@@ -257,10 +257,11 @@ export default function PmixDashboardPage() {
 
                     {/* ── 4 KPI cards ─────────────────────────────────────── */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <KpiCard label="FOOD"     theme={KPI.food}     macro={data.macros.FOOD} />
-                        <KpiCard label="LIQUOR"   theme={KPI.liquor}   macro={data.macros.LIQUOR} />
-                        <KpiCard label="BEVERAGE" theme={KPI.beverage} macro={data.macros.BEVERAGE} />
-                        <KpiCard label="DESSERT"  theme={KPI.dessert}  macro={data.macros.DESSERT} />
+                        <KpiCard label="FOOD"       theme={KPI.food}      macro={data.macros.FOOD} />
+                        <KpiCard label="LIQUOR"     theme={KPI.liquor}    macro={data.macros.LIQUOR} />
+                        <KpiCard label="FRIED RICE" theme={KPI.friedRice} macro={data.macros.FRIED_RICE}
+                            footnote="of which (subset of Food)" />
+                        <KpiCard label="DESSERT"    theme={KPI.dessert}   macro={data.macros.DESSERT} />
                     </div>
 
                     {/* ── Top Selling Items by Category ───────────────────── */}
@@ -273,10 +274,11 @@ export default function PmixDashboardPage() {
 
                     {/* ── Bar + Dessert ───────────────────────────────────── */}
                     <SectionBar>BAR PERFORMANCE</SectionBar>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         <ItemColumn title="COCKTAILS"  icon="🍹" items={data.bar.cocktails} colour="pink"   />
                         <ItemColumn title="MOCKTAILS"  icon="🍸" items={data.bar.mocktails} colour="pink"   />
                         <ItemColumn title="BEER"       icon="🍺" items={data.bar.beer}      colour="blue"   />
+                        <ItemColumn title="BEVERAGE"   icon="🥤" items={data.bar.beverage}  colour="blue"   />
                         <ItemColumn title="DESSERTS"   icon="🍰" items={data.desserts}      colour="orange" />
                     </div>
 
@@ -347,10 +349,11 @@ function SectionBar({ children }: { children: React.ReactNode }) {
     );
 }
 
-function KpiCard({ label, theme, macro }: {
-    label: string;
-    theme: typeof KPI[keyof typeof KPI];
-    macro: { sales: number; qty: number; pct: number };
+function KpiCard({ label, theme, macro, footnote }: {
+    label:     string;
+    theme:     typeof KPI[keyof typeof KPI];
+    macro:     { sales: number; qty: number; pct: number };
+    footnote?: string;
 }) {
     const Icon = theme.icon;
     return (
@@ -366,7 +369,9 @@ function KpiCard({ label, theme, macro }: {
                 <p className="text-base font-bold text-foreground tabular-nums mt-0.5">
                     {fmtMoney(macro.sales)}
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">of Total Sales</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {footnote ?? "of Total Sales"}
+                </p>
             </CardContent>
         </Card>
     );

@@ -72,20 +72,8 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
     }
     doc.text(subParts.join("  ·  "), M, y + 20);
 
-    // Date badge (right)
-    const badgeText = isRange
-        ? `${data.rangeFrom} → ${data.rangeTo}`
-        : formatLongDate(isoDateOnly(data.businessDate));
-    const badgeW = isRange ? 170 : 110;
-    const badgeH = 26;
-    const badgeX = pageW - M - badgeW;
-    doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.8);
-    doc.roundedRect(badgeX, y - 6, badgeW, badgeH, 5, 5, "S");
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(isRange ? 8.5 : 9);
-    doc.setTextColor(...C.text);
-    doc.text(badgeText, badgeX + badgeW / 2, y + 10, { align: "center" });
+    // (Date badge removed per UX feedback — date already appears in the
+    // title block above and in the footer below.)
 
     y += 38;
 
@@ -167,8 +155,8 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         y += colHeight + SECTION_GAP;
     }
 
-    // ── SECTION: Bar Performance + Dessert Performance ───────────────────────
-    drawSectionBar(doc, "BAR PERFORMANCE  ·  DESSERT PERFORMANCE", M, y, contentW);
+    // ── SECTION: Bar Performance (4 cols) ────────────────────────────────────
+    drawSectionBar(doc, "BAR PERFORMANCE", M, y, contentW);
     y += 22 + 4;
 
     const barCols: { label: string; items: { itemName: string; qty: number }[]; colour: RGB }[] = [
@@ -176,7 +164,6 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         { label: "MOCKTAILS", items: data.bar.mocktails, colour: C.rose },
         { label: "BEER",      items: data.bar.beer,      colour: C.blue },
         { label: "BEVERAGE",  items: data.bar.beverage,  colour: C.blue },
-        { label: "DESSERTS",  items: data.desserts,      colour: C.orange },
     ];
     const bw = (contentW - GAP * (barCols.length - 1)) / barCols.length;
     const maxBarItems  = Math.max(...barCols.map(b => b.items.length), 1);
@@ -186,6 +173,18 @@ export function exportPmixDashboardToPDF(data: PmixDashboardResult, locationLabe
         drawItemColumn(doc, cx, y, bw, barHeight, bc.label, bc.items, bc.colour);
     });
     y += barHeight + SECTION_GAP;
+
+    // ── SECTION: Dessert Performance (single col, sits flush-left) ───────────
+    if (y > pageH - 200) { doc.addPage(); y = M + 6; }
+    drawSectionBar(doc, "DESSERT PERFORMANCE", M, y, contentW);
+    y += 22 + 4;
+
+    // Reuse the same column geometry as the bar row so widths line up.
+    const dessertColW = bw;
+    const dessertItems = Math.max(data.desserts.length, 1);
+    const dessertHeight = 30 + dessertItems * ROW_H + 8;
+    drawItemColumn(doc, M, y, dessertColW, dessertHeight, "DESSERTS", data.desserts, C.orange);
+    y += dessertHeight + SECTION_GAP;
 
     // Page-break check before insights
     if (y > pageH - 220) {
@@ -375,9 +374,3 @@ function formatDateMonDay(iso: string): string {
     return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
-function formatLongDate(iso: string): string {
-    const dateOnly = isoDateOnly(iso);
-    const d = new Date(dateOnly + "T00:00:00");
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
-}

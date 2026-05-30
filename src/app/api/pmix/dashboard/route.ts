@@ -207,27 +207,25 @@ export async function GET(req: NextRequest) {
     const macroPct = (b: Bucket) => totalSales > 0 ? +((macros[b].sales / totalSales) * 100).toFixed(1) : 0;
     const friedRicePct = totalSales > 0 ? +((friedRiceSales / totalSales) * 100).toFixed(1) : 0;
 
-    // ── Top items by FOOD category (group by category, top 4 cats, top 5 items each) ─
-    const foodByCategory = new Map<string, ItemRow[]>();
-    for (const r of rows) {
-        if (r.bucket !== "FOOD") continue;
-        if (!foodByCategory.has(r.category)) foodByCategory.set(r.category, []);
-        foodByCategory.get(r.category)!.push(r);
-    }
-    // Sort categories by total qty desc, then take top 4 categories with items
-    const sortedCats = [...foodByCategory.entries()]
-        .map(([cat, items]) => ({
-            category: cat,
-            items:    items.sort((a, b) => b.qty - a.qty).slice(0, 5),
-            totalQty: items.reduce((s, i) => s + i.qty, 0),
-        }))
-        .sort((a, b) => b.totalQty - a.totalQty)
-        .slice(0, 4);
+    // ── Top items by FOOD category — pinned to 4 fixed groups ────────────────
+    // Always show: Appetizers · Noodles · Curry · Fried Rice (in this order).
+    // Each group's column lists the top 5 items in that POS category. Empty
+    // columns are kept so the layout is consistent across uploads.
+    const PINNED_GROUPS: { label: string; patterns: string[] }[] = [
+        { label: "Appetizers", patterns: ["appetizer", "appetiser", "starter"] },
+        { label: "Noodles",    patterns: ["noodle"] },
+        { label: "Curry",      patterns: ["curry"] },
+        { label: "Fried Rice", patterns: ["fried rice"] },
+    ];
 
-    const topByCategory = sortedCats.map(c => ({
-        category: c.category,
-        items:    c.items.map(r => ({ itemName: r.itemName, qty: r.qty })),
-    }));
+    const topByCategory = PINNED_GROUPS.map(g => {
+        const items = rows
+            .filter(r => g.patterns.some(p => r.category.toLowerCase().includes(p)))
+            .sort((a, b) => b.qty - a.qty)
+            .slice(0, 5)
+            .map(r => ({ itemName: r.itemName, qty: r.qty }));
+        return { category: g.label, items };
+    });
 
     // ── Bar performance (Cocktails / Mocktails / Beer) ───────────────────────
     function pickByCat(catNames: string[]): { itemName: string; qty: number }[] {

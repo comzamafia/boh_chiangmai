@@ -272,14 +272,19 @@ export default function PmixDashboardPage() {
                         ))}
                     </div>
 
-                    {/* ── Bar + Dessert ───────────────────────────────────── */}
+                    {/* ── Bar Performance (4 columns) ─────────────────────── */}
                     <SectionBar>BAR PERFORMANCE</SectionBar>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                        <ItemColumn title="COCKTAILS"  icon="🍹" items={data.bar.cocktails} colour="pink"   />
-                        <ItemColumn title="MOCKTAILS"  icon="🍸" items={data.bar.mocktails} colour="pink"   />
-                        <ItemColumn title="BEER"       icon="🍺" items={data.bar.beer}      colour="blue"   />
-                        <ItemColumn title="BEVERAGE"   icon="🥤" items={data.bar.beverage}  colour="blue"   />
-                        <ItemColumn title="DESSERTS"   icon="🍰" items={data.desserts}      colour="orange" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <ItemColumn title="COCKTAILS" icon="🍹" items={data.bar.cocktails} colour="pink" />
+                        <ItemColumn title="MOCKTAILS" icon="🍸" items={data.bar.mocktails} colour="pink" />
+                        <ItemColumn title="BEER"      icon="🍺" items={data.bar.beer}      colour="blue" />
+                        <ItemColumn title="BEVERAGE"  icon="🥤" items={data.bar.beverage}  colour="blue" />
+                    </div>
+
+                    {/* ── Dessert Performance (separate section) ──────────── */}
+                    <SectionBar>DESSERT PERFORMANCE</SectionBar>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <ItemColumn title="DESSERTS" icon="🍰" items={data.desserts} colour="orange" />
                     </div>
 
                     {/* ── Key Insights + Management Focus ─────────────────── */}

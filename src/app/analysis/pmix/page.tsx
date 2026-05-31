@@ -437,8 +437,9 @@ export default function PmixDashboardPage() {
     const [syncOpen,      setSyncOpen]      = useState(false);
     const [syncDate,      setSyncDate]      = useState(() => new Date().toISOString().slice(0, 10));
     const [syncReplace,   setSyncReplace]   = useState(true);
+    const [syncDeplete,   setSyncDeplete]   = useState(true);
     const [syncing,       setSyncing]       = useState(false);
-    const [syncResult,    setSyncResult]    = useState<{ synced: number; date: string } | null>(null);
+    const [syncResult,    setSyncResult]    = useState<{ synced: number; date: string; depleted?: number } | null>(null);
     const [syncedDates,   setSyncedDates]   = useState<string[]>([]);
 
     // ── History / Calendar / Range state ─────────────────────────────────────
@@ -837,7 +838,14 @@ export default function PmixDashboardPage() {
         setSyncing(true); setError(null); setSyncResult(null);
         try {
             const r = await pmixApi.syncSales(selectedId, syncDate, syncReplace);
-            setSyncResult({ synced: r.synced, date: r.date });
+            let depleted: number | undefined;
+            if (syncDeplete) {
+                try {
+                    const d = await pmixApi.depleteInventory(selectedId, syncDate);
+                    depleted = d.depleted;
+                } catch { /* depletion is best-effort; don't fail the whole sync */ }
+            }
+            setSyncResult({ synced: r.synced, date: r.date, depleted });
             await loadSyncStatus(selectedId);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Sync failed");
@@ -3699,6 +3707,14 @@ export default function PmixDashboardPage() {
                                         <strong>{syncResult.synced}</strong> items synced to Daily Sales for{" "}
                                         <strong>{new Date(syncResult.date + "T00:00:00").toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}</strong>
                                     </p>
+                                    {syncResult.depleted != null && (
+                                        <p className="text-sm text-muted-foreground mt-1.5 flex items-center justify-center gap-1.5">
+                                            <Package className="w-3.5 h-3.5 text-blue-500" />
+                                            {syncResult.depleted > 0
+                                                ? <><strong>{syncResult.depleted}</strong> ingredient{syncResult.depleted !== 1 ? "s" : ""} deducted from inventory</>
+                                                : <span className="text-amber-600 dark:text-amber-400">No inventory deducted — link recipes &amp; track ingredients first</span>}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex gap-2">
@@ -3748,6 +3764,19 @@ export default function PmixDashboardPage() {
                                     </p>
                                 </div>
                                 <Switch checked={syncReplace} onCheckedChange={setSyncReplace} />
+                            </div>
+
+                            {/* Auto-deplete inventory toggle */}
+                            <div className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 gap-3">
+                                <div>
+                                    <p className="text-sm font-medium flex items-center gap-1.5">
+                                        <Package className="w-3.5 h-3.5 text-blue-500" /> Deduct ingredients from inventory
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Auto-create &quot;Out&quot; transactions from each dish&apos;s recipe BOM and lower on-hand stock
+                                    </p>
+                                </div>
+                                <Switch checked={syncDeplete} onCheckedChange={setSyncDeplete} />
                             </div>
 
                             {/* Already synced warning */}

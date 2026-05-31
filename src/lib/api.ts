@@ -302,6 +302,14 @@ export const pmixApi = {
         apiFetch<{ uploadId: string; syncedDates: string[]; totalEntries: number }>(
             `/pmix/sync-sales?uploadId=${uploadId}`
         ),
+    /** Deduct ingredients from inventory based on recipe BOM (idempotent). */
+    depleteInventory: (uploadId: string, date: string) =>
+        apiFetch<{
+            depleted: number;
+            lines: { name: string; qty: number; unit: string }[];
+            skippedNotTracked?: number;
+            message?: string;
+        }>("/pmix/deplete-inventory", { method: "POST", body: JSON.stringify({ uploadId, date }) }),
     dailySummary: (uploadId: string) =>
         apiFetch<PmixDailySummary>(`/pmix/daily-summary?uploadId=${uploadId}`),
     trend: (limit = 10) =>

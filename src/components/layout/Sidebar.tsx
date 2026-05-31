@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     { name: "Purchases",      href: "/purchase-history",   icon: FileText,      slug: "purchases",        group: "ops" },
     { name: "Purchase Orders",href: "/purchase-orders",    icon: ClipboardList, slug: "purchase-orders",  group: "ops" },
     { name: "Production",     href: "/production-planning",icon: Calendar,      slug: "production",       group: "ops" },
-    { name: "Prep List",      href: "/prep-list",          icon: ClipboardList, slug: "production",       group: "ops" },
+    { name: "Prep List",      href: "/prep-list",          icon: ClipboardList, slug: "prep-list",        group: "ops" },
     { name: "Analysis",       href: "/analysis",           icon: TrendingUp,    slug: "analysis",         group: "insights" },
     { name: "PMIX Analytics", href: "/analysis/pmix",          icon: PieChart,  slug: "pmix-dashboard",   group: "insights" },
     { name: "PMIX Dashboard", href: "/analysis/pmix/dashboard", icon: BarChart2, slug: "pmix-dashboard",   group: "insights" },

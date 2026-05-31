@@ -73,11 +73,11 @@ export default function PrepListPage() {
         try {
             const res = await prepTasksApi.copy(yesterdayOf(date), date, overwrite);
             if (res.status === 409 && res.duplicate) {
-                if (window.confirm(`วันนี้มี ${res.existingCount} งานอยู่แล้ว — แทนที่ด้วยรายการของเมื่อวานหรือไม่?`)) {
+                if (window.confirm(`This day already has ${res.existingCount} task(s). Replace them with yesterday's list?`)) {
                     await copyFromYesterday(true);
                 }
             } else if (res.error) {
-                alert(res.error === "No tasks to copy from that date" ? "เมื่อวานไม่มีรายการ prep" : res.error);
+                alert(res.error === "No tasks to copy from that date" ? "Yesterday has no prep tasks to copy." : res.error);
             } else {
                 await load();
             }

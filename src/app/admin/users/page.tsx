@@ -68,6 +68,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "admin-notifications": "Email Notifications Log",
     "settings-pmix-rules": "Settings: PMIX Classification Rules",
     "reports": "Reports (PAR/ROP PDF)",
+    "prep-list": "Prep List",
 };
 
 interface UserRow {

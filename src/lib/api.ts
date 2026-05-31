@@ -486,6 +486,35 @@ export const analysisApi = {
     priceTrends:  (months = 6) => apiFetch<PriceTrendsResult>(`/analysis/price-trends?months=${months}`),
 };
 
+// ─── Food Cost Variance ───────────────────────────────────────────────────────
+export interface FoodCostVarianceRow {
+    ingredientId:  string;
+    name:          string;
+    category:      string;
+    unit:          string;
+    salesUsage:    number;   // sales-driven (autodeplete) usage
+    manualOut:     number;   // manual Out
+    wasteQty:      number;
+    countVariance: number;   // signed (negative = shrinkage)
+    received:      number;
+    unitCost:      number;
+    lossQty:       number;   // waste + shrinkage
+    lossValue:     number;   // loss × unitCost
+}
+export interface FoodCostVarianceResult {
+    from:   string;
+    to:     string;
+    items:  FoodCostVarianceRow[];
+    totals: { wasteValue: number; shrinkageValue: number; lossValue: number; salesUsageValue: number };
+}
+export const reportsApi = {
+    foodCostVariance: (from: string, to: string) =>
+        apiFetch<FoodCostVarianceResult>(
+            `/reports/food-cost-variance?from=${from}&to=${to}`,
+            { cache: "no-store" },
+        ),
+};
+
 // ─── Sales ───────────────────────────────────────────────────────────────────
 export const salesApi = {
     list: (date?: string) => apiFetch<SalesEntry[]>(`/sales${date ? `?date=${date}` : ""}`),

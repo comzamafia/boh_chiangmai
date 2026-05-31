@@ -304,6 +304,9 @@ model InventoryTransaction {
   note            String?
   date            String        // YYYY-MM-DD
   recipeId        String?       // for Out: sale that triggered this
+  // For Stocktake only: counted − expected stock at count time. Negative = shrinkage.
+  // Drives the Food Cost Variance report.
+  varianceQty     Decimal?      @db.Decimal(10, 4)
   createdAt       DateTime      @default(now())
 
   @@index([inventoryItemId])

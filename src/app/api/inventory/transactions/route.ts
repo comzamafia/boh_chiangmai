@@ -80,6 +80,10 @@ export async function POST(request: Request) {
                     note:        note ?? null,
                     date,
                     recipeId:    recipeId ?? null,
+                    // Stocktake variance = counted − expected (negative = shrinkage)
+                    varianceQty: (type === "Stocktake" && prevStock != null)
+                        ? Math.round((qtyNum - prevStock) * 10000) / 10000
+                        : null,
                 },
                 include: {
                     ingredient: { select: { id: true, name: true, recipeUnit: true } },

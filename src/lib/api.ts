@@ -528,6 +528,24 @@ export const reportsApi = {
 };
 
 // ─── Prep List ────────────────────────────────────────────────────────────────
+export interface PrepStation {
+    id:        string;
+    name:      string;
+    icon:      string;
+    color:     string;
+    sortOrder: number;
+}
+export const prepStationsApi = {
+    list:   () => apiFetch<PrepStation[]>("/prep-stations", { cache: "no-store" }),
+    create: (data: { name: string; icon?: string; color?: string }) =>
+        apiFetch<PrepStation>("/prep-stations", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ name: string; icon: string; color: string; sortOrder: number }>) =>
+        apiFetch<PrepStation>(`/prep-stations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+        fetch(`/api/prep-stations/${id}`, { method: "DELETE" })
+            .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
+};
+
 export interface PrepTask {
     id:        string;
     date:      string;

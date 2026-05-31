@@ -226,6 +226,18 @@ model ProductionSchedule {
 }
 
 // ─── Master Prep List (persistent daily prep tasks per station) ──────────────
+model PrepStation {
+  id        String   @id @default(cuid())
+  name      String                          // display name, e.g. "Prep Station"
+  icon      String   @default("utensils")   // icon key (see UI map)
+  color     String   @default("bg-slate-500")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("prep_stations")
+}
+
 model PrepTask {
   id        String    @id @default(cuid())
   date      String                       // YYYY-MM-DD

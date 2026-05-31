@@ -42,6 +42,9 @@ export default function PrepBoardPage() {
     const [stationDlg,  setStationDlg]  = useState<{ mode: "add" | "edit"; station?: PrepStation } | null>(null);
     const [analyticsOpen, setAnalyticsOpen] = useState(false);
     const [newTask, setNewTask] = useState({ name: "", qty: "", time: "" });
+    const [importOpen, setImportOpen] = useState(false);
+    const [importText, setImportText] = useState("");
+    const [importing, setImporting] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -122,6 +125,18 @@ export default function PrepBoardPage() {
     async function resetBoard() {
         if (!window.confirm("Reset the board? All To-Do and Complete tasks return to the Task List.")) return;
         await prepApi.reset(date); load();
+    }
+    async function runImport() {
+        if (!station) return;
+        const names = importText.split("\n").map(s => s.trim()).filter(Boolean);
+        if (names.length === 0) return;
+        setImporting(true);
+        try {
+            const res = await prepApi.bulkAddTemplates(station.id, names);
+            alert(`Imported ${res.added} task(s)${res.skipped ? `, skipped ${res.skipped} duplicate(s)` : ""}.`);
+            setImportText(""); setImportOpen(false);
+            await load();
+        } finally { setImporting(false); }
     }
 
     return (
@@ -206,12 +221,18 @@ export default function PrepBoardPage() {
                                     <Column col="tasklist" title="Task List" subtitle="Backlog" accent="bg-slate-400"
                                         cards={station.taskList} canManage={station.canManage}>
                                         {station.canManage && (
-                                            <div className="mt-2 pt-2 border-t border-border/60 flex flex-wrap items-end gap-1.5">
-                                                <Input placeholder="New task…" value={newTask.name} onChange={e => setNewTask(p => ({ ...p, name: e.target.value }))}
-                                                    onKeyDown={e => { if (e.key === "Enter") addTaskTemplate(); }} className="h-8 text-sm flex-1 min-w-[110px]" />
-                                                <Input placeholder="Qty" value={newTask.qty} onChange={e => setNewTask(p => ({ ...p, qty: e.target.value }))} className="h-8 text-sm w-14" />
-                                                <Input placeholder="Time" value={newTask.time} onChange={e => setNewTask(p => ({ ...p, time: e.target.value }))} className="h-8 text-sm w-16" />
-                                                <Button size="sm" variant="outline" className="h-8 px-2" disabled={!newTask.name.trim()} onClick={addTaskTemplate}><Plus className="w-4 h-4" /></Button>
+                                            <div className="mt-2 pt-2 border-t border-border/60 space-y-1.5">
+                                                <div className="flex flex-wrap items-end gap-1.5">
+                                                    <Input placeholder="New task…" value={newTask.name} onChange={e => setNewTask(p => ({ ...p, name: e.target.value }))}
+                                                        onKeyDown={e => { if (e.key === "Enter") addTaskTemplate(); }} className="h-8 text-sm flex-1 min-w-[110px]" />
+                                                    <Input placeholder="Qty" value={newTask.qty} onChange={e => setNewTask(p => ({ ...p, qty: e.target.value }))} className="h-8 text-sm w-14" />
+                                                    <Input placeholder="Time" value={newTask.time} onChange={e => setNewTask(p => ({ ...p, time: e.target.value }))} className="h-8 text-sm w-16" />
+                                                    <Button size="sm" variant="outline" className="h-8 px-2" disabled={!newTask.name.trim()} onClick={addTaskTemplate}><Plus className="w-4 h-4" /></Button>
+                                                </div>
+                                                <button onClick={() => setImportOpen(true)}
+                                                    className="text-[11px] text-primary hover:underline">
+                                                    + Import many (paste a list)
+                                                </button>
                                             </div>
                                         )}
                                     </Column>
@@ -242,6 +263,34 @@ export default function PrepBoardPage() {
                     onSaved={() => { setStationDlg(null); load(); }} />
             )}
             {analyticsOpen && <AnalyticsDialog onClose={() => setAnalyticsOpen(false)} />}
+
+            {/* Bulk import dialog */}
+            <Dialog open={importOpen} onOpenChange={v => { if (!v) setImportOpen(false); }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Import tasks into {station?.name ?? "Task List"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label className="text-xs">Paste one task per line</Label>
+                        <textarea
+                            value={importText}
+                            onChange={e => setImportText(e.target.value)}
+                            rows={12}
+                            placeholder={"No.1 Seasoning Powder\nPad Thai Sauce\nBlended Garlic\n…"}
+                            className="w-full rounded-lg border border-border bg-background p-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {importText.split("\n").map(s => s.trim()).filter(Boolean).length} task(s) detected · duplicates are skipped automatically
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={() => setImportOpen(false)} disabled={importing}>Cancel</Button>
+                        <Button size="sm" onClick={runImport} disabled={importing || importText.trim().length === 0}>
+                            {importing && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Import
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

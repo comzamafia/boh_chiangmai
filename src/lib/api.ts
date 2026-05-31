@@ -588,6 +588,8 @@ export const prepApi = {
         apiFetch<{ ok: boolean; boardTaskId?: string }>("/prep/move", { method: "POST", body: JSON.stringify(payload) }),
     addTemplate: (data: { stationId: string; name: string; qty?: string; dueTime?: string }) =>
         apiFetch<{ id: string }>("/prep/templates", { method: "POST", body: JSON.stringify(data) }),
+    bulkAddTemplates: (stationId: string, names: string[]) =>
+        apiFetch<{ added: number; skipped: number }>("/prep/templates/bulk", { method: "POST", body: JSON.stringify({ stationId, names }) }),
     updateTemplate: (id: string, data: Partial<{ name: string; qty: string; dueTime: string; active: boolean }>) =>
         apiFetch<{ id: string }>(`/prep/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     deleteTemplate: (id: string) => apiFetch<void>(`/prep/templates/${id}`, { method: "DELETE" }),

@@ -225,6 +225,25 @@ model ProductionSchedule {
   @@map("production_schedules")
 }
 
+// ─── Master Prep List (persistent daily prep tasks per station) ──────────────
+model PrepTask {
+  id        String    @id @default(cuid())
+  date      String                       // YYYY-MM-DD
+  station   String                       // "Prep" | "Sauce" | "Hot" | "Cold"
+  name      String
+  qty       String?                      // free text, e.g. "8 kg"
+  dueTime   String?                      // free text, e.g. "08:00 AM"
+  done      Boolean   @default(false)
+  doneBy    String?                      // user name who ticked it
+  doneAt    DateTime?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([date])
+  @@map("prep_tasks")
+}
+
 model BatchPlan {
   id        String          @id @default(cuid())
   date      String          // YYYY-MM-DD

@@ -527,6 +527,31 @@ export const reportsApi = {
         ),
 };
 
+// ─── Prep List ────────────────────────────────────────────────────────────────
+export interface PrepTask {
+    id:        string;
+    date:      string;
+    station:   string;
+    name:      string;
+    qty:       string | null;
+    dueTime:   string | null;
+    done:      boolean;
+    doneBy:    string | null;
+    doneAt:    string | null;
+    sortOrder: number;
+}
+export const prepTasksApi = {
+    list:   (date: string) => apiFetch<PrepTask[]>(`/prep-tasks?date=${date}`, { cache: "no-store" }),
+    create: (data: { date: string; station: string; name: string; qty?: string; dueTime?: string }) =>
+        apiFetch<PrepTask>("/prep-tasks", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ done: boolean; name: string; qty: string; dueTime: string; station: string }>) =>
+        apiFetch<PrepTask>(`/prep-tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/prep-tasks/${id}`, { method: "DELETE" }),
+    copy:   (fromDate: string, toDate: string, overwrite = false) =>
+        fetch("/api/prep-tasks/copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromDate, toDate, overwrite }) })
+            .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; copied?: number; toDate?: string; duplicate?: boolean; existingCount?: number; error?: string })),
+};
+
 // ─── Sales ───────────────────────────────────────────────────────────────────
 export const salesApi = {
     list: (date?: string) => apiFetch<SalesEntry[]>(`/sales${date ? `?date=${date}` : ""}`),

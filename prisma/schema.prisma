@@ -232,10 +232,71 @@ model PrepStation {
   icon      String   @default("utensils")   // icon key (see UI map)
   color     String   @default("bg-slate-500")
   sortOrder Int      @default(0)
+  memberIds String[] @default([])           // user ids who can see this board (empty = everyone)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  templates PrepTaskTemplate[]
+
   @@map("prep_stations")
+}
+
+// Master backlog of reusable prep tasks for a station (the "Task List" column).
+model PrepTaskTemplate {
+  id        String      @id @default(cuid())
+  stationId String
+  station   PrepStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  name      String
+  qty       String?
+  dueTime   String?
+  sortOrder Int         @default(0)
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  boardTasks PrepBoardTask[]
+
+  @@index([stationId])
+  @@map("prep_task_templates")
+}
+
+// A template placed onto a given day's board (To-Do or Complete column).
+model PrepBoardTask {
+  id          String           @id @default(cuid())
+  date        String                            // YYYY-MM-DD
+  stationId   String                            // denormalised for fast board queries
+  templateId  String
+  template    PrepTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  status      String           @default("todo")  // "todo" | "complete"
+  todoAt      DateTime?
+  todoBy      String?
+  completedAt DateTime?
+  completedBy String?
+  sortOrder   Int              @default(0)
+
+  @@unique([date, templateId])
+  @@index([date, stationId])
+  @@map("prep_board_tasks")
+}
+
+// Immutable activity log → powers frequency + staff-performance analytics.
+// Survives the daily board reset.
+model PrepActivityLog {
+  id          String   @id @default(cuid())
+  date        String                  // board date (YYYY-MM-DD)
+  stationId   String
+  stationName String
+  templateId  String?
+  taskName    String
+  action      String                  // "todo" | "complete"
+  userId      String?
+  userName    String?
+  at          DateTime @default(now())
+
+  @@index([date])
+  @@index([action])
+  @@index([userId])
+  @@map("prep_activity_logs")
 }
 
 model PrepTask {

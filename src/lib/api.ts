@@ -534,16 +534,65 @@ export interface PrepStation {
     icon:      string;
     color:     string;
     sortOrder: number;
+    memberIds?: string[];
 }
 export const prepStationsApi = {
     list:   () => apiFetch<PrepStation[]>("/prep-stations", { cache: "no-store" }),
     create: (data: { name: string; icon?: string; color?: string }) =>
         apiFetch<PrepStation>("/prep-stations", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<{ name: string; icon: string; color: string; sortOrder: number }>) =>
+    update: (id: string, data: Partial<{ name: string; icon: string; color: string; sortOrder: number; memberIds: string[] }>) =>
         apiFetch<PrepStation>(`/prep-stations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) =>
         fetch(`/api/prep-stations/${id}`, { method: "DELETE" })
             .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
+};
+
+// ─── Prep Kanban board ──────────────────────────────────────────────────────
+export interface PrepCard {
+    id?:          string;   // board-task id (absent for Task List items)
+    templateId:   string;
+    name:         string;
+    qty:          string | null;
+    dueTime:      string | null;
+    completedBy?: string | null;
+    completedAt?: string | null;
+}
+export interface PrepBoardStation {
+    id: string; name: string; icon: string; color: string;
+    memberIds: string[];
+    canManage: boolean;
+    progress: number;
+    taskList: PrepCard[];
+    todo:     PrepCard[];
+    complete: PrepCard[];
+}
+export interface PrepBoardResult {
+    date: string;
+    canPlan: boolean;
+    stations: PrepBoardStation[];
+}
+export interface PrepStationFrequencyRow {
+    station: string; task: string; daysScheduled: number; timesScheduled: number; timesCompleted: number;
+}
+export interface PrepStaffPerfRow {
+    name: string; completed: number; daysActive: number; avgPerDay: number;
+}
+export interface PrepAnalyticsResult {
+    from: string; to: string;
+    stationFrequency: PrepStationFrequencyRow[];
+    staffPerformance: PrepStaffPerfRow[];
+}
+export const prepApi = {
+    board: (date: string) => apiFetch<PrepBoardResult>(`/prep/board?date=${date}`, { cache: "no-store" }),
+    move:  (payload: { date: string; to: "todo" | "complete" | "tasklist"; templateId?: string; boardTaskId?: string }) =>
+        apiFetch<{ ok: boolean; boardTaskId?: string }>("/prep/move", { method: "POST", body: JSON.stringify(payload) }),
+    addTemplate: (data: { stationId: string; name: string; qty?: string; dueTime?: string }) =>
+        apiFetch<{ id: string }>("/prep/templates", { method: "POST", body: JSON.stringify(data) }),
+    updateTemplate: (id: string, data: Partial<{ name: string; qty: string; dueTime: string; active: boolean }>) =>
+        apiFetch<{ id: string }>(`/prep/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    deleteTemplate: (id: string) => apiFetch<void>(`/prep/templates/${id}`, { method: "DELETE" }),
+    reset: (date?: string) => apiFetch<{ ok: boolean; cleared: number }>("/prep/reset", { method: "POST", body: JSON.stringify({ date }) }),
+    analytics: (from: string, to: string) => apiFetch<PrepAnalyticsResult>(`/prep/analytics?from=${from}&to=${to}`, { cache: "no-store" }),
 };
 
 export interface PrepTask {

@@ -25,6 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (body.icon      !== undefined) data.icon      = body.icon;
     if (body.color     !== undefined) data.color     = body.color;
     if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder);
+    if (Array.isArray(body.memberIds)) data.memberIds = body.memberIds.filter((x: unknown) => typeof x === "string");
 
     const newName = body.name !== undefined ? String(body.name).trim() : undefined;
     if (newName && newName !== current.name) {

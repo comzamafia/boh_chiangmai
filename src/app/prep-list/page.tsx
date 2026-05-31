@@ -1,297 +1,366 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+    DndContext, PointerSensor, TouchSensor, useSensor, useSensors,
+    useDraggable, useDroppable, DragOverlay, type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-    Printer, CheckCircle2, Thermometer, Flame, Droplets, UtensilsCrossed,
-    Soup, ChefHat, Coffee, Wine, Loader2, Plus, X, Copy, CalendarDays, Pencil,
+    Thermometer, Flame, Droplets, UtensilsCrossed, Soup, ChefHat, Coffee, Wine,
+    Loader2, Plus, X, CalendarDays, RotateCcw, BarChart3, Pencil, GripVertical, CheckCircle2, ListChecks,
 } from "lucide-react";
-import { prepTasksApi, prepStationsApi, type PrepTask, type PrepStation } from "@/lib/api";
+import {
+    prepApi, prepStationsApi, usersApi,
+    type PrepBoardResult, type PrepCard, type PrepStation, type User,
+} from "@/lib/api";
 
-// Icon key → component (stations store a key string)
 const ICONS: Record<string, React.ElementType> = {
     utensils: UtensilsCrossed, droplets: Droplets, flame: Flame, thermometer: Thermometer,
     soup: Soup, chef: ChefHat, coffee: Coffee, wine: Wine,
 };
 const ICON_KEYS = Object.keys(ICONS);
-const COLORS = [
-    "bg-orange-500", "bg-blue-500", "bg-red-500", "bg-cyan-500",
-    "bg-emerald-500", "bg-violet-500", "bg-amber-500", "bg-pink-500", "bg-slate-500",
-];
+const COLORS = ["bg-orange-500","bg-blue-500","bg-red-500","bg-cyan-500","bg-emerald-500","bg-violet-500","bg-amber-500","bg-pink-500","bg-slate-500"];
+const iconFor = (k: string) => ICONS[k] ?? UtensilsCrossed;
+const today = () => new Date().toISOString().slice(0, 10);
+const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
-function iconFor(key: string): React.ElementType { return ICONS[key] ?? UtensilsCrossed; }
-function today() { return new Date().toISOString().slice(0, 10); }
-function yesterdayOf(d: string) {
-    const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() - 1);
-    return x.toISOString().slice(0, 10);
-}
+type Col = "tasklist" | "todo" | "complete";
 
-export default function PrepListPage() {
-    const [date,     setDate]     = useState(today());
-    const [stations, setStations] = useState<PrepStation[]>([]);
-    const [tasks,    setTasks]    = useState<PrepTask[]>([]);
-    const [loading,  setLoading]  = useState(true);
-    const [busy,     setBusy]     = useState(false);
-    const [draft,    setDraft]    = useState<Record<string, { name: string; qty: string; time: string }>>({});
+export default function PrepBoardPage() {
+    const [date,    setDate]    = useState(today());
+    const [board,   setBoard]   = useState<PrepBoardResult | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [activeStation, setActiveStation] = useState<string>("");
+    const [dragCard, setDragCard] = useState<PrepCard | null>(null);
 
-    // Station add/edit dialog
-    const [stationDlg, setStationDlg] = useState<{ mode: "add" | "edit"; station?: PrepStation } | null>(null);
+    const [stationDlg,  setStationDlg]  = useState<{ mode: "add" | "edit"; station?: PrepStation } | null>(null);
+    const [analyticsOpen, setAnalyticsOpen] = useState(false);
+    const [newTask, setNewTask] = useState({ name: "", qty: "", time: "" });
 
-    const loadStations = useCallback(async () => {
-        try { setStations(await prepStationsApi.list()); } catch { setStations([]); }
-    }, []);
-    const loadTasks = useCallback(async () => {
-        try { setTasks(await prepTasksApi.list(date)); } catch { setTasks([]); }
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(TouchSensor,   { activationConstraint: { delay: 150, tolerance: 6 } }),
+    );
+
+    const load = useCallback(async () => {
+        try {
+            const b = await prepApi.board(date);
+            setBoard(b);
+            setActiveStation(prev => b.stations.some(s => s.id === prev) ? prev : (b.stations[0]?.id ?? ""));
+        } catch { setBoard(null); }
+        finally { setLoading(false); }
     }, [date]);
+    useEffect(() => { load(); }, [load]);
 
-    useEffect(() => { (async () => { setLoading(true); await Promise.all([loadStations(), loadTasks()]); setLoading(false); })(); }, [loadStations, loadTasks]);
-    useEffect(() => { loadTasks(); }, [loadTasks]);
+    const station = board?.stations.find(s => s.id === activeStation);
 
-    const totalItems     = tasks.length;
-    const completedItems = tasks.filter(t => t.done).length;
-    const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    // ── Drag end → permission-aware move ──────────────────────────────────────
+    async function onDragEnd(e: DragEndEvent) {
+        setDragCard(null);
+        if (!e.over || !station) return;
+        const data = e.active.data.current as { card: PrepCard; from: Col } | undefined;
+        const to = (e.over.data.current as { col: Col } | undefined)?.col;
+        if (!data || !to || data.from === to) return;
 
-    // ── Task actions ──────────────────────────────────────────────────────────
-    async function toggle(task: PrepTask) {
-        const next = !task.done;
-        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, done: next, doneAt: next ? new Date().toISOString() : null } : t));
-        try { await prepTasksApi.update(task.id, { done: next }); await loadTasks(); } catch { loadTasks(); }
-    }
-    async function addTask(stationName: string) {
-        const d = draft[stationName];
-        if (!d?.name.trim()) return;
-        setBusy(true);
+        const canManage = station.canManage;
+        // Permission matrix
+        const allowed =
+            (data.from === "tasklist" && to === "todo"     && canManage) ||
+            (data.from === "todo"     && to === "complete") ||
+            (data.from === "complete" && to === "todo") ||
+            (data.from === "todo"     && to === "tasklist" && canManage) ||
+            (data.from === "complete" && to === "tasklist" && canManage);
+        if (!allowed) return;
+
+        // Optimistic UI
+        applyOptimistic(station.id, data.card, data.from, to);
         try {
-            await prepTasksApi.create({ date, station: stationName, name: d.name, qty: d.qty || undefined, dueTime: d.time || undefined });
-            setDraft(p => ({ ...p, [stationName]: { name: "", qty: "", time: "" } }));
-            await loadTasks();
-        } catch { /* ignore */ } finally { setBusy(false); }
-    }
-    async function removeTask(id: string) {
-        setTasks(prev => prev.filter(t => t.id !== id));
-        try { await prepTasksApi.delete(id); } catch { loadTasks(); }
-    }
-    async function copyFromYesterday(overwrite = false) {
-        setBusy(true);
-        try {
-            const res = await prepTasksApi.copy(yesterdayOf(date), date, overwrite);
-            if (res.status === 409 && res.duplicate) {
-                if (window.confirm(`This day already has ${res.existingCount} task(s). Replace them with yesterday's list?`)) await copyFromYesterday(true);
-            } else if (res.error) {
-                alert(res.error === "No tasks to copy from that date" ? "Yesterday has no prep tasks to copy." : res.error);
-            } else { await loadTasks(); }
-        } finally { setBusy(false); }
+            await prepApi.move({
+                date, to,
+                templateId:  to === "todo" && data.from === "tasklist" ? data.card.templateId : undefined,
+                boardTaskId: data.card.id,
+            });
+        } finally { load(); }
     }
 
-    // ── Station actions ───────────────────────────────────────────────────────
-    async function deleteStation(st: PrepStation) {
-        const res = await prepStationsApi.delete(st.id);
-        if (res.status === 409) { alert(res.message ?? "Station still has tasks."); return; }
-        await loadStations();
+    function applyOptimistic(stationId: string, card: PrepCard, from: Col, to: Col) {
+        setBoard(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                stations: prev.stations.map(s => {
+                    if (s.id !== stationId) return s;
+                    const drop = (arr: PrepCard[]) => arr.filter(c => (c.id ?? c.templateId) !== (card.id ?? card.templateId));
+                    const next = { ...s, taskList: drop(s.taskList), todo: drop(s.todo), complete: drop(s.complete) };
+                    if (to === "tasklist") next.taskList = [...next.taskList, card];
+                    if (to === "todo")     next.todo     = [...next.todo, card];
+                    if (to === "complete") next.complete = [...next.complete, card];
+                    const denom = next.todo.length + next.complete.length;
+                    next.progress = denom > 0 ? Math.round((next.complete.length / denom) * 100) : 0;
+                    return next;
+                }),
+            };
+        });
     }
 
-    const setDraftField = (key: string, field: "name" | "qty" | "time", v: string) =>
-        setDraft(p => { const cur = p[key] ?? { name: "", qty: "", time: "" }; return { ...p, [key]: { ...cur, [field]: v } }; });
+    async function addTaskTemplate() {
+        if (!station || !newTask.name.trim()) return;
+        await prepApi.addTemplate({ stationId: station.id, name: newTask.name, qty: newTask.qty || undefined, dueTime: newTask.time || undefined });
+        setNewTask({ name: "", qty: "", time: "" });
+        load();
+    }
+    async function deleteTemplate(id: string) {
+        if (!window.confirm("Remove this task from the master list?")) return;
+        await prepApi.deleteTemplate(id); load();
+    }
+    async function resetBoard() {
+        if (!window.confirm("Reset the board? All To-Do and Complete tasks return to the Task List.")) return;
+        await prepApi.reset(date); load();
+    }
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500 pb-12">
-
+        <div className="space-y-5 max-w-6xl mx-auto pb-12">
             {/* Header */}
             <div className="flex flex-wrap justify-between items-start gap-3">
                 <div>
-                    <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Master Prep List</h2>
-                    <p className="text-muted-foreground">Daily prep tasks by station — ticks are saved for everyone.</p>
+                    <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary flex items-center gap-2">
+                        <ListChecks className="w-7 h-7" /> Prep Stations Board
+                    </h2>
+                    <p className="text-muted-foreground">Plan the shift, drag tasks across columns, track completion per station.</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5">
                         <CalendarDays className="w-4 h-4 text-muted-foreground" />
                         <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9 w-40" />
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => copyFromYesterday(false)} disabled={busy}>
-                        <Copy className="w-4 h-4 mr-1.5" /> Copy yesterday
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setStationDlg({ mode: "add" })}>
-                        <Plus className="w-4 h-4 mr-1.5" /> Add station
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => window.print()}>
-                        <Printer className="w-4 h-4 mr-1.5" /> Print
-                    </Button>
+                    {board?.canPlan && (
+                        <>
+                            <Button variant="outline" size="sm" onClick={() => setAnalyticsOpen(true)}><BarChart3 className="w-4 h-4 mr-1.5" /> Analytics</Button>
+                            <Button variant="outline" size="sm" onClick={resetBoard}><RotateCcw className="w-4 h-4 mr-1.5" /> Reset</Button>
+                            <Button variant="outline" size="sm" onClick={() => setStationDlg({ mode: "add" })}><Plus className="w-4 h-4 mr-1.5" /> Station</Button>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Overall progress */}
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex-1">
-                            <div className="flex justify-between text-sm mb-1.5">
-                                <span className="font-medium">Overall progress</span>
-                                <span className="font-bold tabular-nums">{progressPercent}%</span>
-                            </div>
-                            <div className="w-full h-2.5 bg-secondary rounded-full overflow-hidden">
-                                <div className="h-full bg-primary transition-all" style={{ width: `${progressPercent}%` }} />
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-2">{completedItems} of {totalItems} tasks completed</p>
-                        </div>
-                        {totalItems > 0 && progressPercent === 100 && (
-                            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-semibold text-sm">
-                                <CheckCircle2 className="h-5 w-5" /> All prep done!
-                            </div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
             {loading ? (
-                <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+                <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+            ) : !board || board.stations.length === 0 ? (
+                <Card><CardContent className="py-16 text-center text-muted-foreground text-sm">
+                    No stations assigned to you.{board?.canPlan && " Tap “Station” to create one."}
+                </CardContent></Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {stations.map(station => {
-                        const Icon  = iconFor(station.icon);
-                        const items = tasks.filter(t => t.station === station.name);
-                        const done  = items.filter(i => i.done).length;
-                        const prog  = items.length > 0 ? (done / items.length) * 100 : 0;
-                        const d     = draft[station.name] ?? { name: "", qty: "", time: "" };
+                <>
+                    {/* Station tabs */}
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {board.stations.map(s => {
+                            const Icon = iconFor(s.icon);
+                            const active = s.id === activeStation;
+                            return (
+                                <button key={s.id} onClick={() => setActiveStation(s.id)}
+                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 border
+                                        ${active ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>
+                                    <span className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                                    <Icon className="w-4 h-4" /> {s.name}
+                                    <span className={`text-xs tabular-nums ${active ? "opacity-90" : "opacity-60"}`}>{s.progress}%</span>
+                                </button>
+                            );
+                        })}
+                    </div>
 
-                        return (
-                            <Card key={station.id} className="h-full border-border/60">
-                                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-accent/30 border-b group">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <div className={`p-1.5 rounded-md ${station.color} text-white`}><Icon className="h-4 w-4" /></div>
-                                        <CardTitle className="text-lg truncate">{station.name}</CardTitle>
+                    {station && (
+                        <>
+                            {/* Station header + progress */}
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex-1">
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span className="font-medium">{station.name} — progress</span>
+                                        <span className="font-bold tabular-nums">{station.progress}%</span>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <span className="text-xs text-muted-foreground tabular-nums mr-1">{done}/{items.length} · {Math.round(prog)}%</span>
-                                        <button onClick={() => setStationDlg({ mode: "edit", station })}
-                                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground/60 hover:text-foreground transition-opacity" title="Edit station">
-                                            <Pencil className="w-3.5 h-3.5" />
-                                        </button>
+                                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                                        <div className={`h-full ${station.color} transition-all`} style={{ width: `${station.progress}%` }} />
                                     </div>
-                                </CardHeader>
-                                <CardContent className="pt-4">
-                                    {items.length > 0 && (
-                                        <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden mb-4">
-                                            <div className={`h-full ${station.color} transition-all`} style={{ width: `${prog}%` }} />
-                                        </div>
-                                    )}
-                                    <ul className="space-y-1">
-                                        {items.map(item => (
-                                            <li key={item.id} className="group flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 -mx-2 transition-colors">
-                                                <button onClick={() => toggle(item)}
-                                                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors touch-manipulation ${item.done ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground text-transparent hover:border-primary"}`}>
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                </button>
-                                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
-                                                    <p className={`text-sm font-medium ${item.done ? "line-through text-muted-foreground" : ""}`}>{item.name}</p>
-                                                    <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-muted-foreground">
-                                                        {item.qty && <span>Qty: <strong className="text-foreground">{item.qty}</strong></span>}
-                                                        {item.dueTime && <span>Target: {item.dueTime}</span>}
-                                                        {item.done && item.doneBy && <span className="text-green-600 dark:text-green-400">✓ {item.doneBy}</span>}
-                                                    </div>
-                                                </div>
-                                                <button onClick={() => removeTask(item.id)}
-                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity shrink-0" title="Delete task">
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </li>
-                                        ))}
-                                        {items.length === 0 && <li className="text-xs text-muted-foreground italic py-2 text-center opacity-70">No tasks yet</li>}
-                                    </ul>
-                                    <div className="mt-3 pt-3 border-t border-border/60 flex flex-wrap items-end gap-1.5">
-                                        <Input placeholder="New task…" value={d.name}
-                                            onChange={e => setDraftField(station.name, "name", e.target.value)}
-                                            onKeyDown={e => { if (e.key === "Enter") addTask(station.name); }}
-                                            className="h-8 text-sm flex-1 min-w-[120px]" />
-                                        <Input placeholder="Qty" value={d.qty}
-                                            onChange={e => setDraftField(station.name, "qty", e.target.value)}
-                                            onKeyDown={e => { if (e.key === "Enter") addTask(station.name); }}
-                                            className="h-8 text-sm w-16" />
-                                        <Input placeholder="Time" value={d.time}
-                                            onChange={e => setDraftField(station.name, "time", e.target.value)}
-                                            onKeyDown={e => { if (e.key === "Enter") addTask(station.name); }}
-                                            className="h-8 text-sm w-20" />
-                                        <Button size="sm" variant="outline" className="h-8 px-2" disabled={busy || !d.name.trim()} onClick={() => addTask(station.name)}>
-                                            <Plus className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {station.complete.length} of {station.todo.length + station.complete.length} planned tasks complete
+                                    </p>
+                                </div>
+                                {station.canManage && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit station"
+                                        onClick={() => setStationDlg({ mode: "edit", station: { id: station.id, name: station.name, icon: station.icon, color: station.color, sortOrder: 0, memberIds: station.memberIds } })}>
+                                        <Pencil className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            </div>
+
+                            {/* Board */}
+                            <DndContext sensors={sensors}
+                                onDragStart={(e: DragStartEvent) => setDragCard((e.active.data.current as { card: PrepCard } | undefined)?.card ?? null)}
+                                onDragEnd={onDragEnd}>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <Column col="tasklist" title="Task List" subtitle="Backlog" accent="bg-slate-400"
+                                        cards={station.taskList} canManage={station.canManage}>
+                                        {station.canManage && (
+                                            <div className="mt-2 pt-2 border-t border-border/60 flex flex-wrap items-end gap-1.5">
+                                                <Input placeholder="New task…" value={newTask.name} onChange={e => setNewTask(p => ({ ...p, name: e.target.value }))}
+                                                    onKeyDown={e => { if (e.key === "Enter") addTaskTemplate(); }} className="h-8 text-sm flex-1 min-w-[110px]" />
+                                                <Input placeholder="Qty" value={newTask.qty} onChange={e => setNewTask(p => ({ ...p, qty: e.target.value }))} className="h-8 text-sm w-14" />
+                                                <Input placeholder="Time" value={newTask.time} onChange={e => setNewTask(p => ({ ...p, time: e.target.value }))} className="h-8 text-sm w-16" />
+                                                <Button size="sm" variant="outline" className="h-8 px-2" disabled={!newTask.name.trim()} onClick={addTaskTemplate}><Plus className="w-4 h-4" /></Button>
+                                            </div>
+                                        )}
+                                    </Column>
+                                    <Column col="todo" title="To-Do" subtitle={`${station.todo.length} planned`} accent="bg-blue-500"
+                                        cards={station.todo} canManage={station.canManage} onDelete={station.canManage ? deleteTemplate : undefined} />
+                                    <Column col="complete" title="Complete" subtitle={`${station.complete.length} done`} accent="bg-emerald-500"
+                                        cards={station.complete} canManage={station.canManage} done />
+                                </div>
+
+                                <DragOverlay>
+                                    {dragCard ? <CardFace card={dragCard} dragging /> : null}
+                                </DragOverlay>
+                            </DndContext>
+
+                            {!station.canManage && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    You can move tasks between <strong>To-Do</strong> and <strong>Complete</strong>. Managers plan the To-Do list.
+                                </p>
+                            )}
+                        </>
+                    )}
+                </>
             )}
 
-            {/* Station add/edit dialog */}
             {stationDlg && (
-                <StationDialog
-                    mode={stationDlg.mode}
-                    station={stationDlg.station}
+                <StationDialog mode={stationDlg.mode} station={stationDlg.station}
                     onClose={() => setStationDlg(null)}
-                    onSaved={async () => { setStationDlg(null); await loadStations(); await loadTasks(); }}
-                    onDelete={stationDlg.station ? async () => {
-                        await deleteStation(stationDlg.station!);
-                        setStationDlg(null);
-                    } : undefined}
-                />
+                    onSaved={() => { setStationDlg(null); load(); }} />
             )}
+            {analyticsOpen && <AnalyticsDialog onClose={() => setAnalyticsOpen(false)} />}
         </div>
     );
 }
 
-// ─── Station add / edit dialog ──────────────────────────────────────────────
-function StationDialog({
-    mode, station, onClose, onSaved, onDelete,
-}: {
-    mode: "add" | "edit";
-    station?: PrepStation;
-    onClose: () => void;
-    onSaved: () => void;
-    onDelete?: () => void | Promise<void>;
+// ─── Column (droppable) ─────────────────────────────────────────────────────
+function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete, children }: {
+    col: Col; title: string; subtitle: string; accent: string;
+    cards: PrepCard[]; canManage: boolean; done?: boolean;
+    onDelete?: (templateId: string) => void; children?: React.ReactNode;
+}) {
+    const { setNodeRef, isOver } = useDroppable({ id: col, data: { col } });
+    return (
+        <div ref={setNodeRef}
+            className={`rounded-xl border bg-muted/20 p-3 min-h-[140px] transition-colors ${isOver ? "border-primary bg-primary/5" : "border-border"}`}>
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${accent}`} />
+                    <span className="font-semibold text-sm">{title}</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground">{subtitle}</span>
+            </div>
+            <div className="space-y-1.5">
+                {cards.map(c => (
+                    <DraggableCard key={c.id ?? c.templateId} card={c} from={col} done={done}
+                        onDelete={col === "tasklist" && canManage && onDelete ? () => onDelete(c.templateId) : undefined} />
+                ))}
+                {cards.length === 0 && <p className="text-xs text-muted-foreground/60 italic text-center py-3">Drop tasks here</p>}
+            </div>
+            {children}
+        </div>
+    );
+}
+
+// ─── Draggable card ─────────────────────────────────────────────────────────
+function DraggableCard({ card, from, done, onDelete }: { card: PrepCard; from: Col; done?: boolean; onDelete?: () => void }) {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: card.id ?? card.templateId, data: { card, from },
+    });
+    return (
+        <div ref={setNodeRef} {...attributes} {...listeners}
+            className={`group rounded-lg border bg-card px-2.5 py-2 flex items-start gap-2 cursor-grab active:cursor-grabbing touch-none
+                ${isDragging ? "opacity-30" : ""} ${done ? "border-emerald-200 dark:border-emerald-800" : "border-border"}`}>
+            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium leading-tight ${done ? "text-muted-foreground" : ""}`}>{card.name}</p>
+                <div className="flex flex-wrap gap-x-2 mt-0.5 text-[11px] text-muted-foreground">
+                    {card.qty && <span>{card.qty}</span>}
+                    {card.dueTime && <span>· {card.dueTime}</span>}
+                    {done && card.completedBy && <span className="text-emerald-600 dark:text-emerald-400">✓ {card.completedBy}</span>}
+                </div>
+            </div>
+            {done && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+            {onDelete && (
+                <button onClick={onDelete} onPointerDown={e => e.stopPropagation()}
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                </button>
+            )}
+        </div>
+    );
+}
+function CardFace({ card, dragging }: { card: PrepCard; dragging?: boolean }) {
+    return (
+        <div className={`rounded-lg border border-primary bg-card px-2.5 py-2 shadow-lg ${dragging ? "rotate-1" : ""}`}>
+            <p className="text-sm font-medium">{card.name}</p>
+        </div>
+    );
+}
+
+// ─── Station dialog (add/edit + member assignment) ──────────────────────────
+function StationDialog({ mode, station, onClose, onSaved }: {
+    mode: "add" | "edit"; station?: PrepStation; onClose: () => void; onSaved: () => void;
 }) {
     const [name,  setName]  = useState(station?.name ?? "");
     const [icon,  setIcon]  = useState(station?.icon ?? "utensils");
     const [color, setColor] = useState(station?.color ?? "bg-slate-500");
+    const [members, setMembers] = useState<string[]>(station?.memberIds ?? []);
+    const [users, setUsers] = useState<User[]>([]);
     const [saving, setSaving] = useState(false);
+
+    useEffect(() => { usersApi.list().then(setUsers).catch(() => setUsers([])); }, []);
 
     async function save() {
         if (!name.trim()) return;
         setSaving(true);
         try {
-            if (mode === "add") await prepStationsApi.create({ name: name.trim(), icon, color });
-            else if (station)   await prepStationsApi.update(station.id, { name: name.trim(), icon, color });
+            if (mode === "add") {
+                const created = await prepStationsApi.create({ name: name.trim(), icon, color });
+                if (members.length) await prepStationsApi.update(created.id, { memberIds: members });
+            } else if (station) {
+                await prepStationsApi.update(station.id, { name: name.trim(), icon, color, memberIds: members });
+            }
             onSaved();
-        } catch (e) { console.error(e); } finally { setSaving(false); }
+        } finally { setSaving(false); }
+    }
+    async function del() {
+        if (!station) return;
+        if (!window.confirm("Delete this station? (Only works if it has no tasks.)")) return;
+        const res = await prepStationsApi.delete(station.id);
+        if (res.status === 409) { alert(res.message ?? "Station still has tasks."); return; }
+        onSaved();
     }
 
     return (
         <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>{mode === "add" ? "Add Station" : "Edit Station"}</DialogTitle>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
+                <DialogHeader><DialogTitle>{mode === "add" ? "Add Station" : "Edit Station"}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                     <div className="space-y-1">
                         <Label className="text-xs">Station name</Label>
-                        <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Garnish Station" className="h-10" autoFocus />
+                        <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Grill" className="h-10" autoFocus />
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-xs">Icon</Label>
                         <div className="flex flex-wrap gap-1.5">
-                            {ICON_KEYS.map(k => {
-                                const I = ICONS[k];
-                                return (
-                                    <button key={k} onClick={() => setIcon(k)}
-                                        className={`p-2 rounded-lg border transition-colors ${icon === k ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                                        <I className="w-4 h-4" />
-                                    </button>
-                                );
-                            })}
+                            {ICON_KEYS.map(k => { const I = ICONS[k]; return (
+                                <button key={k} onClick={() => setIcon(k)}
+                                    className={`p-2 rounded-lg border ${icon === k ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                                    <I className="w-4 h-4" />
+                                </button>); })}
                         </div>
                     </div>
                     <div className="space-y-1.5">
@@ -299,32 +368,115 @@ function StationDialog({
                         <div className="flex flex-wrap gap-1.5">
                             {COLORS.map(c => (
                                 <button key={c} onClick={() => setColor(c)}
-                                    className={`w-7 h-7 rounded-full ${c} transition-transform ${color === c ? "ring-2 ring-offset-2 ring-foreground scale-110" : "hover:scale-105"}`} />
+                                    className={`w-7 h-7 rounded-full ${c} ${color === c ? "ring-2 ring-offset-2 ring-foreground" : ""}`} />
                             ))}
                         </div>
                     </div>
-                    {/* Preview */}
-                    <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 bg-muted/30">
-                        <div className={`p-1.5 rounded-md ${color} text-white`}>
-                            {(() => { const I = iconFor(icon); return <I className="h-4 w-4" />; })()}
+                    <div className="space-y-1.5">
+                        <Label className="text-xs">Assigned staff <span className="text-muted-foreground font-normal">(none = visible to all)</span></Label>
+                        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                            {users.map(u => {
+                                const on = members.includes(u.id);
+                                return (
+                                    <button key={u.id}
+                                        onClick={() => setMembers(m => on ? m.filter(x => x !== u.id) : [...m, u.id])}
+                                        className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                                        {u.name}
+                                    </button>
+                                );
+                            })}
+                            {users.length === 0 && <span className="text-xs text-muted-foreground">No users</span>}
                         </div>
-                        <span className="font-medium">{name.trim() || "Station name"}</span>
                     </div>
                 </div>
                 <DialogFooter className="flex-row justify-between gap-2">
-                    {mode === "edit" && onDelete ? (
-                        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" disabled={saving}
-                            onClick={() => { if (window.confirm("Delete this station?")) onDelete(); }}>
-                            Delete
-                        </Button>
-                    ) : <span />}
+                    {mode === "edit" ? <Button variant="ghost" size="sm" className="text-red-600" onClick={del} disabled={saving}>Delete</Button> : <span />}
                     <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
-                        <Button size="sm" onClick={save} disabled={saving || !name.trim()}>
-                            {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save
-                        </Button>
+                        <Button size="sm" onClick={save} disabled={saving || !name.trim()}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save</Button>
                     </div>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ─── Analytics dialog ───────────────────────────────────────────────────────
+function AnalyticsDialog({ onClose }: { onClose: () => void }) {
+    const [from, setFrom] = useState(daysAgo(6));
+    const [to,   setTo]   = useState(today());
+    const [tab,  setTab]  = useState<"freq" | "staff">("freq");
+    const [data, setData] = useState<Awaited<ReturnType<typeof prepApi.analytics>> | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let active = true;
+        prepApi.analytics(from, to)
+            .then(d => { if (active) setData(d); })
+            .catch(() => { if (active) setData(null); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [from, to]);
+
+    return (
+        <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-2xl max-h-[90dvh] flex flex-col p-0">
+                <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+                    <DialogTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-primary" /> Prep Productivity Analytics</DialogTitle>
+                </DialogHeader>
+                <div className="px-5 py-3 flex flex-wrap items-end gap-2 border-b border-border">
+                    <div><Label className="text-xs">From</Label><Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 w-36" /></div>
+                    <div><Label className="text-xs">To</Label><Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 w-36" /></div>
+                    <div className="flex gap-1 p-0.5 bg-muted/50 rounded-lg ml-auto">
+                        <button onClick={() => setTab("freq")}  className={`px-3 py-1.5 rounded-md text-xs font-medium ${tab === "freq" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Station Frequency</button>
+                        <button onClick={() => setTab("staff")} className={`px-3 py-1.5 rounded-md text-xs font-medium ${tab === "staff" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Staff Performance</button>
+                    </div>
+                </div>
+                <div className="overflow-y-auto px-5 py-4 flex-1">
+                    {loading ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                    : tab === "freq" ? (
+                        <table className="w-full text-xs">
+                            <thead><tr className="border-b-2 border-border text-muted-foreground uppercase text-[10px] tracking-wide">
+                                <th className="text-left py-2">Station</th><th className="text-left py-2">Task</th>
+                                <th className="text-right py-2 px-2">Days</th><th className="text-right py-2 px-2">Scheduled</th><th className="text-right py-2">Completed</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-border/50">
+                                {(data?.stationFrequency ?? []).map((r, i) => (
+                                    <tr key={i} className="hover:bg-muted/20">
+                                        <td className="py-1.5 text-muted-foreground">{r.station}</td>
+                                        <td className="py-1.5 font-medium">{r.task}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums">{r.daysScheduled}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{r.timesScheduled}</td>
+                                        <td className="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{r.timesCompleted}</td>
+                                    </tr>
+                                ))}
+                                {(data?.stationFrequency.length ?? 0) === 0 && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground italic">No activity in this range</td></tr>}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <table className="w-full text-xs">
+                            <thead><tr className="border-b-2 border-border text-muted-foreground uppercase text-[10px] tracking-wide">
+                                <th className="text-left py-2">Staff</th><th className="text-right py-2 px-2">Completed</th>
+                                <th className="text-right py-2 px-2">Days Active</th><th className="text-right py-2">Avg / Day</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-border/50">
+                                {(data?.staffPerformance ?? []).map((r, i) => (
+                                    <tr key={i} className="hover:bg-muted/20">
+                                        <td className="py-1.5 font-medium">{r.name}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{r.completed}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums">{r.daysActive}</td>
+                                        <td className="py-1.5 text-right tabular-nums">{r.avgPerDay}</td>
+                                    </tr>
+                                ))}
+                                {(data?.staffPerformance.length ?? 0) === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground italic">No completions in this range</td></tr>}
+                            </tbody>
+                        </table>
+                    )}
+                    <p className="text-[10px] text-muted-foreground mt-3">
+                        Frequency = how often a task is planned (To-Do) — high-volume prep is a candidate for pre-cut buying. Staff completions are timestamped for performance review.
+                    </p>
+                </div>
+                <div className="px-5 py-3 border-t border-border flex justify-end"><Button onClick={onClose}>Close</Button></div>
             </DialogContent>
         </Dialog>
     );

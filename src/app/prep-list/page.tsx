@@ -12,12 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
     Thermometer, Flame, Droplets, UtensilsCrossed, Soup, ChefHat, Coffee, Wine,
-    Loader2, Plus, X, CalendarDays, RotateCcw, BarChart3, Pencil, GripVertical, CheckCircle2, ListChecks,
+    Loader2, Plus, X, CalendarDays, RotateCcw, BarChart3, Pencil, GripVertical, CheckCircle2, ListChecks, FileDown,
 } from "lucide-react";
 import {
     prepApi, prepStationsApi, usersApi,
     type PrepBoardResult, type PrepCard, type PrepStation, type User,
 } from "@/lib/api";
+import { exportPrepAnalyticsToPDF } from "@/lib/prep-analytics-pdf";
 
 const ICONS: Record<string, React.ElementType> = {
     utensils: UtensilsCrossed, droplets: Droplets, flame: Flame, thermometer: Thermometer,
@@ -427,6 +428,11 @@ function AnalyticsDialog({ onClose }: { onClose: () => void }) {
                 <div className="px-5 py-3 flex flex-wrap items-end gap-2 border-b border-border">
                     <div><Label className="text-xs">From</Label><Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 w-36" /></div>
                     <div><Label className="text-xs">To</Label><Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 w-36" /></div>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5"
+                        disabled={!data || (data.stationFrequency.length === 0 && data.staffPerformance.length === 0)}
+                        onClick={() => data && exportPrepAnalyticsToPDF(data)}>
+                        <FileDown className="w-4 h-4" /> Export PDF
+                    </Button>
                     <div className="flex gap-1 p-0.5 bg-muted/50 rounded-lg ml-auto">
                         <button onClick={() => setTab("freq")}  className={`px-3 py-1.5 rounded-md text-xs font-medium ${tab === "freq" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Station Frequency</button>
                         <button onClick={() => setTab("staff")} className={`px-3 py-1.5 rounded-md text-xs font-medium ${tab === "staff" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Staff Performance</button>

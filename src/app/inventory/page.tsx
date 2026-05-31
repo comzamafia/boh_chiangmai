@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import StockCountSheet from "@/components/inventory/StockCountSheet";
+import StockCountGuide from "@/components/inventory/StockCountGuide";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
 import { exportHeatmapToPDF } from "@/lib/heatmap-pdf-export";
 import { useCurrency } from "@/components/currency-context";
@@ -952,11 +953,14 @@ export default function InventoryPage() {
 
                 {/* ══ STOCK COUNT (STOCKTAKE) ══════════════════════════════════════ */}
                 <TabsContent value="stocktake" className="mt-4 space-y-4">
-                    <div>
-                        <h3 className="text-lg font-semibold">Physical Stock Count</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Count what you see on the shelf — whole cases, loose units — and the system converts automatically.
-                        </p>
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 className="text-lg font-semibold">Physical Stock Count</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Count what you see on the shelf — whole cases, loose units — and the system converts automatically.
+                            </p>
+                        </div>
+                        <StockCountGuide />
                     </div>
                     <StockCountSheet items={items} onSaved={loadData} />
                 </TabsContent>

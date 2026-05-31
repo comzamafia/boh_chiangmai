@@ -51,6 +51,7 @@ model Supplier {
   ingredients         Ingredient[]
   purchaseHistory     PurchaseHistory[]
   ingredientSuppliers IngredientSupplier[]
+  purchaseOrders      PurchaseOrder[]
 
   @@map("suppliers")
 }
@@ -172,6 +173,44 @@ model PurchaseHistory {
   updatedAt  DateTime @updatedAt
 
   @@map("purchase_history")
+}
+
+// ─── Purchase Orders (DB-backed; replaces the old localStorage version) ──────
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  poNumber     String              @unique          // "PO-2026-0001"
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  supplierName String                               // snapshot at creation
+  status       String              @default("Draft") // Draft | Sent | Received | Cancelled
+  orderDate    String                               // YYYY-MM-DD
+  deliveryDate String?                              // YYYY-MM-DD (expected)
+  notes        String?
+  grandTotal   Decimal             @db.Decimal(12, 2) @default(0)
+  createdById  String?                              // user who created it
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  items PurchaseOrderItem[]
+
+  @@index([status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  ingredientId    String?                            // optional link to Ingredient
+  ingredientName  String                             // snapshot / free text
+  qty             Decimal       @db.Decimal(10, 4)
+  unit            String
+  unitPrice       Decimal       @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(12, 2)
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
 }
 
 model ProductionSchedule {

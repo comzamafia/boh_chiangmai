@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
-import { suppliersApi, ingredientsApi, inventoryApi, Supplier, Ingredient, InventoryAlert } from "@/lib/api";
+import { suppliersApi, ingredientsApi, inventoryApi, purchaseOrdersApi, Supplier, Ingredient, InventoryAlert, type PurchaseOrder as ApiPurchaseOrder } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,13 +76,6 @@ function StatusBadge({ status }: { status: POStatus }) {
     );
 }
 
-function generatePONumber(existing: PurchaseOrder[]): string {
-    const year = new Date().getFullYear();
-    const max  = existing
-        .map(p => parseInt(p.poNumber.split("-")[2] ?? "0", 10))
-        .reduce((a, b) => Math.max(a, b), 0);
-    return `PO-${year}-${String(max + 1).padStart(4, "0")}`;
-}
 
 const UNITS = ["kg", "lbs", "g", "oz", "L", "ml", "piece", "dozen", "pack", "bag", "bottle", "box", "case"];
 
@@ -91,18 +84,37 @@ function emptyLineItem(): POLineItem {
     return { id: `li-${Date.now()}-${Math.random()}`, ingredientId: "", ingredientName: "", qty: 1, unit: "kg", unitPrice: 0, total: 0 };
 }
 
+/** Map an API PurchaseOrder into the local (null-free) shape this page uses. */
+function fromApi(po: ApiPurchaseOrder): PurchaseOrder {
+    return {
+        id:           po.id,
+        poNumber:     po.poNumber,
+        supplierId:   po.supplierId,
+        supplierName: po.supplierName,
+        status:       po.status as POStatus,
+        orderDate:    po.orderDate,
+        deliveryDate: po.deliveryDate ?? "",
+        notes:        po.notes ?? "",
+        grandTotal:   Number(po.grandTotal),
+        createdAt:    po.createdAt,
+        items: (po.items ?? []).map(i => ({
+            id:             i.id ?? `li-${Math.random()}`,
+            ingredientId:   i.ingredientId ?? "",
+            ingredientName: i.ingredientName,
+            qty:            Number(i.qty),
+            unit:           i.unit,
+            unitPrice:      Number(i.unitPrice),
+            total:          Number(i.total),
+        })),
+    };
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PurchaseOrdersPage() {
     const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-    const [orders, setOrders]         = useState<PurchaseOrder[]>(() => {
-        if (typeof window === "undefined") return [];
-        try {
-            const saved = localStorage.getItem("padthai-purchase-orders");
-            return saved ? (JSON.parse(saved) as PurchaseOrder[]) : [];
-        } catch { return []; }
-    });
+    const [orders, setOrders]         = useState<PurchaseOrder[]>([]);
     const [loading, setLoading]       = useState(true);
     const [search, setSearch]         = useState("");
     const [statusFilter, setStatusFilter] = useState<POStatus | "All">("All");
@@ -127,19 +139,20 @@ export default function PurchaseOrdersPage() {
     const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        Promise.all([suppliersApi.list(), ingredientsApi.list(), inventoryApi.alerts().catch(() => [])])
-            .then(([sups, ings, alrts]) => {
+        Promise.all([
+            suppliersApi.list(),
+            ingredientsApi.list(),
+            inventoryApi.alerts().catch(() => []),
+            purchaseOrdersApi.list().catch(() => [] as ApiPurchaseOrder[]),
+        ])
+            .then(([sups, ings, alrts, pos]) => {
                 setSuppliers(sups);
                 setIngredients(ings);
                 setStockAlerts(alrts);
+                setOrders(pos.map(fromApi));
             })
             .finally(() => setLoading(false));
     }, []);
-
-    // Persist orders to localStorage whenever they change
-    useEffect(() => {
-        localStorage.setItem("padthai-purchase-orders", JSON.stringify(orders));
-    }, [orders]);
 
     // ── Computed ───────────────────────────────────────────────────────────────
 
@@ -215,30 +228,38 @@ export default function PurchaseOrdersPage() {
         return errors.length === 0;
     }
 
-    function saveDraft(sendNow = false) {
+    async function saveDraft(sendNow = false) {
         if (!validateForm()) return;
         const supplier = suppliers.find(s => s.id === poSupplier);
-        const po: PurchaseOrder = {
-            id:           `po-${Date.now()}`,
-            poNumber:     generatePONumber(orders),
-            supplierId:   poSupplier,
-            supplierName: supplier?.name ?? "Unknown",
-            status:       sendNow ? "Sent" : "Draft",
-            orderDate:    poOrderDate,
-            deliveryDate: poDeliveryDate,
-            notes:        poNotes,
-            items:        poItems.filter(i => i.ingredientName.trim()),
-            grandTotal,
-            createdAt:    new Date().toISOString(),
-        };
-        setOrders(prev => [po, ...prev]);
-        setFormErrors([]);
-        setSaveSuccess(true);
-        setTimeout(() => {
-            setSaveSuccess(false);
-            setView("list");
-            resetForm();
-        }, 1500);
+        try {
+            const created = await purchaseOrdersApi.create({
+                supplierId:   poSupplier,
+                supplierName: supplier?.name ?? "Unknown",
+                status:       sendNow ? "Sent" : "Draft",
+                orderDate:    poOrderDate,
+                deliveryDate: poDeliveryDate || null,
+                notes:        poNotes || null,
+                items: poItems
+                    .filter(i => i.ingredientName.trim())
+                    .map(i => ({
+                        ingredientId:   i.ingredientId || null,
+                        ingredientName: i.ingredientName.trim(),
+                        qty:            i.qty,
+                        unit:           i.unit,
+                        unitPrice:      i.unitPrice,
+                    })),
+            });
+            setOrders(prev => [fromApi(created), ...prev]);
+            setFormErrors([]);
+            setSaveSuccess(true);
+            setTimeout(() => {
+                setSaveSuccess(false);
+                setView("list");
+                resetForm();
+            }, 1500);
+        } catch (e) {
+            setFormErrors([e instanceof Error ? e.message : "Failed to save purchase order"]);
+        }
     }
 
     function resetForm() {
@@ -256,9 +277,16 @@ export default function PurchaseOrdersPage() {
 
     // ── PO Actions ────────────────────────────────────────────────────────────
 
-    function updateStatus(id: string, status: POStatus) {
+    async function updateStatus(id: string, status: POStatus) {
+        // Optimistic update
         setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
         if (detailPO?.id === id) setDetailPO(d => d ? { ...d, status } : d);
+        try {
+            await purchaseOrdersApi.update(id, { status });
+        } catch {
+            // Reload from server on failure to stay consistent
+            try { setOrders((await purchaseOrdersApi.list()).map(fromApi)); } catch { /* ignore */ }
+        }
     }
 
     // ── Print ─────────────────────────────────────────────────────────────────

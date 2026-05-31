@@ -120,6 +120,55 @@ export const inventoryApi = {
         ),
 };
 
+// ─── Purchase Orders ──────────────────────────────────────────────────────────
+export type POStatus = "Draft" | "Sent" | "Received" | "Cancelled";
+
+export interface PurchaseOrderItemDTO {
+    id?:             string;
+    ingredientId?:   string | null;
+    ingredientName:  string;
+    qty:             number;
+    unit:            string;
+    unitPrice:       number;
+    total:           number;
+}
+
+export interface PurchaseOrder {
+    id:           string;
+    poNumber:     string;
+    supplierId:   string;
+    supplierName: string;
+    status:       POStatus;
+    orderDate:    string;
+    deliveryDate: string | null;
+    notes:        string | null;
+    grandTotal:   number;
+    createdById?: string | null;
+    createdAt:    string;
+    updatedAt:    string;
+    items:        PurchaseOrderItemDTO[];
+}
+
+export interface PurchaseOrderInput {
+    supplierId:   string;
+    supplierName: string;
+    status?:      POStatus;
+    orderDate:    string;
+    deliveryDate?: string | null;
+    notes?:       string | null;
+    items:        Omit<PurchaseOrderItemDTO, "id" | "total">[];
+}
+
+export const purchaseOrdersApi = {
+    list:   () => apiFetch<PurchaseOrder[]>("/purchase-orders"),
+    get:    (id: string) => apiFetch<PurchaseOrder>(`/purchase-orders/${id}`),
+    create: (data: PurchaseOrderInput) =>
+        apiFetch<PurchaseOrder>("/purchase-orders", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ status: POStatus; deliveryDate: string | null; notes: string | null; orderDate: string; items: Omit<PurchaseOrderItemDTO, "id" | "total">[] }>) =>
+        apiFetch<PurchaseOrder>(`/purchase-orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/purchase-orders/${id}`, { method: "DELETE" }),
+};
+
 // ─── Ingredient Categories ────────────────────────────────────────────────────
 export const ingredientCategoriesApi = {
     list: () => apiFetch<IngredientCategory[]>("/ingredient-categories"),

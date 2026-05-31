@@ -75,13 +75,29 @@ export default function RecipesPage() {
             .catch(() => {});
     }, []);
 
-    const filtered = recipes.filter(r => {
-        const matchSearch =
-            r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            r.category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCat = catFilter === "all" || r.category === catFilter;
-        return matchSearch && matchCat;
+    // Recipes matching the search box (category filter applied separately)
+    const searchFiltered = recipes.filter(r => {
+        const q = searchTerm.toLowerCase();
+        return r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q);
     });
+
+    // Per-category counts (reflect the current search)
+    const countFor = (catName: string) => searchFiltered.filter(r => r.category === catName).length;
+
+    // Recipes shown after BOTH search + category filter
+    const filtered = catFilter === "all"
+        ? searchFiltered
+        : searchFiltered.filter(r => r.category === catFilter);
+
+    // Build ordered category groups for the "All" view: defined categories first
+    // (in their configured order), then any leftover categories found on recipes.
+    const definedNames = categories.map(c => c.name);
+    const orphanNames = [...new Set(searchFiltered.map(r => r.category))]
+        .filter(name => !definedNames.includes(name));
+    const groupOrder = [...definedNames, ...orphanNames];
+    const grouped = groupOrder
+        .map(name => ({ name, recipes: searchFiltered.filter(r => r.category === name) }))
+        .filter(g => g.recipes.length > 0);
 
     const handleDuplicate = async (recipe: RecipeWithIngredients, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -187,8 +203,9 @@ export default function RecipesPage() {
                     />
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                    <Button variant={catFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setCatFilter("all")}>
+                    <Button variant={catFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setCatFilter("all")} className="gap-1.5">
                         All
+                        <span className={`text-[10px] tabular-nums rounded-full px-1.5 ${catFilter === "all" ? "bg-primary-foreground/20" : "bg-muted"}`}>{searchFiltered.length}</span>
                     </Button>
                     {catsLoading ? (
                         <div className="h-8 w-24 rounded-md bg-muted animate-pulse" />
@@ -199,9 +216,10 @@ export default function RecipesPage() {
                                     variant={catFilter === cat.name ? "default" : "outline"}
                                     size="sm"
                                     onClick={() => setCatFilter(cat.name)}
-                                    className="capitalize pr-6"
+                                    className="capitalize pr-6 gap-1.5"
                                 >
                                     {cat.name}
+                                    <span className={`text-[10px] tabular-nums rounded-full px-1.5 ${catFilter === cat.name ? "bg-primary-foreground/20" : "bg-muted"}`}>{countFor(cat.name)}</span>
                                 </Button>
                                 {canManageCategories && (
                                     <button
@@ -221,9 +239,18 @@ export default function RecipesPage() {
                 </p>
             </div>
 
-            {/* Recipe Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filtered.map((recipe) => {
+            {/* Recipes grouped by category (every category visible in "All") */}
+            {(catFilter === "all" ? grouped : [{ name: catFilter, recipes: filtered }]).filter(g => g.recipes.length > 0).map(group => (
+                <section key={group.name} className="space-y-3 scroll-mt-4">
+                    <div className="flex items-center gap-2.5 sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-1.5">
+                        <span className="w-1.5 h-5 rounded-full bg-primary/70" />
+                        <h3 className="text-lg font-bold tracking-tight capitalize">{group.name}</h3>
+                        <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-2 py-0.5 tabular-nums">
+                            {group.recipes.length}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {group.recipes.map((recipe) => {
                     const ingCost = calcIngredientCost(recipe);
                     const totalCost = calcTotalCost(recipe);
                     const yield_ = Number(recipe.yieldAmount);
@@ -384,7 +411,9 @@ export default function RecipesPage() {
                         </Card>
                     );
                 })}
-            </div>
+                    </div>
+                </section>
+            ))}
 
             {filtered.length === 0 && (
                 <div className="text-center py-16 border rounded-xl border-dashed">

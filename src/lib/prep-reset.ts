@@ -9,6 +9,7 @@
  */
 import { prisma } from "@/lib/db";
 
+// (rebuild marker — re-trigger deploy after a transient Neon migrate lock timeout)
 export async function resetPrepBoards(beforeOrOn?: string): Promise<{ cleared: number; cutoff: string }> {
     const cutoff = beforeOrOn ?? new Date().toISOString().slice(0, 10);
     const res = await prisma.prepBoardTask.deleteMany({ where: { date: { lte: cutoff } } });

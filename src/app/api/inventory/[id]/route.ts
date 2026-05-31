@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 
 const INCLUDE = {
     ingredient: {
-        include: { supplier: { select: { id: true, name: true } } },
+        include: {
+            supplier: { select: { id: true, name: true } },
+            category: { select: { id: true, name: true } },
+        },
     },
 };
 
@@ -32,6 +35,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (body.holdingDays   !== undefined) data.holdingDays   = Number(body.holdingDays);
         if (body.currentStock  !== undefined) data.currentStock  = Number(body.currentStock);
         if (body.lastCountDate !== undefined) data.lastCountDate = body.lastCountDate ? new Date(body.lastCountDate) : null;
+        // Pack / case counting layer
+        if (body.packUnit !== undefined) data.packUnit = body.packUnit ? String(body.packUnit).trim() : null;
+        if (body.packSize !== undefined) data.packSize = (body.packSize === null || body.packSize === "") ? null : Number(body.packSize);
 
         const item = await prisma.inventoryItem.update({ where: { id }, data, include: INCLUDE });
         return NextResponse.json(item);

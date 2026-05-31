@@ -10,6 +10,7 @@ import {
     type DessertHeatmapResult, type BeverageHeatmapResult, type CurryHeatmapResult,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
+import StockCountSheet from "@/components/inventory/StockCountSheet";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
 import { exportHeatmapToPDF } from "@/lib/heatmap-pdf-export";
 import { useCurrency } from "@/components/currency-context";
@@ -174,11 +175,6 @@ export default function InventoryPage() {
     // Waste log form
     const [wasteForm,   setWasteForm]   = useState({ inventoryItemId: "", ingredientId: "", qty: "", reason: "Spoiled", note: "", date: today() });
 
-    // Stock count state (map id → physical count string)
-    const [countMap,    setCountMap]    = useState<Record<string, string>>({});
-    const [countSaving, setCountSaving] = useState(false);
-    // "purchase" = user enters in purchaseUnit; "recipe" = user enters in recipeUnit
-    const [countUnit,   setCountUnit]   = useState<"purchase" | "recipe">("purchase");
 
     // Txn filter
     const [txnType,     setTxnType]     = useState("all");
@@ -372,40 +368,6 @@ export default function InventoryPage() {
         } catch (e) { console.error(e); } finally { setSaving(false); }
     }
 
-    async function handleStockCount() {
-        if (Object.keys(countMap).length === 0) return;
-        setCountSaving(true);
-        try {
-            await Promise.all(
-                Object.entries(countMap).map(([id, countStr]) => {
-                    const item = items.find(i => i.id === id);
-                    if (!item || countStr === "") return Promise.resolve();
-                    const enteredQty = Number(countStr);
-                    // Convert purchase units → recipe units if needed
-                    const conv = Number(item.ingredient.conversionRate);
-                    const qtyInRecipeUnits =
-                        countUnit === "purchase" && conv > 0
-                            ? enteredQty * conv
-                            : enteredQty;
-                    const noteText =
-                        countUnit === "purchase"
-                            ? `Physical count: ${enteredQty} ${item.ingredient.purchaseUnit} → ${qtyInRecipeUnits.toFixed(3)} ${item.ingredient.recipeUnit}`
-                            : "Physical count";
-                    return inventoryApi.logTransaction({
-                        inventoryItemId: id,
-                        ingredientId:    item.ingredientId,
-                        type:            "Stocktake",
-                        qty:             qtyInRecipeUnits,
-                        unit:            item.ingredient.recipeUnit,
-                        date:            today(),
-                        note:            noteText,
-                    });
-                })
-            );
-            await loadData();
-            setCountMap({});
-        } catch (e) { console.error(e); } finally { setCountSaving(false); }
-    }
 
     // Receive goods — selected ingredient details
     const rcvIngredient = rcvForm.ingredientId
@@ -990,173 +952,13 @@ export default function InventoryPage() {
 
                 {/* ══ STOCK COUNT (STOCKTAKE) ══════════════════════════════════════ */}
                 <TabsContent value="stocktake" className="mt-4 space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                                <div>
-                                    <CardTitle>Physical Stock Count</CardTitle>
-                                    <CardDescription className="mt-1">
-                                        Enter the physical count for each ingredient. Stock will be updated and a Stocktake transaction logged.
-                                    </CardDescription>
-                                </div>
-                                {/* Unit mode toggle */}
-                                <div className="flex items-center gap-1 rounded-lg border p-1 self-start shrink-0">
-                                    <button
-                                        onClick={() => { setCountUnit("purchase"); setCountMap({}); }}
-                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${countUnit === "purchase" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                                    >
-                                        Purchase Unit
-                                    </button>
-                                    <button
-                                        onClick={() => { setCountUnit("recipe"); setCountMap({}); }}
-                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${countUnit === "recipe" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                                    >
-                                        Recipe Unit
-                                    </button>
-                                </div>
-                            </div>
-                            {countUnit === "purchase" && (
-                                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
-                                    Count in purchase units (e.g. kg, litre, bag). The system will automatically convert to recipe units using the conversion rate.
-                                </p>
-                            )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="border rounded-md overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Ingredient</TableHead>
-                                            <TableHead className="text-right hidden sm:table-cell">
-                                                {countUnit === "purchase" ? "System Stock" : "System Stock"}
-                                            </TableHead>
-                                            <TableHead className="text-right">
-                                                Count ({countUnit === "purchase" ? "Purchase Unit" : "Recipe Unit"})
-                                            </TableHead>
-                                            {countUnit === "purchase" && (
-                                                <TableHead className="text-right hidden md:table-cell">Converted (Recipe)</TableHead>
-                                            )}
-                                            <TableHead className="text-right hidden md:table-cell">Variance</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map(item => {
-                                            const conv          = Number(item.ingredient.conversionRate);
-                                            const currentRecipe = Number(item.currentStock);
-                                            // Current stock expressed in purchase units
-                                            const currentPurch  = conv > 0 ? currentRecipe / conv : null;
-                                            const physical      = countMap[item.id];
-                                            const enteredQty    = physical !== undefined && physical !== "" ? Number(physical) : null;
-                                            // Convert entered qty to recipe units for variance
-                                            const enteredRecipe =
-                                                enteredQty !== null
-                                                    ? countUnit === "purchase" && conv > 0
-                                                        ? enteredQty * conv
-                                                        : enteredQty
-                                                    : null;
-                                            const variance = enteredRecipe !== null ? enteredRecipe - currentRecipe : null;
-                                            // Display helpers
-                                            const sysStockLabel =
-                                                countUnit === "purchase" && currentPurch !== null
-                                                    ? `${currentPurch.toFixed(3)} ${item.ingredient.purchaseUnit}`
-                                                    : `${currentRecipe.toFixed(3)} ${item.ingredient.recipeUnit}`;
-                                            const inputUnit =
-                                                countUnit === "purchase"
-                                                    ? item.ingredient.purchaseUnit
-                                                    : item.ingredient.recipeUnit;
-                                            const inputStep =
-                                                countUnit === "purchase" ? "0.001" : "0.01";
-                                            const inputPlaceholder =
-                                                countUnit === "purchase" && currentPurch !== null
-                                                    ? currentPurch.toFixed(3)
-                                                    : currentRecipe.toFixed(2);
-
-                                            return (
-                                                <TableRow key={item.id}>
-                                                    <TableCell className="font-medium">
-                                                        {item.ingredient.name}
-                                                        <span className="block text-xs text-muted-foreground">
-                                                            {countUnit === "purchase"
-                                                                ? `${item.ingredient.purchaseUnit} → ${item.ingredient.recipeUnit} (×${conv})`
-                                                                : item.ingredient.recipeUnit}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-right hidden sm:table-cell tabular-nums text-sm">
-                                                        {sysStockLabel}
-                                                        {countUnit === "purchase" && (
-                                                            <span className="block text-xs text-muted-foreground">
-                                                                = {currentRecipe.toFixed(2)} {item.ingredient.recipeUnit}
-                                                            </span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            <Input
-                                                                type="number" min={0} step={inputStep}
-                                                                placeholder={inputPlaceholder}
-                                                                value={countMap[item.id] ?? ""}
-                                                                onChange={e => setCountMap(m => ({ ...m, [item.id]: e.target.value }))}
-                                                                className="w-28 text-right h-8"
-                                                            />
-                                                            <span className="text-xs text-muted-foreground whitespace-nowrap">{inputUnit}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    {countUnit === "purchase" && (
-                                                        <TableCell className="text-right hidden md:table-cell tabular-nums text-sm text-muted-foreground">
-                                                            {enteredRecipe !== null
-                                                                ? `${enteredRecipe.toFixed(2)} ${item.ingredient.recipeUnit}`
-                                                                : "—"}
-                                                        </TableCell>
-                                                    )}
-                                                    <TableCell className="text-right hidden md:table-cell tabular-nums">
-                                                        {variance !== null && (
-                                                            <div>
-                                                                <span className={`font-medium text-sm ${variance < 0 ? "text-red-600" : variance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                                                                    {variance > 0 ? "+" : ""}{variance.toFixed(2)}
-                                                                    <span className="text-xs font-normal ml-0.5">{item.ingredient.recipeUnit}</span>
-                                                                </span>
-                                                                {countUnit === "purchase" && conv > 0 && (
-                                                                    <span className={`block text-xs ${variance < 0 ? "text-red-500" : variance > 0 ? "text-green-500" : "text-muted-foreground"}`}>
-                                                                        ({variance > 0 ? "+" : ""}{(variance / conv).toFixed(3)} {item.ingredient.purchaseUnit})
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                        {items.length === 0 && (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                                    No ingredients tracked yet.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                            <div className="flex items-center justify-between mt-4 gap-3 flex-wrap">
-                                <p className="text-xs text-muted-foreground">
-                                    {Object.values(countMap).filter(v => v !== "").length} of {items.length} items counted
-                                </p>
-                                <div className="flex gap-2">
-                                    {Object.values(countMap).some(v => v !== "") && (
-                                        <Button variant="outline" size="sm" onClick={() => setCountMap({})}>
-                                            Clear All
-                                        </Button>
-                                    )}
-                                    <Button
-                                        onClick={handleStockCount}
-                                        disabled={countSaving || Object.values(countMap).every(v => v === "")}
-                                    >
-                                        {countSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        <ClipboardList className="mr-2 h-4 w-4" /> Save Stock Count
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <div>
+                        <h3 className="text-lg font-semibold">Physical Stock Count</h3>
+                        <p className="text-sm text-muted-foreground">
+                            Count what you see on the shelf — whole cases, loose units — and the system converts automatically.
+                        </p>
+                    </div>
+                    <StockCountSheet items={items} onSaved={loadData} />
                 </TabsContent>
 
                 {/* ══ TRANSACTION HISTORY ═════════════════════════════════════════ */}

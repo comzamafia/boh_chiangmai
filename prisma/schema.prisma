@@ -237,6 +237,10 @@ model InventoryItem {
   reorderPoint  Decimal   @db.Decimal(10, 4)
   leadTimeDays  Int       @default(1)
   holdingDays   Int       @default(7)          // CR: days of stock to hold (used for PAR Max calculation)
+  // ── Pack / case counting layer (Physical Stock Count) ──
+  // 1 pack = packSize purchaseUnits = packSize × ingredient.conversionRate recipeUnits.
+  packUnit      String?                        // label e.g. "Case", "ลัง", "Bag", "Box"
+  packSize      Decimal?  @db.Decimal(10, 4)   // how many purchaseUnits in one pack (e.g. 50 = 1 case of 50 lb)
   lastCountDate DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

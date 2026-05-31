@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 
 const INCLUDE = {
     ingredient: {
-        include: { supplier: { select: { id: true, name: true } } },
+        include: {
+            supplier: { select: { id: true, name: true } },
+            category: { select: { id: true, name: true } },
+        },
     },
 };
 

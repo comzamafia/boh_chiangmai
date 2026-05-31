@@ -85,7 +85,7 @@ export const inventoryApi = {
     get:     (id: string) => apiFetch<InventoryItem>(`/inventory/${id}`),
     create:  (data: { ingredientId: string; currentStock?: number; parMin?: number; parMax?: number; reorderPoint?: number; leadTimeDays?: number }) =>
         apiFetch<InventoryItem>("/inventory", { method: "POST", body: JSON.stringify(data) }),
-    update:  (id: string, data: Partial<Pick<InventoryItem, "parMin" | "parMax" | "reorderPoint" | "leadTimeDays" | "holdingDays" | "currentStock">>) =>
+    update:  (id: string, data: Partial<Pick<InventoryItem, "parMin" | "parMax" | "reorderPoint" | "leadTimeDays" | "holdingDays" | "currentStock" | "packUnit" | "packSize">>) =>
         apiFetch<InventoryItem>(`/inventory/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete:  (id: string) => apiFetch<void>(`/inventory/${id}`, { method: "DELETE" }),
 
@@ -579,6 +579,9 @@ export interface InventoryItem {
     reorderPoint: number;
     leadTimeDays: number;
     holdingDays: number;       // CR: days of stock to hold (PAR Max calculation)
+    /** Pack / case counting layer — 1 pack = packSize purchaseUnits. */
+    packUnit?: string | null;
+    packSize?: number | null;
     lastCountDate?: string | null;
     createdAt?: string;
     updatedAt?: string;

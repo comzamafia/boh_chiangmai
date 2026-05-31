@@ -131,6 +131,16 @@ export interface PurchaseOrderItemDTO {
     unit:            string;
     unitPrice:       number;
     total:           number;
+    receivedQty?:    number | null;   // actual qty received (null = not yet received)
+}
+
+export interface PoReceiveResult {
+    ingredientName: string;
+    orderedQty:     number;
+    receivedQty:    number;
+    variance:       number;
+    stockAdded:     number | null;
+    priceAlert:     boolean;
 }
 
 export interface PurchaseOrder {
@@ -167,6 +177,13 @@ export const purchaseOrdersApi = {
     update: (id: string, data: Partial<{ status: POStatus; deliveryDate: string | null; notes: string | null; orderDate: string; items: Omit<PurchaseOrderItemDTO, "id" | "total">[] }>) =>
         apiFetch<PurchaseOrder>(`/purchase-orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/purchase-orders/${id}`, { method: "DELETE" }),
+    receive: (id: string, payload: { date: string; lines: { itemId: string; receivedQty: number; unitPrice?: number }[] }) =>
+        apiFetch<{
+            purchaseOrder: PurchaseOrder;
+            results: PoReceiveResult[];
+            receivedLines: number;
+            anyPriceAlert: boolean;
+        }>(`/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify(payload) }),
 };
 
 // ─── Ingredient Categories ────────────────────────────────────────────────────

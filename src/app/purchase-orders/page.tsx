@@ -40,6 +40,7 @@ interface POLineItem {
     unit: string;
     unitPrice: number;
     total: number;
+    receivedQty?: number | null;
 }
 
 interface PurchaseOrder {
@@ -105,6 +106,7 @@ function fromApi(po: ApiPurchaseOrder): PurchaseOrder {
             unit:           i.unit,
             unitPrice:      Number(i.unitPrice),
             total:          Number(i.total),
+            receivedQty:    i.receivedQty != null ? Number(i.receivedQty) : null,
         })),
     };
 }
@@ -125,6 +127,12 @@ export default function PurchaseOrdersPage() {
     const [view, setView]         = useState<"list" | "create" | "detail">("list");
     const [detailPO, setDetailPO] = useState<PurchaseOrder | null>(null);
     const [confirmCancel, setConfirmCancel] = useState<PurchaseOrder | null>(null);
+
+    // Receive-goods dialog
+    const [receivePO,    setReceivePO]    = useState<PurchaseOrder | null>(null);
+    const [receiveDate,  setReceiveDate]  = useState(new Date().toISOString().split("T")[0]);
+    const [receiveLines, setReceiveLines] = useState<Record<string, { qty: string; price: string }>>({});
+    const [receiving,    setReceiving]    = useState(false);
 
     // New PO form state
     const [poSupplier, setPoSupplier]       = useState("");
@@ -286,6 +294,37 @@ export default function PurchaseOrdersPage() {
         } catch {
             // Reload from server on failure to stay consistent
             try { setOrders((await purchaseOrdersApi.list()).map(fromApi)); } catch { /* ignore */ }
+        }
+    }
+
+    // ── Receive goods ───────────────────────────────────────────────────────────
+    function openReceive(po: PurchaseOrder) {
+        // Default each line to ordered qty + PO unit price
+        const init: Record<string, { qty: string; price: string }> = {};
+        po.items.forEach(i => { init[i.id] = { qty: String(i.qty), price: String(i.unitPrice) }; });
+        setReceiveLines(init);
+        setReceiveDate(new Date().toISOString().split("T")[0]);
+        setReceivePO(po);
+    }
+
+    async function handleReceive() {
+        if (!receivePO) return;
+        setReceiving(true);
+        try {
+            const lines = receivePO.items.map(i => ({
+                itemId:      i.id,
+                receivedQty: Number(receiveLines[i.id]?.qty ?? i.qty) || 0,
+                unitPrice:   Number(receiveLines[i.id]?.price ?? i.unitPrice) || 0,
+            }));
+            const res = await purchaseOrdersApi.receive(receivePO.id, { date: receiveDate, lines });
+            const mapped = fromApi(res.purchaseOrder);
+            setOrders(prev => prev.map(o => o.id === mapped.id ? mapped : o));
+            if (detailPO?.id === mapped.id) setDetailPO(mapped);
+            setReceivePO(null);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setReceiving(false);
         }
     }
 
@@ -546,8 +585,8 @@ export default function PurchaseOrdersPage() {
                         )}
                         {po.status === "Sent" && (
                             <Button size="sm" variant="outline" className="border-green-500 text-green-700 hover:bg-green-50"
-                                onClick={() => updateStatus(po.id, "Received")}>
-                                <PackageCheck className="mr-2 h-3.5 w-3.5" /> Mark as Received
+                                onClick={() => openReceive(po)}>
+                                <PackageCheck className="mr-2 h-3.5 w-3.5" /> Receive Goods
                             </Button>
                         )}
                         {(po.status === "Draft" || po.status === "Sent") && (
@@ -608,28 +647,54 @@ export default function PurchaseOrdersPage() {
                     </div>
 
                     {/* Line Items Table */}
+                    {(() => {
+                        const showReceived = po.items.some(it => it.receivedQty != null);
+                        return (
                     <table className="w-full text-sm mb-6">
                         <thead>
                             <tr className="border-b">
                                 <th className="text-left py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">#</th>
                                 <th className="text-left py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">Item</th>
-                                <th className="text-right py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">Qty</th>
+                                <th className="text-right py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">{showReceived ? "Ordered" : "Qty"}</th>
+                                {showReceived && (
+                                    <th className="text-right py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">Received</th>
+                                )}
                                 <th className="text-right py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">Unit Price</th>
                                 <th className="text-right py-2 text-xs uppercase tracking-widest text-muted-foreground font-semibold">Total</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {po.items.map((item, i) => (
+                            {po.items.map((item, i) => {
+                                const rq = item.receivedQty;
+                                const variance = rq != null ? rq - Number(item.qty) : null;
+                                return (
                                 <tr key={item.id} className="border-b last:border-0">
                                     <td className="py-2 text-muted-foreground">{i + 1}</td>
                                     <td className="py-2 font-medium">{item.ingredientName}</td>
                                     <td className="py-2 text-right">{item.qty} {item.unit}</td>
+                                    {showReceived && (
+                                        <td className="py-2 text-right">
+                                            {rq != null ? (
+                                                <span className={variance === 0 ? "" : variance! < 0 ? "text-amber-600 font-medium" : "text-blue-600 font-medium"}>
+                                                    {rq} {item.unit}
+                                                    {variance !== 0 && variance != null && (
+                                                        <span className="block text-[10px]">
+                                                            ({variance > 0 ? "+" : ""}{variance.toFixed(2)})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            ) : <span className="text-muted-foreground">—</span>}
+                                        </td>
+                                    )}
                                     <td className="py-2 text-right">${Number(item.unitPrice).toFixed(2)}</td>
                                     <td className="py-2 text-right font-semibold">${Number(item.total).toFixed(2)}</td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
+                        );
+                    })()}
 
                     {/* Grand Total */}
                     <div className="flex justify-end mb-6">
@@ -856,6 +921,99 @@ export default function PurchaseOrdersPage() {
                             setConfirmCancel(null);
                         }}>
                             Cancel PO
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Receive Goods Dialog — reconcile ordered vs received */}
+            <Dialog open={!!receivePO} onOpenChange={v => { if (!v) setReceivePO(null); }}>
+                <DialogContent className="sm:max-w-2xl max-h-[90dvh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <PackageCheck className="h-4 w-4 text-green-600" />
+                            Receive Goods — {receivePO?.poNumber}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {receivePO && (
+                        <div className="space-y-4 overflow-y-auto flex-1 min-h-0">
+                            <p className="text-sm text-muted-foreground">
+                                Enter the qty actually delivered for each line. Tracked ingredients are added to inventory
+                                automatically (stock + average cost updated). Differences vs ordered are flagged.
+                            </p>
+
+                            {/* Receive date */}
+                            <div className="flex items-center gap-2">
+                                <Label className="text-sm">Received date</Label>
+                                <Input type="date" value={receiveDate} onChange={e => setReceiveDate(e.target.value)}
+                                    className="h-9 w-44" max={new Date().toISOString().split("T")[0]} />
+                            </div>
+
+                            {/* Lines */}
+                            <div className="border rounded-lg overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Item</TableHead>
+                                            <TableHead className="text-right">Ordered</TableHead>
+                                            <TableHead className="text-right">Received</TableHead>
+                                            <TableHead className="text-right hidden sm:table-cell">Unit Price</TableHead>
+                                            <TableHead className="text-right">Variance</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {receivePO.items.map(item => {
+                                            const ln = receiveLines[item.id] ?? { qty: String(item.qty), price: String(item.unitPrice) };
+                                            const recv = Number(ln.qty) || 0;
+                                            const variance = recv - Number(item.qty);
+                                            return (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="font-medium">
+                                                        {item.ingredientName}
+                                                        <span className="block text-xs text-muted-foreground">{item.unit}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums text-muted-foreground">{item.qty}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Input
+                                                            type="number" min={0} step="0.001"
+                                                            value={ln.qty}
+                                                            onChange={e => setReceiveLines(m => ({ ...m, [item.id]: { ...ln, qty: e.target.value } }))}
+                                                            className="w-24 h-8 text-right ml-auto"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-right hidden sm:table-cell">
+                                                        <Input
+                                                            type="number" min={0} step="0.01"
+                                                            value={ln.price}
+                                                            onChange={e => setReceiveLines(m => ({ ...m, [item.id]: { ...ln, price: e.target.value } }))}
+                                                            className="w-24 h-8 text-right ml-auto"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {recv === 0 && Number(item.qty) > 0
+                                                            ? <span className="text-red-600 text-xs font-medium">Not received</span>
+                                                            : variance === 0
+                                                                ? <span className="text-muted-foreground text-xs">—</span>
+                                                                : <span className={`text-xs font-medium ${variance < 0 ? "text-amber-600" : "text-blue-600"}`}>
+                                                                    {variance > 0 ? "+" : ""}{variance.toFixed(2)} {item.unit}
+                                                                  </span>}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setReceivePO(null)} disabled={receiving}>Cancel</Button>
+                        <Button onClick={handleReceive} disabled={receiving}
+                            className="bg-green-600 hover:bg-green-700">
+                            {receiving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <PackageCheck className="mr-2 h-4 w-4" /> Confirm Receipt
                         </Button>
                     </DialogFooter>
                 </DialogContent>

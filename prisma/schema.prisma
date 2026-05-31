@@ -204,10 +204,11 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   ingredientId    String?                            // optional link to Ingredient
   ingredientName  String                             // snapshot / free text
-  qty             Decimal       @db.Decimal(10, 4)
+  qty             Decimal       @db.Decimal(10, 4)    // ordered qty (purchase unit)
   unit            String
   unitPrice       Decimal       @db.Decimal(10, 2)
   total           Decimal       @db.Decimal(12, 2)
+  receivedQty     Decimal?      @db.Decimal(10, 4)    // actual qty received (null = not yet received)
 
   @@index([purchaseOrderId])
   @@map("purchase_order_items")

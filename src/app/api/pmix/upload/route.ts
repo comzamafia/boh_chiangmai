@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File | null;
     const periodLabel   = (formData.get("periodLabel")   as string | null)?.trim() || null;
     const businessDateRaw = (formData.get("businessDate") as string | null)?.trim() || null;
+    const replaceExisting = (formData.get("replaceExisting") as string | null) === "true";
     // Parse YYYY-MM-DD → midnight UTC Date, or null
     const businessDate  = businessDateRaw ? new Date(businessDateRaw + "T00:00:00.000Z") : null;
 
@@ -94,6 +95,26 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!["xlsx", "xls", "csv"].includes(ext ?? "")) {
         return NextResponse.json({ error: "Only XLSX, XLS or CSV files are supported" }, { status: 400 });
+    }
+
+    // ── Duplicate-date guard ────────────────────────────────────────────────
+    // A PMIX report is one business day. Uploading the same day twice silently
+    // double-counts in range analytics, so warn (409) unless the caller opts to
+    // replace the existing upload(s) for that date.
+    let dupIds: string[] = [];
+    if (businessDate) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existing: { id: string }[] = await (prisma as any).pmixUpload.findMany({
+            where:  { businessDate },
+            select: { id: true },
+        });
+        dupIds = existing.map(e => e.id);
+        if (dupIds.length > 0 && !replaceExisting) {
+            return NextResponse.json(
+                { error: "duplicate", duplicate: true, businessDate: businessDateRaw, existingCount: dupIds.length },
+                { status: 409 },
+            );
+        }
     }
 
     // Read file bytes
@@ -165,6 +186,12 @@ export async function POST(req: NextRequest) {
 
     // Persist in transaction
     const upload = await prisma.$transaction(async (tx) => {
+        // Replace mode: drop prior uploads for this business date first
+        // (cascade removes their items + modifiers).
+        if (dupIds.length > 0 && replaceExisting) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (tx as any).pmixUpload.deleteMany({ where: { id: { in: dupIds } } });
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const up = await (tx as any).pmixUpload.create({
             data: {
@@ -202,5 +229,11 @@ export async function POST(req: NextRequest) {
         return up;
     });
 
-    return NextResponse.json({ uploadId: upload.id, totalItems: items.length, totalQty, totalSales }, { status: 201 });
+    return NextResponse.json({
+        uploadId: upload.id,
+        totalItems: items.length,
+        totalQty, totalSales,
+        businessDate: businessDateRaw,
+        replaced: dupIds.length > 0 && replaceExisting ? dupIds.length : 0,
+    }, { status: 201 });
 }

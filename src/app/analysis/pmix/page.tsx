@@ -453,6 +453,8 @@ export default function PmixDashboardPage() {
     const [rangeData,      setRangeData]      = useState<PmixRangeResult | null>(null);
     const [rangeLoading,   setRangeLoading]   = useState(false);
     const [uploadDate,     setUploadDate]     = useState(() => new Date().toISOString().slice(0, 10));
+    const [autoSync,       setAutoSync]       = useState(true);   // auto sync→sales+inventory after upload
+    const [uploadMsg,      setUploadMsg]      = useState<string | null>(null);
 
     // ── Protein calendar modal ──
     const [proteinCalOpen,    setProteinCalOpen]    = useState(false);
@@ -817,14 +819,48 @@ export default function PmixDashboardPage() {
     }
 
     // ── Handle file ──
-    async function handleFile(file: File) {
-        setUploading(true); setError(null);
+    async function handleFile(file: File, replaceExisting = false) {
+        setUploading(true); setError(null); setUploadMsg(null);
         try {
-            const result = await pmixApi.upload(file, file.name.replace(/\.[^.]+$/, ""), uploadDate);
+            const res = await pmixApi.upload(file, file.name.replace(/\.[^.]+$/, ""), uploadDate, replaceExisting);
+
+            // Duplicate-date guard → confirm replace, then retry
+            if (res.status === 409 && res.duplicate) {
+                const ok = window.confirm(
+                    `มีรายงาน PMIX ของวันที่ ${res.businessDate ?? uploadDate} อยู่แล้ว (${res.existingCount} ไฟล์)\n\n` +
+                    `กด OK เพื่อ "แทนที่" ของเดิม หรือ Cancel เพื่อยกเลิก`
+                );
+                setUploading(false);
+                if (ok) await handleFile(file, true);
+                return;
+            }
+            if (!res.uploadId) {
+                setError(res.error || "Upload failed");
+                return;
+            }
+
             await loadUploads();
             await loadCalendar(calendarMonth);
-            setSelectedId(result.uploadId);
+            setSelectedId(res.uploadId);
             changeHistoryMode("single");
+
+            let msg = `อัพโหลดสำเร็จ — ${res.totalItems ?? 0} เมนู`;
+            if (res.replaced) msg += ` (แทนที่ ${res.replaced} ไฟล์เดิม)`;
+
+            // One-step daily flow: auto sync → Daily Sales + deplete inventory
+            if (autoSync && uploadDate) {
+                try {
+                    const r = await pmixApi.syncSales(res.uploadId, uploadDate, true);
+                    let depleted: number | undefined;
+                    try { depleted = (await pmixApi.depleteInventory(res.uploadId, uploadDate)).depleted; } catch { /* best-effort */ }
+                    await loadSyncStatus(res.uploadId);
+                    msg += ` · ซิงค์ยอดขาย ${r.synced} รายการ`;
+                    if (depleted != null) msg += depleted > 0 ? ` · หักสต็อก ${depleted} วัตถุดิบ` : ` · (ยังไม่หักสต็อก — ผูกสูตร/track วัตถุดิบก่อน)`;
+                } catch {
+                    msg += " · ⚠ ซิงค์อัตโนมัติไม่สำเร็จ กด Sync เองได้";
+                }
+            }
+            setUploadMsg(msg);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Upload failed");
         } finally {
@@ -1086,6 +1122,25 @@ export default function PmixDashboardPage() {
                     <input id="pmix-file-input" type="file" accept=".xlsx,.xls,.csv" className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.target.value = ""; } }} />
                 </div>
+
+                {/* Auto-sync toggle — makes daily upload a one-step task */}
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input type="checkbox" checked={autoSync} onChange={e => setAutoSync(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-border accent-primary" />
+                    <span>
+                        <Zap className="w-3 h-3 inline mr-0.5 text-emerald-500" />
+                        หลังอัพโหลด ซิงค์เข้า Daily Sales + หักสต็อกอัตโนมัติ (วันที่ {uploadDate})
+                    </span>
+                </label>
+
+                {/* Upload result banner */}
+                {uploadMsg && (
+                    <div className="flex items-start gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{uploadMsg}</span>
+                        <button onClick={() => setUploadMsg(null)} className="ml-auto text-emerald-600/60 hover:text-emerald-700 shrink-0">✕</button>
+                    </div>
+                )}
 
                 {/* Selector row */}
                 {uploads.length > 0 && historyMode === "single" && (

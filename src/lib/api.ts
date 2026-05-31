@@ -470,13 +470,25 @@ export const pmixApi = {
             { cache: "no-store" },
         ),
 
-    upload: (file: File, periodLabel?: string, businessDate?: string) => {
+    upload: (file: File, periodLabel?: string, businessDate?: string, replaceExisting?: boolean) => {
         const fd = new FormData();
         fd.append("file", file);
-        if (periodLabel)  fd.append("periodLabel",  periodLabel);
-        if (businessDate) fd.append("businessDate", businessDate);
+        if (periodLabel)     fd.append("periodLabel",  periodLabel);
+        if (businessDate)    fd.append("businessDate", businessDate);
+        if (replaceExisting) fd.append("replaceExisting", "true");
         return fetch("/api/pmix/upload", { method: "POST", body: fd })
-            .then(r => r.json()) as Promise<{ uploadId: string; totalItems: number; totalQty: number; totalSales: number }>;
+            .then(async r => {
+                const body = await r.json().catch(() => ({}));
+                return { status: r.status, ...body } as {
+                    status: number;
+                    uploadId?: string;
+                    totalItems?: number; totalQty?: number; totalSales?: number;
+                    businessDate?: string | null;
+                    replaced?: number;
+                    duplicate?: boolean; existingCount?: number;
+                    error?: string;
+                };
+            });
     },
 };
 

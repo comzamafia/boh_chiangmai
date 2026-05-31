@@ -9,6 +9,12 @@ export default defineConfig({
         seed: `ts-node --compiler-options {"module":"CommonJS"} prisma/seed.ts`,
     },
     datasource: {
-        url: process.env.DATABASE_URL ?? "postgresql://padthai:padthai_secret@localhost:5432/padthai_chaiyo_boh",
+        // Migrations (advisory locks) must run over a DIRECT, non-pooled
+        // connection. Over Neon's PgBouncer pooler, pg_advisory_lock hangs
+        // (P1002), so prefer an unpooled URL and fall back to DATABASE_URL.
+        url: process.env.DIRECT_URL
+            ?? process.env.POSTGRES_URL_NON_POOLING
+            ?? process.env.DATABASE_URL
+            ?? "postgresql://padthai:padthai_secret@localhost:5432/padthai_chaiyo_boh",
     },
 });

@@ -163,9 +163,6 @@ export default function BatchPlanningPage() {
                     <p className="text-muted-foreground">Manage and track grouped production recipes.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link href="/batch-calculation">
-                        <Button variant="outline">Use Calculator</Button>
-                    </Link>
                     <Button onClick={openCreate}>
                         <Plus className="mr-2 h-4 w-4" /> Create Batch Plan
                     </Button>

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText, TrendingUp,
-    Calculator, Scale, PieChart, Calendar, ClipboardList,
+    PieChart, Calendar, ClipboardList,
     Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,9 +41,6 @@ const navItems: NavItem[] = [
     { name: "Analysis",       href: "/analysis",           icon: TrendingUp,    slug: "analysis",         group: "insights" },
     { name: "PMIX Analytics", href: "/analysis/pmix",          icon: PieChart,  slug: "pmix-dashboard",   group: "insights" },
     { name: "PMIX Dashboard", href: "/analysis/pmix/dashboard", icon: BarChart2, slug: "pmix-dashboard",   group: "insights" },
-    { name: "Batch Calc",     href: "/batch-calculation",  icon: Calculator,    slug: "batch-calculation",group: "insights" },
-    { name: "Batch Scaling",  href: "/batch-scaling",      icon: Scale,         slug: "batch-scaling",    group: "insights" },
-    { name: "Sales Sim",      href: "/sales-simulation",   icon: PieChart,      slug: "sales-simulation", group: "insights" },
     { name: "Reports",        href: "/reports",            icon: FileText,      slug: "reports",          group: "insights" },
     { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",                    group: "admin" },
     { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",              group: "admin" },

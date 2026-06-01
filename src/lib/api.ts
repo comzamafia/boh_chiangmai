@@ -1045,6 +1045,7 @@ export interface PmixRangeResult {
         portionSize:    number | null;
         portionUnit:    string | null;
         ingredientName: string | null;
+        extraUsed?:     number;   // matching "Extra <Protein>" usage, folded in
     }[];
     ingredientSummary?: {
         mainProtein:  {
@@ -1328,6 +1329,7 @@ export interface IngredientSummaryProteinByType {
     portionSize:    number | null;
     portionUnit:    string | null;
     ingredientName: string | null;
+    extraUsed?:     number;          // matching "Extra <Protein>" usage, folded in
 }
 
 export interface IngredientSummaryProteinByDish {

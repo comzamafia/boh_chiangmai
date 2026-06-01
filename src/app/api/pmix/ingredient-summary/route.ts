@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     });
 
     // ─── Accumulators ─────────────────────────────────────────────────────────
-    interface ByType { proteinType: string; qty: number; totalUsed: number | null; portionSize: number | null; portionUnit: string | null; ingredientName: string | null }
+    interface ByType { proteinType: string; qty: number; totalUsed: number | null; portionSize: number | null; portionUnit: string | null; ingredientName: string | null; extraUsed: number }
     interface ByDish  { category: string; dish: string; proteinType: string; qty: number }
     interface DessertItem { itemName: string; qty: number }
 
@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
     // ─── Helpers ──────────────────────────────────────────────────────────────
     function withPortion(proteinType: string, qty: number): ByType {
         const std = stdByName.get(proteinType.toLowerCase().trim());
-        if (!std) return { proteinType, qty, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null };
+        if (!std) return { proteinType, qty, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null, extraUsed: 0 };
         return {
             proteinType,
             qty,
@@ -185,7 +185,29 @@ export async function GET(req: NextRequest) {
             portionSize:    std.portionSize,
             portionUnit:    std.portionUnit,
             ingredientName: std.ingredientName,
+            extraUsed:      0,
         };
+    }
+
+    /**
+     * Fold each "Extra <Protein>" add-on's INGREDIENT USAGE into the matching
+     * main protein (e.g. "Extra Chicken" → "Chicken"). Orders stay main-only;
+     * only `extraUsed` is populated so the UI can show a combined "Total We Use".
+     * Units must match to be additive.
+     */
+    function foldExtrasIntoMain(main: ByType[], extra: ByType[]) {
+        const extraUsedByBase = new Map<string, { used: number; unit: string }>();
+        for (const e of extra) {
+            if (e.totalUsed == null || !e.portionUnit) continue;
+            const base = e.proteinType.replace(/^extra\s+/i, "").trim().toLowerCase();
+            const cur  = extraUsedByBase.get(base);
+            if (cur && cur.unit === e.portionUnit) cur.used += e.totalUsed;
+            else if (!cur)                          extraUsedByBase.set(base, { used: e.totalUsed, unit: e.portionUnit });
+        }
+        for (const p of main) {
+            const ex = extraUsedByBase.get(p.proteinType.toLowerCase().trim());
+            p.extraUsed = (ex && ex.unit === p.portionUnit) ? +ex.used.toFixed(3) : 0;
+        }
     }
 
     const sortByDish = (a: ByDish, b: ByDish) => {
@@ -203,6 +225,9 @@ export async function GET(req: NextRequest) {
         .map(([t, q]) => withPortion(t, q))
         .sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
     const extraTotal = extraByTypeArr.reduce((s, x) => s + x.qty, 0);
+
+    // Combine extra add-on usage into the matching main protein's "Total We Use"
+    foldExtrasIntoMain(mainByTypeArr, extraByTypeArr);
 
     const dessertArr: DessertItem[] = [...dessertItems.entries()]
         .map(([itemName, qty]) => ({ itemName, qty }))

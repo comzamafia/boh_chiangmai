@@ -287,13 +287,14 @@ export async function GET(req: NextRequest) {
     function withPortion(proteinType: string, qty: number) {
         const std = stdByName.get(proteinType.toLowerCase().trim());
         const avg = dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0;
-        if (!std) return { proteinType, qty, avgQtyPerDay: avg, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null };
+        if (!std) return { proteinType, qty, avgQtyPerDay: avg, totalUsed: null as number | null, portionSize: null as number | null, portionUnit: null as string | null, ingredientName: null as string | null, extraUsed: 0 };
         return {
             proteinType, qty, avgQtyPerDay: avg,
-            totalUsed:      qty * std.portionSize,
-            portionSize:    std.portionSize,
-            portionUnit:    std.portionUnit,
-            ingredientName: std.ingredientName,
+            totalUsed:      qty * std.portionSize as number | null,
+            portionSize:    std.portionSize as number | null,
+            portionUnit:    std.portionUnit as string | null,
+            ingredientName: std.ingredientName as string | null,
+            extraUsed:      0,
         };
     }
 
@@ -305,6 +306,25 @@ export async function GET(req: NextRequest) {
 
     const proteinTotals  = [...mainByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
     const extraTotals    = [...extraByType.entries()].map(([n, q]) => withPortion(n, q)).sort((a, b) => b.qty - a.qty || a.proteinType.localeCompare(b.proteinType));
+
+    // Fold each "Extra <Protein>" add-on's INGREDIENT USAGE into the matching
+    // main protein (e.g. "Extra Chicken" → "Chicken"). Orders stay main-only;
+    // only `extraUsed` is set so the UI shows a combined "Total We Use".
+    {
+        const extraUsedByBase = new Map<string, { used: number; unit: string }>();
+        for (const e of extraTotals) {
+            if (e.totalUsed == null || !e.portionUnit) continue;
+            const base = e.proteinType.replace(/^extra\s+/i, "").trim().toLowerCase();
+            const cur  = extraUsedByBase.get(base);
+            if (cur && cur.unit === e.portionUnit) cur.used += e.totalUsed;
+            else if (!cur)                          extraUsedByBase.set(base, { used: e.totalUsed, unit: e.portionUnit });
+        }
+        for (const p of proteinTotals) {
+            const ex = extraUsedByBase.get(p.proteinType.toLowerCase().trim());
+            p.extraUsed = (ex && ex.unit === p.portionUnit) ? +ex.used.toFixed(3) : 0;
+        }
+    }
+
     const mainTotal      = proteinTotals.reduce((s, p) => s + p.qty, 0);
     const extraTotal     = extraTotals.reduce((s, p) => s + p.qty, 0);
 

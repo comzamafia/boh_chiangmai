@@ -633,15 +633,16 @@ export default function PmixDashboardPage() {
         // Sheet 1: Main Protein totals
         const mainRows: string[][] = [
             [`Main Protein by Type — ${label}`],
-            ["Protein Type", "Total Orders", "Portion Standard", "Total We Use", "Unit", "% of Total"],
+            ["Protein Type", "Total Orders", "Portion Standard", "Total We Use (incl. Extra)", "Unit", "% of Total"],
         ];
         for (const r of ingSum.mainProtein.byType) {
             const pct = ingSum.mainProtein.total > 0 ? ((r.qty / ingSum.mainProtein.total) * 100).toFixed(1) : "0.0";
+            const combinedUsed = r.totalUsed !== null ? r.totalUsed + (r.extraUsed ?? 0) : null;
             mainRows.push([
                 r.proteinType,
                 String(r.qty),
                 r.portionSize !== null ? `${r.portionSize} ${r.portionUnit ?? ""}` : "—",
-                r.totalUsed   !== null ? String(r.totalUsed) : "—",
+                combinedUsed !== null ? String(+combinedUsed.toFixed(3)) : "—",
                 r.portionUnit ?? "",
                 `${pct}%`,
             ]);
@@ -2741,7 +2742,7 @@ export default function PmixDashboardPage() {
                                                 <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 gap-y-2 text-sm items-center">
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protein Type</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total Orders</div>
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use</div>
+                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use<span className="text-orange-500 normal-case font-normal"> +extra</span></div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Total We Use (lb)</div>
                                                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-12">%</div>
 
@@ -2750,8 +2751,10 @@ export default function PmixDashboardPage() {
                                                             ? Math.round((row.qty / ingSum.mainProtein.total) * 100)
                                                             : 0;
                                                         const max = ingSum.mainProtein.byType[0]?.qty ?? 1;
-                                                        const lbValue = row.totalUsed !== null && row.portionUnit === "oz"
-                                                            ? (row.totalUsed / 16).toFixed(2)
+                                                        const extraUsed = row.extraUsed ?? 0;
+                                                        const combinedUsed = row.totalUsed !== null ? row.totalUsed + extraUsed : null;
+                                                        const lbValue = combinedUsed !== null && row.portionUnit === "oz"
+                                                            ? (combinedUsed / 16).toFixed(2)
                                                             : null;
                                                         return (
                                                             <div key={row.proteinType} className="contents">
@@ -2761,13 +2764,15 @@ export default function PmixDashboardPage() {
                                                                 </div>
                                                                 <div className="tabular-nums font-bold text-teal-700 dark:text-teal-300 text-right">{fmtN(row.qty)}</div>
                                                                 <div className="text-right">
-                                                                    {row.totalUsed !== null ? (
+                                                                    {combinedUsed !== null ? (
                                                                         <div>
                                                                             <div className="tabular-nums font-bold text-foreground">
-                                                                                {fmtN(row.totalUsed)} <span className="text-xs font-medium text-muted-foreground">{row.portionUnit}</span>
+                                                                                {fmtN(combinedUsed)} <span className="text-xs font-medium text-muted-foreground">{row.portionUnit}</span>
                                                                             </div>
                                                                             <div className="text-[10px] text-muted-foreground tabular-nums">
-                                                                                {row.qty} × {row.portionSize} {row.portionUnit}
+                                                                                {extraUsed > 0
+                                                                                    ? <>{fmtN(row.totalUsed!)} main + <span className="text-orange-500">{fmtN(extraUsed)} extra</span></>
+                                                                                    : <>{row.qty} × {row.portionSize} {row.portionUnit}</>}
                                                                             </div>
                                                                         </div>
                                                                     ) : (
@@ -2797,7 +2802,7 @@ export default function PmixDashboardPage() {
                                                     <div className="border-t border-border pt-2 mt-1 text-right">
                                                         {ingSum.mainProtein.byType.every(r => r.portionUnit === "oz" && r.totalUsed !== null) ? (
                                                             <span className="tabular-nums font-bold text-foreground text-sm">
-                                                                {(ingSum.mainProtein.byType.reduce((s, r) => s + (r.totalUsed ?? 0), 0) / 16).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">lb</span>
+                                                                {(ingSum.mainProtein.byType.reduce((s, r) => s + (r.totalUsed ?? 0) + (r.extraUsed ?? 0), 0) / 16).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">lb</span>
                                                             </span>
                                                         ) : (
                                                             <span className="text-[10px] text-muted-foreground">—</span>
@@ -3427,7 +3432,7 @@ export default function PmixDashboardPage() {
                                                     Main Protein Usage ({rangeData.dayCount}-day total)
                                                 </CardTitle>
                                                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                                                    Click any protein to view daily calendar
+                                                    Click any protein to view daily calendar · <span className="text-orange-500">Total We Use</span> includes matching Extra add-ons
                                                 </p>
                                             </CardHeader>
                                             <CardContent className="px-3 sm:px-6">
@@ -3443,6 +3448,8 @@ export default function PmixDashboardPage() {
                                                         const pct = rangeData.ingredientSummary!.mainProtein.total > 0
                                                             ? (p.qty / rangeData.ingredientSummary!.mainProtein.total) * 100
                                                             : 0;
+                                                        const extraUsed = p.extraUsed ?? 0;
+                                                        const combinedUsed = p.totalUsed !== null ? p.totalUsed + extraUsed : null;
                                                         return (
                                                             <div key={i} className="contents">
                                                                 {/* Protein name — tap/click → calendar popup
@@ -3462,8 +3469,11 @@ export default function PmixDashboardPage() {
                                                                 <div className="font-bold text-teal-600 text-right py-2 tabular-nums self-center">{p.qty.toLocaleString()}</div>
                                                                 <div className="text-muted-foreground text-right py-2 tabular-nums self-center">{p.avgQtyPerDay}</div>
                                                                 <div className="text-right py-2 tabular-nums self-center">
-                                                                    {p.totalUsed !== null
-                                                                        ? <span className="font-semibold">{p.totalUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span></span>
+                                                                    {combinedUsed !== null
+                                                                        ? <span className="font-semibold" title={extraUsed > 0 ? `Main ${p.totalUsed!.toLocaleString()} + Extra ${extraUsed.toLocaleString()} ${p.portionUnit}` : undefined}>
+                                                                            {combinedUsed.toLocaleString()} <span className="text-muted-foreground text-[10px]">{p.portionUnit}</span>
+                                                                            {extraUsed > 0 && <span className="text-orange-500 text-[9px] ml-0.5">+ex</span>}
+                                                                          </span>
                                                                         : <span className="text-muted-foreground italic text-[10px]">No std</span>}
                                                                 </div>
                                                                 <div className="text-muted-foreground text-right py-2 tabular-nums text-[11px] self-center">{pct.toFixed(1)}%</div>

@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -90,8 +90,8 @@ export async function GET(req: NextRequest) {
 
         const mods = pmixItem.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-        // Items that have protein modifiers are never desserts
-        if (hasProteinModifier(mods)) continue;
+        // Items whose MAIN protein is chosen via a modifier group are never desserts
+        if (hasMainProteinModifier(mods)) continue;
 
         const result = classifyItem(dishName, rules);
         if (!result || result.category !== "dessert") continue;

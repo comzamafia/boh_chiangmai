@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { calculateLeadTime } from "@/lib/supplier-lead-time";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 // PAR suggestions are recomputed live from PMIX uploads + InventoryTransaction —
 // never serve a cached response.
@@ -141,29 +141,32 @@ export async function GET(req: NextRequest) {
 
             const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-            if (hasProteinModifier(mods)) {
-                // Modifier-based protein path
-                for (const mod of mods) {
-                    const grp    = (mod.modifierGroup ?? "").toLowerCase();
-                    const name   = (mod.modifier ?? "").trim();
-                    const modQty = Number(mod.qtySold ?? 0);
-                    if (!name || modQty === 0) continue;
-                    const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
-                    const isMain  = grp.includes("protein") && !isExtra;
-                    if (!isMain && !isExtra) continue;
+            const mainFromModifier = hasMainProteinModifier(mods);
 
-                    const modClass = classifyItem(name, rules);
-                    if (modClass?.category === "excluded") continue;
+            // (1) Always tally modifier proteins/extras (Choice of Protein + Extra …)
+            for (const mod of mods) {
+                const grp    = (mod.modifierGroup ?? "").toLowerCase();
+                const name   = (mod.modifier ?? "").trim();
+                const modQty = Number(mod.qtySold ?? 0);
+                if (!name || modQty === 0) continue;
+                const isExtra = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
+                const isMain  = grp.includes("protein") && !isExtra;
+                if (!isMain && !isExtra) continue;
 
-                    // Always record under name (raw orders) for fuzzy fallback.
-                    addByName(name, modQty);
-                    // If a Portion Standard exists, ALSO record the converted
-                    // amount under the standard's ingredientId for exact matching.
-                    const std = stdByName.get(name.toLowerCase().trim());
-                    if (std) addById(std.ingredientId, modQty * std.portionSize);
-                }
-            } else {
-                // Item-rule path (mostly desserts)
+                const modClass = classifyItem(name, rules);
+                if (modClass?.category === "excluded") continue;
+
+                // Always record under name (raw orders) for fuzzy fallback.
+                addByName(name, modQty);
+                // If a Portion Standard exists, ALSO record the converted
+                // amount under the standard's ingredientId for exact matching.
+                const std = stdByName.get(name.toLowerCase().trim());
+                if (std) addById(std.ingredientId, modQty * std.portionSize);
+            }
+
+            // (2) Dish-name path (named-protein dishes + desserts) — skip when the
+            //     main protein is chosen via a modifier group (avoid double count).
+            if (!mainFromModifier) {
                 const result = classifyItem(dishName, rules);
                 if (!result || result.category === "excluded") continue;
                 if (result.category === "dessert" || result.category === "main_protein" || result.category === "extra_protein") {

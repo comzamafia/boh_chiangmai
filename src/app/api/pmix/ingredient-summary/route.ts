@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
@@ -108,39 +108,44 @@ export async function GET(req: NextRequest) {
             curryByGroup.set(curryGroup, (curryByGroup.get(curryGroup) ?? 0) + qty);
         }
 
-        if (hasProteinModifier(mods)) {
-            // ── Modifier-based path (existing logic) ──────────────────────────
-            for (const mod of mods) {
-                const grp    = (mod.modifierGroup ?? "").toLowerCase();
-                const name   = mod.modifier ?? "";
-                const modQty = Number(mod.qtySold ?? 0);
-                const isExtra   = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
-                const isMainPro = grp.includes("protein") && !isExtra;
+        // Main protein from a "Choice of Protein" modifier group? (an "Extra …"
+        // group alone does not count — protein then still lives in the dish name)
+        const mainFromModifier = hasMainProteinModifier(mods);
 
-                // Apply exclusion rules to modifier names too (e.g. "Veg & Tofu" → excluded)
-                if (isMainPro || isExtra) {
-                    const modClass = classifyItem(name, rules);
-                    if (modClass?.category === "excluded") continue;
-                }
+        // (1) Always tally modifiers so EXTRA add-ons (and modifier-chosen mains)
+        //     are counted regardless of how the dish name is classified.
+        for (const mod of mods) {
+            const grp    = (mod.modifierGroup ?? "").toLowerCase();
+            const name   = mod.modifier ?? "";
+            const modQty = Number(mod.qtySold ?? 0);
+            const isExtra   = grp.includes("extra") || name.toLowerCase().startsWith("extra ");
+            const isMainPro = grp.includes("protein") && !isExtra;
+            if (!isMainPro && !isExtra) continue;
 
-                if (isMainPro) {
-                    mainGroupNames.add(mod.modifierGroup);
-                    mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
-                    const k = `${dishName}|||${name}`;
-                    const ex = mainByDish.get(k);
-                    if (ex) ex.qty += modQty;
-                    else    mainByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
-                } else if (isExtra) {
-                    extraGroupNames.add(mod.modifierGroup);
-                    extraByType.set(name, (extraByType.get(name) ?? 0) + modQty);
-                    const k = `${dishName}|||${name}`;
-                    const ex = extraByDish.get(k);
-                    if (ex) ex.qty += modQty;
-                    else    extraByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
-                }
+            // Apply exclusion rules to modifier names too (e.g. "Veg & Tofu" → excluded)
+            const modClass = classifyItem(name, rules);
+            if (modClass?.category === "excluded") continue;
+
+            if (isMainPro) {
+                mainGroupNames.add(mod.modifierGroup);
+                mainByType.set(name, (mainByType.get(name) ?? 0) + modQty);
+                const k = `${dishName}|||${name}`;
+                const ex = mainByDish.get(k);
+                if (ex) ex.qty += modQty;
+                else    mainByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
+            } else {
+                extraGroupNames.add(mod.modifierGroup);
+                extraByType.set(name, (extraByType.get(name) ?? 0) + modQty);
+                const k = `${dishName}|||${name}`;
+                const ex = extraByDish.get(k);
+                if (ex) ex.qty += modQty;
+                else    extraByDish.set(k, { category, dish: dishName, proteinType: name, qty: modQty });
             }
-        } else {
-            // ── Item-rule path (new) ──────────────────────────────────────────
+        }
+
+        // (2) Classify the dish NAME for its main protein / dessert only when the
+        //     main protein is not chosen via a modifier group (else double-count).
+        if (!mainFromModifier) {
             const result = classifyItem(dishName, rules);
             if (!result) {
                 // Unknown — surface for admin review

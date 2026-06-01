@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -99,8 +99,10 @@ export async function GET(req: NextRequest) {
 
         const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-        if (hasProteinModifier(mods)) {
-            // Modifier-based path
+        const mainFromModifier = hasMainProteinModifier(mods);
+
+        if (mainFromModifier) {
+            // Main protein is chosen via a "Choice of Protein" modifier group
             for (const mod of mods) {
                 const grp    = (mod.modifierGroup ?? "").toLowerCase();
                 const name   = (mod.modifier ?? "").trim();
@@ -121,7 +123,7 @@ export async function GET(req: NextRequest) {
                 dayQty.set(date, (dayQty.get(date) ?? 0) + modQty);
             }
         } else {
-            // Item-rule path
+            // Main protein lives in the dish name (may still carry "Extra …" mods)
             const result = classifyItem(dishName, rules);
             if (!result) continue;
             if (result.category !== "main_protein") continue;

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export const dynamic   = "force-dynamic";
 export const revalidate = 0;
@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
 
         const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-        if (hasProteinModifier(mods)) {
+        if (hasMainProteinModifier(mods)) {
             for (const mod of mods) {
                 const grp    = (mod.modifierGroup ?? "").toLowerCase();
                 const name   = (mod.modifier ?? "").trim();

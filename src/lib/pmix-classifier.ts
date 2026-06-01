@@ -82,3 +82,23 @@ export function hasProteinModifier(
         return grp.includes("protein") || grp.includes("extra") || name.startsWith("extra ");
     });
 }
+
+/**
+ * True only when the item's MAIN protein is chosen via a modifier group
+ * (a group whose name contains "protein" and is NOT an "extra" add-on group).
+ *
+ * This is the signal that the dish name should NOT be classified for its main
+ * protein (the protein comes from the chosen modifier instead). Items that have
+ * ONLY an "Extra …" group (e.g. "Duck Panang" + "Extra Protein") still carry
+ * their main protein in the dish name and must be classified by name.
+ */
+export function hasMainProteinModifier(
+    modifiers: Array<{ modifierGroup: string; modifier: string; qtySold: number }>,
+): boolean {
+    return modifiers.some(m => {
+        const grp     = (m.modifierGroup ?? "").toLowerCase();
+        const name    = (m.modifier      ?? "").toLowerCase();
+        const isExtra = grp.includes("extra") || name.startsWith("extra ");
+        return grp.includes("protein") && !isExtra;
+    });
+}

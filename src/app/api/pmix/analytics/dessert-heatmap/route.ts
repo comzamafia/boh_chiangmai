@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { classifyItem, hasProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
+import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { loadInventoryByName, fuzzyMatchInventory, toDisplayQty } from "@/lib/inventory-match";
 
 export const dynamic   = "force-dynamic";
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         if (!date) continue;
 
         const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
-        if (hasProteinModifier(mods)) continue;
+        if (hasMainProteinModifier(mods)) continue;
         const cls = classifyItem(dishName, rules);
         if (!cls || cls.category !== "dessert") continue;
 

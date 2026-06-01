@@ -14,6 +14,7 @@ import {
     TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ScrollText, Loader2, ChevronDown, ChevronRight, Search, RefreshCw } from "lucide-react";
+import { DataPagination, paginate } from "@/components/ui/data-pagination";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ACTION_COLORS: Record<string, string> = {
@@ -162,6 +163,11 @@ export default function AuditLogPage() {
           )
         : logs;
 
+    const [page, setPage]         = useState(1);
+    const [pageSize, setPageSize] = useState(25);
+    useEffect(() => { setPage(1); }, [userFilter, actionFilter, tableFilter, from, to]);
+    const paged = paginate(filtered, page, pageSize);
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
@@ -262,11 +268,18 @@ export default function AuditLogPage() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filtered.map(log => <AuditRow key={log.id} log={log} />)
+                            paged.map(log => <AuditRow key={log.id} log={log} />)
                         )}
                     </TableBody>
                 </Table>
             </div>
+
+            {!loading && filtered.length > 0 && (
+                <DataPagination
+                    total={filtered.length} page={page} pageSize={pageSize}
+                    onPageChange={setPage} onPageSizeChange={setPageSize}
+                />
+            )}
         </div>
     );
 }

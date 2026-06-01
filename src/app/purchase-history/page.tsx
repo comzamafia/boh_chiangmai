@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Download, Search, Filter, Loader2, PackageCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrency } from "@/components/currency-context";
+import { DataPagination, paginate } from "@/components/ui/data-pagination";
 
 // ─── Types (mirrors purchase-orders/page.tsx) ─────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function PurchaseHistoryPage() {
     const [supplierFilter, setSupplierFilter] = useState("all");
     const [dateFrom, setDateFrom]       = useState("");
     const [dateTo, setDateTo]           = useState("");
+    const [page, setPage]               = useState(1);
+    const [pageSize, setPageSize]       = useState(25);
     const { format, symbol }            = useCurrency();
 
     useEffect(() => {
@@ -119,6 +122,10 @@ export default function PurchaseHistoryPage() {
     });
 
     const grandTotal = filtered.reduce((acc, r) => acc + r.total, 0);
+
+    // Reset to first page whenever the filters change
+    useEffect(() => { setPage(1); }, [searchTerm, supplierFilter, dateFrom, dateTo]);
+    const paged = paginate(filtered, page, pageSize);
 
     // ── Export CSV ────────────────────────────────────────────────────────────
 
@@ -220,7 +227,7 @@ export default function PurchaseHistoryPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filtered.map(r => (
+                        {paged.map(r => (
                             <TableRow key={r.rowId}>
                                 <TableCell className="font-medium font-mono text-sm">{r.poNumber}</TableCell>
                                 <TableCell className="hidden sm:table-cell">{r.date}</TableCell>
@@ -245,6 +252,14 @@ export default function PurchaseHistoryPage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Pagination */}
+            {filtered.length > 0 && (
+                <DataPagination
+                    total={filtered.length} page={page} pageSize={pageSize}
+                    onPageChange={setPage} onPageSizeChange={setPageSize}
+                />
+            )}
 
             {/* Grand Total */}
             <div className="flex justify-end">

@@ -40,6 +40,7 @@ import {
     DollarSign, TrendingUp, RefreshCw, FileDown,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DataPagination, paginate } from "@/components/ui/data-pagination";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell, Legend,
@@ -179,6 +180,8 @@ export default function InventoryPage() {
 
     // Txn filter
     const [txnType,     setTxnType]     = useState("all");
+    const [txnPage,     setTxnPage]     = useState(1);
+    const [txnPageSize, setTxnPageSize] = useState(25);
 
     // mounted for charts
     const [mounted, setMounted] = useState(false);
@@ -968,7 +971,7 @@ export default function InventoryPage() {
                 {/* ══ TRANSACTION HISTORY ═════════════════════════════════════════ */}
                 <TabsContent value="history" className="mt-4 space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
-                        <Select value={txnType} onValueChange={setTxnType}>
+                        <Select value={txnType} onValueChange={(v) => { setTxnType(v); setTxnPage(1); }}>
                             <SelectTrigger className="w-40"><SelectValue placeholder="All types" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Types</SelectItem>
@@ -995,7 +998,7 @@ export default function InventoryPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {txns.filter(t => txnType === "all" || t.type === txnType).slice(0, 100).map(t => {
+                                {paginate(txns.filter(t => txnType === "all" || t.type === txnType), txnPage, txnPageSize).map(t => {
                                     const cfg  = TXN_CONFIG[t.type] ?? { label: t.type, badge: "", sign: "?" };
                                     return (
                                         <TableRow key={t.id}>
@@ -1032,6 +1035,15 @@ export default function InventoryPage() {
                             </TableBody>
                         </Table>
                     </div>
+                    {(() => {
+                        const total = txns.filter(t => txnType === "all" || t.type === txnType).length;
+                        return total > 0 ? (
+                            <DataPagination
+                                total={total} page={txnPage} pageSize={txnPageSize}
+                                onPageChange={setTxnPage} onPageSizeChange={setTxnPageSize}
+                            />
+                        ) : null;
+                    })()}
                 </TabsContent>
 
                 {/* ══ USAGE TREND ═══════════════════════════════════════════════ */}

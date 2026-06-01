@@ -196,18 +196,41 @@ export async function GET(req: NextRequest) {
      * Units must match to be additive.
      */
     function foldExtrasIntoMain(main: ByType[], extra: ByType[]) {
-        const extraUsedByBase = new Map<string, { used: number; unit: string }>();
+        const extraAgg = new Map<string, { used: number; unit: string; display: string }>();
         for (const e of extra) {
             if (e.totalUsed == null || !e.portionUnit) continue;
-            const base = e.proteinType.replace(/^extra\s+/i, "").trim().toLowerCase();
-            const cur  = extraUsedByBase.get(base);
+            const display = e.proteinType.replace(/^extra\s+/i, "").trim();
+            const base    = display.toLowerCase();
+            const cur     = extraAgg.get(base);
             if (cur && cur.unit === e.portionUnit) cur.used += e.totalUsed;
-            else if (!cur)                          extraUsedByBase.set(base, { used: e.totalUsed, unit: e.portionUnit });
+            else if (!cur)                          extraAgg.set(base, { used: e.totalUsed, unit: e.portionUnit, display });
         }
+        const consumed = new Set<string>();
         for (const p of main) {
-            const ex = extraUsedByBase.get(p.proteinType.toLowerCase().trim());
-            p.extraUsed = (ex && ex.unit === p.portionUnit) ? +ex.used.toFixed(3) : 0;
+            const key = p.proteinType.toLowerCase().trim();
+            const ex  = extraAgg.get(key);
+            if (ex) {
+                consumed.add(key);
+                p.extraUsed = (p.portionUnit === null || ex.unit === p.portionUnit) ? +ex.used.toFixed(3) : 0;
+            } else {
+                p.extraUsed = 0;
+            }
         }
+        // Proteins sold ONLY as an Extra add-on → surface as their own main row.
+        for (const [base, ex] of extraAgg) {
+            if (consumed.has(base)) continue;
+            const std = stdByName.get(base);
+            main.push({
+                proteinType:    ex.display,
+                qty:            0,
+                totalUsed:      0,
+                portionSize:    std ? std.portionSize : null,
+                portionUnit:    ex.unit,
+                ingredientName: std ? std.ingredientName : null,
+                extraUsed:      +ex.used.toFixed(3),
+            });
+        }
+        main.sort((a, b) => (b.qty + (b.extraUsed ?? 0)) - (a.qty + (a.extraUsed ?? 0)) || a.proteinType.localeCompare(b.proteinType));
     }
 
     const sortByDish = (a: ByDish, b: ByDish) => {

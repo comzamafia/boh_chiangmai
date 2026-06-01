@@ -452,6 +452,7 @@ export default function PmixDashboardPage() {
     const [rangeTo,        setRangeTo]        = useState(() => new Date().toISOString().slice(0, 10));
     const [rangeData,      setRangeData]      = useState<PmixRangeResult | null>(null);
     const [rangeLoading,   setRangeLoading]   = useState(false);
+    const [showRangeDetails, setShowRangeDetails] = useState(false);   // collapse secondary range cards
     const [uploadDate,     setUploadDate]     = useState(() => new Date().toISOString().slice(0, 10));
     const [autoSync,       setAutoSync]       = useState(true);   // auto sync→sales+inventory after upload
     const [uploadMsg,      setUploadMsg]      = useState<string | null>(null);
@@ -3372,27 +3373,6 @@ export default function PmixDashboardPage() {
                                 </Card>
                             )}
 
-                            {/* ── 7-Day Usage Heatmap ────────────────────────────── */}
-                            {rangeData.topItems.length > 0 && (
-                                <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <Star className="w-4 h-4 text-amber-500" />
-                                            7-Day Usage Trend — Top {rangeData.topItems.length} Important Items
-                                        </CardTitle>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                                            Qty sold by day of week · aggregated across the selected date range · darker cell = higher volume
-                                        </p>
-                                    </CardHeader>
-                                    <CardContent className="px-3 sm:px-5 pb-4">
-                                        <ItemUsageHeatmap
-                                            items={rangeData.topItems}
-                                            dayCount={rangeData.dayCount}
-                                        />
-                                    </CardContent>
-                                </Card>
-                            )}
-
                             {/* ── Category breakdown ─────────────────────────────── */}
                             <Card>
                                 <CardHeader className="pb-2">
@@ -3487,6 +3467,40 @@ export default function PmixDashboardPage() {
                                                     <div className="border-t border-border pt-2 mt-1 text-right text-muted-foreground text-[11px]">100%</div>
                                                 </div>
                                                 </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    {/* ── Toggle: detailed breakdown ───────────────── */}
+                                    <button
+                                        onClick={() => setShowRangeDetails(v => !v)}
+                                        className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                                    >
+                                        <ChevronDown className={`w-4 h-4 transition-transform ${showRangeDetails ? "rotate-180" : ""}`} />
+                                        {showRangeDetails
+                                            ? "Hide detailed breakdown"
+                                            : "Show detailed breakdown · usage heatmap · extras · desserts · beverages · curries · by-dish"}
+                                    </button>
+
+                                    {showRangeDetails && (
+                                    <>
+                                    {/* ── 7-Day Usage Heatmap ────────────────────────────── */}
+                                    {rangeData.topItems.length > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm flex items-center gap-2">
+                                                    <Star className="w-4 h-4 text-amber-500" />
+                                                    7-Day Usage Trend — Top {rangeData.topItems.length} Important Items
+                                                </CardTitle>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    Qty sold by day of week · aggregated across the selected date range · darker cell = higher volume
+                                                </p>
+                                            </CardHeader>
+                                            <CardContent className="px-3 sm:px-5 pb-4">
+                                                <ItemUsageHeatmap
+                                                    items={rangeData.topItems}
+                                                    dayCount={rangeData.dayCount}
+                                                />
                                             </CardContent>
                                         </Card>
                                     )}
@@ -3683,6 +3697,8 @@ export default function PmixDashboardPage() {
                                                 </div>
                                             </CardContent>
                                         </Card>
+                                    )}
+                                    </>
                                     )}
                                 </>
                             )}

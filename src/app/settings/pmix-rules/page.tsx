@@ -24,7 +24,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, Pencil, Trash2, Tag, RefreshCw } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Tag, RefreshCw, Sparkles, Zap } from "lucide-react";
 
 interface ItemRule {
     id:        string;
@@ -36,6 +36,13 @@ interface ItemRule {
     isActive:  boolean;
     notes:     string | null;
     createdAt: string;
+}
+
+interface UncatItem {
+    itemName: string;
+    category: string;   // POS category (informational)
+    qty:      number;
+    days:     number;
 }
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
@@ -72,6 +79,10 @@ export default function PmixRulesPage() {
     const [testInput, setTestInput] = useState("");
     const [testResult, setTestResult] = useState<{ label: string; category: string; pattern: string } | null | "no-match">(null);
 
+    // Uncategorized items (need a rule) — surfaced for one-click "Quick add"
+    const [uncat, setUncat] = useState<UncatItem[]>([]);
+    const [uncatLoading, setUncatLoading] = useState(true);
+
     const load = useCallback(async () => {
         setLoading(true);
         try {
@@ -81,7 +92,17 @@ export default function PmixRulesPage() {
         } finally { setLoading(false); }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    const loadUncat = useCallback(async () => {
+        setUncatLoading(true);
+        try {
+            const r = await fetch("/api/pmix/uncategorized");
+            const data = await r.json();
+            setUncat(Array.isArray(data?.items) ? data.items : []);
+        } catch { setUncat([]); }
+        finally { setUncatLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); loadUncat(); }, [load, loadUncat]);
 
     function openNew() {
         setEditId(null);
@@ -103,6 +124,22 @@ export default function PmixRulesPage() {
         setOpen(true);
     }
 
+    // Prefill the Add-Rule dialog from an uncategorized item (one-click).
+    // Defaults to an EXACT main-protein rule on the full dish name; the admin
+    // can adjust category / match type / label before saving.
+    function quickAdd(item: UncatItem) {
+        setEditId(null);
+        setForm({
+            ...EMPTY_FORM,
+            pattern:   item.itemName,
+            matchType: "exact",
+            category:  "main_protein",
+            label:     "",
+            priority:  "0",
+        });
+        setOpen(true);
+    }
+
     async function save() {
         if (!form.pattern.trim()) return;
         setSaving(true);
@@ -119,14 +156,14 @@ export default function PmixRulesPage() {
                 await fetch("/api/pmix/item-rules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             }
             setOpen(false);
-            await load();
+            await Promise.all([load(), loadUncat()]);
         } finally { setSaving(false); }
     }
 
     async function remove(id: string) {
         if (!confirm("Delete this rule?")) return;
         await fetch(`/api/pmix/item-rules/${id}`, { method: "DELETE" });
-        await load();
+        await Promise.all([load(), loadUncat()]);
     }
 
     async function toggleActive(rule: ItemRule) {
@@ -203,6 +240,57 @@ export default function PmixRulesPage() {
                                     label: <strong>{testResult.label}</strong>
                                 </p>
                             )}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Uncategorized — needs a rule */}
+            <Card className={uncat.length > 0 ? "border-amber-300 dark:border-amber-800" : ""}>
+                <CardHeader className="pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <Sparkles className="h-4 w-4 text-amber-600" />
+                                Uncategorized Items
+                                {!uncatLoading && (
+                                    <Badge variant="outline" className="ml-1">{uncat.length}</Badge>
+                                )}
+                            </CardTitle>
+                            <CardDescription>
+                                Sold items (last 365 days) that match no rule. Click <strong>Quick add</strong> to turn one into a rule.
+                            </CardDescription>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={loadUncat} disabled={uncatLoading}>
+                            <RefreshCw className={`h-4 w-4 mr-1.5 ${uncatLoading ? "animate-spin" : ""}`} /> Refresh
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {uncatLoading ? (
+                        <div className="flex justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        </div>
+                    ) : uncat.length === 0 ? (
+                        <p className="text-sm text-green-700 dark:text-green-400 py-4 text-center">
+                            ✓ All sold items are classified. Nothing to review.
+                        </p>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {uncat.map(item => (
+                                <button
+                                    key={item.itemName}
+                                    onClick={() => quickAdd(item)}
+                                    title={`${item.qty} sold · seen on ${item.days} day(s) · click to add a rule`}
+                                    className="group inline-flex items-center gap-2 rounded-full border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 pl-3 pr-2 py-1 text-sm hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                                >
+                                    <span className="font-medium">{item.itemName}</span>
+                                    <span className="text-[11px] text-muted-foreground tabular-nums">{item.qty}</span>
+                                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-600 text-white px-1.5 py-0.5 text-[10px] font-semibold opacity-80 group-hover:opacity-100">
+                                        <Zap className="h-3 w-3" /> Add
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     )}
                 </CardContent>

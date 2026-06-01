@@ -372,7 +372,7 @@ function PackEditorDialog({
                     <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
                         <div className="space-y-1">
                             <Label className="text-xs">Pack name</Label>
-                            <Input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Case / ลัง / Bag" className="h-10" />
+                            <Input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Case / Box / Bag" className="h-10" />
                         </div>
                         <span className="pb-2.5 text-muted-foreground text-sm">=</span>
                         <div className="space-y-1">

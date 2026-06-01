@@ -56,7 +56,7 @@ Example — Lobster:
                             <ol className="list-decimal pl-5 space-y-1.5">
                                 <li>Open <strong>Inventory → Stock Count</strong>.</li>
                                 <li>Find the ingredient. If no pack is set, you&apos;ll see a dashed <strong>&quot;Set pack size&quot;</strong> button.</li>
-                                <li>Tap it. Enter <strong>Pack name</strong> (e.g. <em>Case</em>, <em>ลัง</em>, <em>Box</em>) and <strong>Size</strong> in the purchase unit (e.g. <em>50</em> = 1 Case of 50 lb).</li>
+                                <li>Tap it. Enter <strong>Pack name</strong> (e.g. <em>Case</em>, <em>Box</em>, <em>Crate</em>) and <strong>Size</strong> in the purchase unit (e.g. <em>50</em> = 1 Case of 50 lb).</li>
                                 <li>Check the preview: <span className="font-mono text-xs">1 Case = 50 lb = 800 oz</span>. Tap <strong>Save</strong>.</li>
                                 <li>An amber chip <span className="font-mono text-xs">1 Case = 50 lb</span> now shows on the card. Tap it any time to edit.</li>
                             </ol>

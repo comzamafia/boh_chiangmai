@@ -829,8 +829,8 @@ export default function PmixDashboardPage() {
             // Duplicate-date guard → confirm replace, then retry
             if (res.status === 409 && res.duplicate) {
                 const ok = window.confirm(
-                    `มีรายงาน PMIX ของวันที่ ${res.businessDate ?? uploadDate} อยู่แล้ว (${res.existingCount} ไฟล์)\n\n` +
-                    `กด OK เพื่อ "แทนที่" ของเดิม หรือ Cancel เพื่อยกเลิก`
+                    `A PMIX report for ${res.businessDate ?? uploadDate} already exists (${res.existingCount} file${res.existingCount === 1 ? "" : "s"}).\n\n` +
+                    `Click OK to replace it, or Cancel to abort.`
                 );
                 setUploading(false);
                 if (ok) await handleFile(file, true);
@@ -846,8 +846,8 @@ export default function PmixDashboardPage() {
             setSelectedId(res.uploadId);
             changeHistoryMode("single");
 
-            let msg = `อัพโหลดสำเร็จ — ${res.totalItems ?? 0} เมนู`;
-            if (res.replaced) msg += ` (แทนที่ ${res.replaced} ไฟล์เดิม)`;
+            let msg = `Upload successful — ${res.totalItems ?? 0} items`;
+            if (res.replaced) msg += ` (replaced ${res.replaced} existing file${res.replaced === 1 ? "" : "s"})`;
 
             // One-step daily flow: auto sync → Daily Sales + deplete inventory
             if (autoSync && uploadDate) {
@@ -856,10 +856,10 @@ export default function PmixDashboardPage() {
                     let depleted: number | undefined;
                     try { depleted = (await pmixApi.depleteInventory(res.uploadId, uploadDate)).depleted; } catch { /* best-effort */ }
                     await loadSyncStatus(res.uploadId);
-                    msg += ` · ซิงค์ยอดขาย ${r.synced} รายการ`;
-                    if (depleted != null) msg += depleted > 0 ? ` · หักสต็อก ${depleted} วัตถุดิบ` : ` · (ยังไม่หักสต็อก — ผูกสูตร/track วัตถุดิบก่อน)`;
+                    msg += ` · synced ${r.synced} sales record${r.synced === 1 ? "" : "s"}`;
+                    if (depleted != null) msg += depleted > 0 ? ` · depleted ${depleted} ingredient${depleted === 1 ? "" : "s"}` : ` · (no stock depleted — link recipes / track ingredients first)`;
                 } catch {
-                    msg += " · ⚠ ซิงค์อัตโนมัติไม่สำเร็จ กด Sync เองได้";
+                    msg += " · ⚠ Auto-sync failed — you can run Sync manually";
                 }
             }
             setUploadMsg(msg);
@@ -1131,7 +1131,7 @@ export default function PmixDashboardPage() {
                         className="h-3.5 w-3.5 rounded border-border accent-primary" />
                     <span>
                         <Zap className="w-3 h-3 inline mr-0.5 text-emerald-500" />
-                        หลังอัพโหลด ซิงค์เข้า Daily Sales + หักสต็อกอัตโนมัติ (วันที่ {uploadDate})
+                        After upload, auto-sync to Daily Sales + deplete stock (for {uploadDate})
                     </span>
                 </label>
 

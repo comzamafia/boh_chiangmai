@@ -1075,6 +1075,9 @@ export interface PmixRangeResult {
         uncategorized?: { itemName: string; category: string; qty: number }[];
         hasProteinData: boolean;
     };
+    lossItems?: { itemName: string; category: string; qtySold: number; refundQty: number; refundAmount: number; discountAmount: number }[];
+    lossTotals?: { refundQty: number; refundAmount: number };
+    modifierPrep?: { group: string; modifier: string; qty: number; avgQtyPerDay: number }[];
     message?:          string;
 }
 

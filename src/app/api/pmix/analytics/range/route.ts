@@ -394,6 +394,38 @@ export async function GET(req: NextRequest) {
     const totalRefundAmt  = [...itemMap.values()].reduce((s, i) => s + i.refundAmount, 0);
     const allDates        = [...trendMap.keys()].sort();
 
+    // ─── Quality & Loss: items with refunds / discounts ─────────────────────────
+    const lossItems = [...itemMap.values()]
+        .filter(i => i.refundAmount > 0 || i.refundQty > 0 || i.discountAmount > 0)
+        .map(i => ({
+            itemName:       i.itemName,
+            category:       i.category,
+            qtySold:        i.qtySold,
+            refundQty:      i.refundQty,
+            refundAmount:   +i.refundAmount.toFixed(2),
+            discountAmount: +i.discountAmount.toFixed(2),
+        }))
+        .sort((a, b) => (b.refundAmount + b.discountAmount) - (a.refundAmount + a.discountAmount));
+
+    // ─── Kitchen Prep: modifier mise-en-place totals (group → modifier → qty) ───
+    const modPrepMap = new Map<string, { group: string; modifier: string; qty: number }>();
+    for (const item of items) {
+        const mods = item.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
+        for (const m of mods) {
+            const group = (m.modifierGroup ?? "").trim();
+            const name  = (m.modifier ?? "").trim();
+            if (!group || !name) continue;
+            const k  = `${group}|||${name}`;
+            const ex = modPrepMap.get(k);
+            if (ex) ex.qty += Number(m.qtySold ?? 0);
+            else    modPrepMap.set(k, { group, modifier: name, qty: Number(m.qtySold ?? 0) });
+        }
+    }
+    const modifierPrep = [...modPrepMap.values()]
+        .filter(m => m.qty > 0)
+        .sort((a, b) => a.group.localeCompare(b.group) || b.qty - a.qty)
+        .map(m => ({ ...m, avgQtyPerDay: dayCount > 0 ? +(m.qty / dayCount).toFixed(1) : 0 }));
+
     return NextResponse.json({
         uploadIds,
         dayCount,
@@ -413,6 +445,9 @@ export async function GET(req: NextRequest) {
         categoryBreakdown,
         dailyTrend,
         proteinTotals,
+        lossItems,
+        lossTotals: { refundQty: totalRefundQty, refundAmount: +totalRefundAmt.toFixed(2) },
+        modifierPrep,
         ingredientSummary: {
             mainProtein:  {
                 byType:     proteinTotals,

@@ -1078,6 +1078,14 @@ export interface PmixRangeResult {
     lossItems?: { itemName: string; category: string; qtySold: number; refundQty: number; refundAmount: number; discountAmount: number }[];
     lossTotals?: { refundQty: number; refundAmount: number };
     modifierPrep?: { group: string; modifier: string; qty: number; avgQtyPerDay: number }[];
+    bcg?: {
+        items: { itemName: string; category: string; qtySold: number; netSales: number; unitPrice: number; quadrant: "Star" | "Plowhorse" | "Puzzle" | "Dog" }[];
+        summary: { Star: number; Plowhorse: number; Puzzle: number; Dog: number; avgQty: number; avgPrice: number };
+    };
+    bom?: {
+        consumption: { ingredientId: string; ingredientName: string; unit: string; totalQty: number; avgPerDay: number }[];
+        linkedRecipes: number;
+    };
     message?:          string;
 }
 

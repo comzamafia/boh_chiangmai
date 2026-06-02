@@ -3354,31 +3354,55 @@ export default function PmixDashboardPage() {
                                 ))}
                             </div>
 
-                            {/* ════ MENU ENGINEERING (Top sellers & revenue) ════ */}
+                            {/* ════ MENU ENGINEERING (BCG matrix) ════ */}
                             {rangeTab === "bcg" && (
                                 <Card>
                                     <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4 text-rose-600" /> Menu Engineering — Top Sellers ({rangeData.dayCount}-day)</CardTitle>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">Ranked by volume across the range · revenue and daily average per item</p>
+                                        <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4 text-rose-600" /> Menu Engineering — BCG Matrix ({rangeData.dayCount}-day)</CardTitle>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                            Popularity (qty vs avg {rangeData.bcg?.summary.avgQty ?? 0}) × Profitability (net/unit vs avg ${rangeData.bcg?.summary.avgPrice ?? 0})
+                                        </p>
                                     </CardHeader>
-                                    <CardContent className="px-2 sm:px-6">
+                                    <CardContent className="px-2 sm:px-6 space-y-3">
+                                        {/* Quadrant summary */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {([
+                                                { q: "Star",      desc: "High vol · High $", cls: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" },
+                                                { q: "Plowhorse",  desc: "High vol · Low $",  cls: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800" },
+                                                { q: "Puzzle",     desc: "Low vol · High $",  cls: "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800" },
+                                                { q: "Dog",        desc: "Low vol · Low $",   cls: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700" },
+                                            ] as const).map(({ q, desc, cls }) => (
+                                                <div key={q} className={`rounded-xl border p-2.5 ${cls}`}>
+                                                    <p className="text-lg font-bold tabular-nums leading-none">{rangeData.bcg?.summary[q] ?? 0}</p>
+                                                    <p className="text-[11px] font-semibold mt-0.5">{q}</p>
+                                                    <p className="text-[9px] opacity-80">{desc}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {/* Item table */}
                                         <div className="overflow-x-auto">
-                                            <table className="w-full text-xs min-w-[420px]">
+                                            <table className="w-full text-xs min-w-[460px]">
                                                 <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                                    <th className="text-left py-2 pl-2">#</th><th className="text-left py-2">Item</th>
-                                                    <th className="text-right py-2 px-2">Qty</th><th className="text-right py-2 px-2">Avg/Day</th><th className="text-right py-2 pr-2">Net Sales</th>
+                                                    <th className="text-left py-2 pl-2">Item</th><th className="text-left py-2 px-2">Class</th>
+                                                    <th className="text-right py-2 px-2">Qty</th><th className="text-right py-2 px-2">Net/Unit</th><th className="text-right py-2 pr-2">Net Sales</th>
                                                 </tr></thead>
                                                 <tbody className="divide-y divide-border/40">
-                                                    {rangeData.topItems.map((it, i) => (
-                                                        <tr key={i} className="hover:bg-muted/20">
-                                                            <td className="py-1.5 pl-2 text-muted-foreground tabular-nums">{i + 1}</td>
-                                                            <td className="py-1.5"><span className="font-medium">{it.itemName}</span><span className="block text-[10px] text-muted-foreground">{it.category}</span></td>
-                                                            <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{it.qtySold.toLocaleString()}</td>
-                                                            <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{it.avgQtyPerDay}</td>
-                                                            <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">${Number(it.netSales).toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
-                                                        </tr>
-                                                    ))}
-                                                    {rangeData.topItems.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground italic">No items in this range</td></tr>}
+                                                    {(rangeData.bcg?.items ?? []).map((it, i) => {
+                                                        const qc: Record<string, string> = {
+                                                            Star: "text-amber-600 dark:text-amber-400", Plowhorse: "text-blue-600 dark:text-blue-400",
+                                                            Puzzle: "text-violet-600 dark:text-violet-400", Dog: "text-slate-500",
+                                                        };
+                                                        return (
+                                                            <tr key={i} className="hover:bg-muted/20">
+                                                                <td className="py-1.5 pl-2"><span className="font-medium">{it.itemName}</span><span className="block text-[10px] text-muted-foreground">{it.category}</span></td>
+                                                                <td className={`py-1.5 px-2 font-semibold ${qc[it.quadrant]}`}>{it.quadrant}</td>
+                                                                <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{it.qtySold.toLocaleString()}</td>
+                                                                <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">${it.unitPrice.toFixed(2)}</td>
+                                                                <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">${it.netSales.toLocaleString("en-CA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {(rangeData.bcg?.items.length ?? 0) === 0 && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground italic">No items in this range</td></tr>}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -3450,31 +3474,54 @@ export default function PmixDashboardPage() {
                                 </Card>
                             )}
 
-                            {/* ════ BOM LINKAGE (dish → protein) ════ */}
+                            {/* ════ BOM LINKAGE (recipe-level ingredient consumption) ════ */}
                             {rangeTab === "bom" && (
                                 <Card>
                                     <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm flex items-center gap-2"><Link2 className="w-4 h-4 text-emerald-600" /> BOM Linkage — Dish → Protein ({rangeData.dayCount}-day)</CardTitle>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">How each dish maps to its main protein across the range · open a single day for full recipe-level BOM</p>
+                                        <CardTitle className="text-sm flex items-center gap-2"><Link2 className="w-4 h-4 text-emerald-600" /> BOM Linkage — Ingredient Consumption ({rangeData.dayCount}-day)</CardTitle>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                            {(rangeData.bom?.linkedRecipes ?? 0) > 0
+                                                ? `Estimated ingredient usage from ${rangeData.bom?.linkedRecipes} linked recipe(s) across the range`
+                                                : "No PMIX items are linked to recipes yet — showing dish → protein mapping instead"}
+                                        </p>
                                     </CardHeader>
                                     <CardContent className="px-2 sm:px-6">
-                                        <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
-                                            <table className="w-full text-xs min-w-[420px]">
-                                                <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border sticky top-0 bg-card">
-                                                    <th className="text-left py-2 pl-2">Dish</th><th className="text-right py-2 px-2">Protein</th><th className="text-right py-2 pr-2">Qty</th>
-                                                </tr></thead>
-                                                <tbody className="divide-y divide-border/40">
-                                                    {(rangeData.ingredientSummary?.mainProtein.byDish ?? []).map((d, i) => (
-                                                        <tr key={i} className="hover:bg-muted/20">
-                                                            <td className="py-1.5 pl-2"><span className="text-muted-foreground text-[10px] mr-1">{d.category}</span>{d.dish}</td>
-                                                            <td className="py-1.5 px-2 text-right text-muted-foreground">{d.proteinType}</td>
-                                                            <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{d.qty}</td>
-                                                        </tr>
-                                                    ))}
-                                                    {(rangeData.ingredientSummary?.mainProtein.byDish.length ?? 0) === 0 && <tr><td colSpan={3} className="py-8 text-center text-muted-foreground italic">No linked dishes in this range</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                        {(rangeData.bom?.consumption.length ?? 0) > 0 ? (
+                                            <div className="overflow-x-auto max-h-[30rem] overflow-y-auto">
+                                                <table className="w-full text-xs min-w-[420px]">
+                                                    <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border sticky top-0 bg-card">
+                                                        <th className="text-left py-2 pl-2">Ingredient</th><th className="text-right py-2 px-2">Total Used</th><th className="text-right py-2 pr-2">Avg/Day</th>
+                                                    </tr></thead>
+                                                    <tbody className="divide-y divide-border/40">
+                                                        {(rangeData.bom?.consumption ?? []).map((c, i) => (
+                                                            <tr key={i} className="hover:bg-muted/20">
+                                                                <td className="py-1.5 pl-2 font-medium">{c.ingredientName}</td>
+                                                                <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{c.totalQty.toLocaleString()} <span className="text-muted-foreground text-[10px]">{c.unit}</span></td>
+                                                                <td className="py-1.5 pr-2 text-right tabular-nums text-muted-foreground">{c.avgPerDay}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto max-h-[30rem] overflow-y-auto">
+                                                <table className="w-full text-xs min-w-[420px]">
+                                                    <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border sticky top-0 bg-card">
+                                                        <th className="text-left py-2 pl-2">Dish</th><th className="text-right py-2 px-2">Protein</th><th className="text-right py-2 pr-2">Qty</th>
+                                                    </tr></thead>
+                                                    <tbody className="divide-y divide-border/40">
+                                                        {(rangeData.ingredientSummary?.mainProtein.byDish ?? []).map((d, i) => (
+                                                            <tr key={i} className="hover:bg-muted/20">
+                                                                <td className="py-1.5 pl-2"><span className="text-muted-foreground text-[10px] mr-1">{d.category}</span>{d.dish}</td>
+                                                                <td className="py-1.5 px-2 text-right text-muted-foreground">{d.proteinType}</td>
+                                                                <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{d.qty}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {(rangeData.ingredientSummary?.mainProtein.byDish.length ?? 0) === 0 && <tr><td colSpan={3} className="py-8 text-center text-muted-foreground italic">No linked dishes in this range</td></tr>}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             )}

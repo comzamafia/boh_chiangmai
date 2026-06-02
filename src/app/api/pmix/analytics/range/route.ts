@@ -426,6 +426,77 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => a.group.localeCompare(b.group) || b.qty - a.qty)
         .map(m => ({ ...m, avgQtyPerDay: dayCount > 0 ? +(m.qty / dayCount).toFixed(1) : 0 }));
 
+    // ─── Menu Engineering (BCG matrix) ──────────────────────────────────────────
+    // Popularity = qty vs avg; Profitability proxy = net sales per unit vs avg
+    const bcgRaw   = [...itemMap.values()];
+    const bcgAvgQty   = bcgRaw.length > 0 ? bcgRaw.reduce((s, i) => s + i.qtySold, 0) / bcgRaw.length : 0;
+    const bcgPriced   = bcgRaw.filter(i => i.qtySold > 0);
+    const bcgAvgPrice = bcgPriced.length > 0 ? bcgPriced.reduce((s, i) => s + i.netSales / i.qtySold, 0) / bcgPriced.length : 0;
+    const classifyBcg = (qty: number, up: number): "Star" | "Plowhorse" | "Puzzle" | "Dog" => {
+        const hiPop = qty >= bcgAvgQty, hiProf = up >= bcgAvgPrice;
+        return hiPop && hiProf ? "Star" : hiPop && !hiProf ? "Plowhorse" : !hiPop && hiProf ? "Puzzle" : "Dog";
+    };
+    const bcgItems = bcgRaw.map(i => {
+        const unitPrice = i.qtySold > 0 ? i.netSales / i.qtySold : 0;
+        return {
+            itemName: i.itemName, category: i.category,
+            qtySold: i.qtySold, netSales: +i.netSales.toFixed(2),
+            unitPrice: +unitPrice.toFixed(2), quadrant: classifyBcg(i.qtySold, unitPrice),
+        };
+    }).sort((a, b) => b.qtySold - a.qtySold);
+    const bcg = {
+        items:   bcgItems,
+        summary: {
+            Star:      bcgItems.filter(i => i.quadrant === "Star").length,
+            Plowhorse: bcgItems.filter(i => i.quadrant === "Plowhorse").length,
+            Puzzle:    bcgItems.filter(i => i.quadrant === "Puzzle").length,
+            Dog:       bcgItems.filter(i => i.quadrant === "Dog").length,
+            avgQty:    +bcgAvgQty.toFixed(1),
+            avgPrice:  +bcgAvgPrice.toFixed(2),
+        },
+    };
+
+    // ─── BOM: recipe-level ingredient consumption across the range ──────────────
+    const recipeQty = new Map<string, number>();   // recipeId → total qty sold
+    for (const it of items) {
+        const rid = (it as { recipeId?: string | null }).recipeId;
+        if (!rid) continue;
+        recipeQty.set(rid, (recipeQty.get(rid) ?? 0) + Number(it.qtySold ?? 0));
+    }
+    const bomRecipeIds = [...recipeQty.keys()];
+    const recipeIngredients = bomRecipeIds.length > 0
+        ? await db.recipeIngredient.findMany({
+            where:   { recipeId: { in: bomRecipeIds } },
+            include: {
+                ingredient: { select: { id: true, name: true, recipeUnit: true } },
+                recipe:     { select: { id: true, yieldAmount: true } },
+            },
+        })
+        : [];
+    const consMap = new Map<string, { ingredientId: string; ingredientName: string; unit: string; totalQty: number }>();
+    for (const rid of bomRecipeIds) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const riList = recipeIngredients.filter((ri: any) => ri.recipeId === rid);
+        const yieldAmt = Number(riList[0]?.recipe?.yieldAmount ?? 1) || 1;
+        const soldQty  = recipeQty.get(rid) ?? 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const ri of riList as any[]) {
+            const used = (Number(ri.quantity) / yieldAmt) * soldQty;
+            const ex = consMap.get(ri.ingredientId);
+            if (ex) ex.totalQty += used;
+            else consMap.set(ri.ingredientId, {
+                ingredientId:   ri.ingredientId,
+                ingredientName: ri.ingredient.name,
+                unit:           ri.ingredient.recipeUnit,
+                totalQty:       used,
+            });
+        }
+    }
+    const bomConsumption = [...consMap.values()]
+        .map(c => ({ ...c, totalQty: +c.totalQty.toFixed(3), avgPerDay: dayCount > 0 ? +(c.totalQty / dayCount).toFixed(3) : 0 }))
+        .sort((a, b) => b.totalQty - a.totalQty);
+    const bom = { consumption: bomConsumption, linkedRecipes: bomRecipeIds.length };
+
     return NextResponse.json({
         uploadIds,
         dayCount,
@@ -448,6 +519,8 @@ export async function GET(req: NextRequest) {
         lossItems,
         lossTotals: { refundQty: totalRefundQty, refundAmount: +totalRefundAmt.toFixed(2) },
         modifierPrep,
+        bcg,
+        bom,
         ingredientSummary: {
             mainProtein:  {
                 byType:     proteinTotals,

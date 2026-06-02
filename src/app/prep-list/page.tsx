@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
     Thermometer, Flame, Droplets, UtensilsCrossed, Soup, ChefHat, Coffee, Wine,
     Loader2, Plus, X, CalendarDays, RotateCcw, BarChart3, Pencil, GripVertical, CheckCircle2, ListChecks, FileDown,
+    ArrowRight, Undo2, Check,
 } from "lucide-react";
 import {
     prepApi, prepStationsApi, usersApi,
@@ -63,33 +64,36 @@ export default function PrepBoardPage() {
 
     const station = board?.stations.find(s => s.id === activeStation);
 
-    // ── Drag end → permission-aware move ──────────────────────────────────────
-    async function onDragEnd(e: DragEndEvent) {
-        setDragCard(null);
-        if (!e.over || !station) return;
-        const data = e.active.data.current as { card: PrepCard; from: Col } | undefined;
-        const to = (e.over.data.current as { col: Col } | undefined)?.col;
-        if (!data || !to || data.from === to) return;
+    // ── Permission-aware move (used by both drag-drop AND tap buttons) ─────────
+    const canMove = useCallback((from: Col, to: Col, canManage: boolean) =>
+        from !== to && (
+            (from === "tasklist" && to === "todo"     && canManage) ||
+            (from === "todo"     && to === "complete") ||
+            (from === "complete" && to === "todo") ||
+            (from === "todo"     && to === "tasklist" && canManage) ||
+            (from === "complete" && to === "tasklist" && canManage)
+        ), []);
 
-        const canManage = station.canManage;
-        // Permission matrix
-        const allowed =
-            (data.from === "tasklist" && to === "todo"     && canManage) ||
-            (data.from === "todo"     && to === "complete") ||
-            (data.from === "complete" && to === "todo") ||
-            (data.from === "todo"     && to === "tasklist" && canManage) ||
-            (data.from === "complete" && to === "tasklist" && canManage);
-        if (!allowed) return;
-
-        // Optimistic UI
-        applyOptimistic(station.id, data.card, data.from, to);
+    const moveCard = useCallback(async (card: PrepCard, from: Col, to: Col) => {
+        if (!station || !canMove(from, to, station.canManage)) return;
+        applyOptimistic(station.id, card, from, to);
         try {
             await prepApi.move({
                 date, to,
-                templateId:  to === "todo" && data.from === "tasklist" ? data.card.templateId : undefined,
-                boardTaskId: data.card.id,
+                templateId:  to === "todo" && from === "tasklist" ? card.templateId : undefined,
+                boardTaskId: card.id,
             });
         } finally { load(); }
+    }, [station, canMove, date, load]);
+
+    // ── Drag end → move ────────────────────────────────────────────────────────
+    async function onDragEnd(e: DragEndEvent) {
+        setDragCard(null);
+        if (!e.over) return;
+        const data = e.active.data.current as { card: PrepCard; from: Col } | undefined;
+        const to = (e.over.data.current as { col: Col } | undefined)?.col;
+        if (!data || !to) return;
+        await moveCard(data.card, data.from, to);
     }
 
     function applyOptimistic(stationId: string, card: PrepCard, from: Col, to: Col) {
@@ -149,10 +153,10 @@ export default function PrepBoardPage() {
                     </h2>
                     <p className="text-muted-foreground">Plan the shift, drag tasks across columns, track completion per station.</p>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                        <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9 w-40" />
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                    <div className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
+                        <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9 flex-1 sm:w-40" />
                     </div>
                     {board?.canPlan && (
                         <>
@@ -219,7 +223,7 @@ export default function PrepBoardPage() {
                                 onDragEnd={onDragEnd}>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <Column col="tasklist" title="Task List" subtitle="Backlog" accent="bg-slate-400"
-                                        cards={station.taskList} canManage={station.canManage}>
+                                        cards={station.taskList} canManage={station.canManage} onMove={moveCard}>
                                         {station.canManage && (
                                             <div className="mt-2 pt-2 border-t border-border/60 space-y-1.5">
                                                 <div className="flex flex-wrap items-end gap-1.5">
@@ -237,9 +241,9 @@ export default function PrepBoardPage() {
                                         )}
                                     </Column>
                                     <Column col="todo" title="To-Do" subtitle={`${station.todo.length} planned`} accent="bg-blue-500"
-                                        cards={station.todo} canManage={station.canManage} onDelete={station.canManage ? deleteTemplate : undefined} />
+                                        cards={station.todo} canManage={station.canManage} onMove={moveCard} onDelete={station.canManage ? deleteTemplate : undefined} />
                                     <Column col="complete" title="Complete" subtitle={`${station.complete.length} done`} accent="bg-emerald-500"
-                                        cards={station.complete} canManage={station.canManage} done />
+                                        cards={station.complete} canManage={station.canManage} onMove={moveCard} done />
                                 </div>
 
                                 <DragOverlay>
@@ -296,10 +300,12 @@ export default function PrepBoardPage() {
 }
 
 // ─── Column (droppable) ─────────────────────────────────────────────────────
-function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete, children }: {
+function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete, onMove, children }: {
     col: Col; title: string; subtitle: string; accent: string;
     cards: PrepCard[]; canManage: boolean; done?: boolean;
-    onDelete?: (templateId: string) => void; children?: React.ReactNode;
+    onDelete?: (templateId: string) => void;
+    onMove?: (card: PrepCard, from: Col, to: Col) => void;
+    children?: React.ReactNode;
 }) {
     const { setNodeRef, isOver } = useDroppable({ id: col, data: { col } });
     return (
@@ -315,6 +321,7 @@ function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete
             <div className="space-y-1.5">
                 {cards.map(c => (
                     <DraggableCard key={c.id ?? c.templateId} card={c} from={col} done={done}
+                        canManage={canManage} onMove={onMove}
                         onDelete={col === "tasklist" && canManage && onDelete ? () => onDelete(c.templateId) : undefined} />
                 ))}
                 {cards.length === 0 && <p className="text-xs text-muted-foreground/60 italic text-center py-3">Drop tasks here</p>}
@@ -325,31 +332,82 @@ function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete
 }
 
 // ─── Draggable card ─────────────────────────────────────────────────────────
-function DraggableCard({ card, from, done, onDelete }: { card: PrepCard; from: Col; done?: boolean; onDelete?: () => void }) {
+function DraggableCard({ card, from, done, canManage, onDelete, onMove }: {
+    card: PrepCard; from: Col; done?: boolean; canManage?: boolean;
+    onDelete?: () => void;
+    onMove?: (card: PrepCard, from: Col, to: Col) => void;
+}) {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: card.id ?? card.templateId, data: { card, from },
     });
+
+    // Tap-to-move actions (primary interaction on touch / mobile)
+    const move = (to: Col) => onMove?.(card, from, to);
+
     return (
-        <div ref={setNodeRef} {...attributes} {...listeners}
-            className={`group rounded-lg border bg-card px-2.5 py-2 flex items-start gap-2 cursor-grab active:cursor-grabbing touch-none
-                ${isDragging ? "opacity-30" : ""} ${done ? "border-emerald-200 dark:border-emerald-800" : "border-border"}`}>
-            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium leading-tight ${done ? "text-muted-foreground" : ""}`}>{card.name}</p>
-                <div className="flex flex-wrap gap-x-2 mt-0.5 text-[11px] text-muted-foreground">
-                    {card.qty && <span>{card.qty}</span>}
-                    {card.dueTime && <span>· {card.dueTime}</span>}
-                    {done && card.completedBy && <span className="text-emerald-600 dark:text-emerald-400">✓ {card.completedBy}</span>}
-                </div>
-            </div>
-            {done && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
-            {onDelete && (
-                <button onClick={onDelete} onPointerDown={e => e.stopPropagation()}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity shrink-0">
-                    <X className="w-3.5 h-3.5" />
+        <div ref={setNodeRef}
+            className={`group rounded-lg border bg-card px-2.5 py-2 ${isDragging ? "opacity-30" : ""} ${done ? "border-emerald-200 dark:border-emerald-800" : "border-border"}`}>
+            <div className="flex items-start gap-2">
+                {/* Drag handle (desktop) — only this grips, so taps elsewhere don't start a drag */}
+                <button {...attributes} {...listeners}
+                    className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground"
+                    aria-label="Drag to move" tabIndex={-1}>
+                    <GripVertical className="w-3.5 h-3.5" />
                 </button>
+                <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium leading-tight ${done ? "text-muted-foreground" : ""}`}>{card.name}</p>
+                    <div className="flex flex-wrap gap-x-2 mt-0.5 text-[11px] text-muted-foreground">
+                        {card.qty && <span>{card.qty}</span>}
+                        {card.dueTime && <span>· {card.dueTime}</span>}
+                        {done && card.completedBy && <span className="text-emerald-600 dark:text-emerald-400">✓ {card.completedBy}</span>}
+                    </div>
+                </div>
+                {done && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                {onDelete && (
+                    <button onClick={onDelete} onPointerDown={e => e.stopPropagation()}
+                        className="text-muted-foreground/40 hover:text-destructive transition-colors shrink-0 sm:opacity-0 sm:group-hover:opacity-100">
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
+            {/* Quick move buttons — work on touch where drag is awkward */}
+            {onMove && (
+                <div className="flex flex-wrap gap-1.5 mt-2" onPointerDown={e => e.stopPropagation()}>
+                    {from === "tasklist" && canManage && (
+                        <MoveBtn label="Move to To-Do" onClick={() => move("todo")} icon={ArrowRight} tone="blue" />
+                    )}
+                    {from === "todo" && (
+                        <>
+                            <MoveBtn label="Mark done" onClick={() => move("complete")} icon={Check} tone="emerald" />
+                            {canManage && <MoveBtn label="Back to list" onClick={() => move("tasklist")} icon={Undo2} tone="muted" iconOnly />}
+                        </>
+                    )}
+                    {from === "complete" && (
+                        <MoveBtn label="Undo" onClick={() => move("todo")} icon={Undo2} tone="muted" />
+                    )}
+                </div>
             )}
         </div>
+    );
+}
+
+// Touch-friendly move button (≥32px tap target)
+function MoveBtn({ label, onClick, icon: Icon, tone, iconOnly }: {
+    label: string; onClick: () => void; icon: React.ElementType;
+    tone: "blue" | "emerald" | "muted"; iconOnly?: boolean;
+}) {
+    const tones: Record<string, string> = {
+        blue:    "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40",
+        emerald: "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40",
+        muted:   "border-border text-muted-foreground hover:bg-accent",
+    };
+    return (
+        <button onClick={onClick} title={label} aria-label={label}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 h-8 text-xs font-medium transition-colors active:scale-95 ${tones[tone]}`}>
+            <Icon className="w-3.5 h-3.5" />
+            {!iconOnly && <span>{label}</span>}
+        </button>
     );
 }
 function CardFace({ card, dragging }: { card: PrepCard; dragging?: boolean }) {

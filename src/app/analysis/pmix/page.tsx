@@ -3624,6 +3624,48 @@ export default function PmixDashboardPage() {
                                 </Card>
                             )}
 
+                            {/* ── Aggregated ingredient consumption (BOM, all stations) — Summary tab ── */}
+                            {rangeTab === "summary" && (
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Link2 className="w-4 h-4 text-emerald-600" />
+                                            Ingredient Consumption ({rangeData.dayCount}-day)
+                                        </CardTitle>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                            Aggregated ingredient consumption from BOM linkage — all stations
+                                            {(rangeData.bom?.linkedRecipes ?? 0) > 0 ? ` · ${rangeData.bom?.linkedRecipes} linked recipe(s)` : ""}
+                                        </p>
+                                    </CardHeader>
+                                    <CardContent className="px-2 sm:px-6">
+                                        {(rangeData.bom?.consumption.length ?? 0) > 0 ? (
+                                            <div className="overflow-x-auto max-h-[26rem] overflow-y-auto">
+                                                <table className="w-full text-xs min-w-[360px]">
+                                                    <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border sticky top-0 bg-card">
+                                                        <th className="text-left py-2 pl-2">Ingredient</th><th className="text-right py-2 px-2">Total Used</th><th className="text-right py-2 pr-2">Avg/Day</th>
+                                                    </tr></thead>
+                                                    <tbody className="divide-y divide-border/40">
+                                                        {(rangeData.bom?.consumption ?? []).map((c, i) => (
+                                                            <tr key={i} className="hover:bg-muted/20">
+                                                                <td className="py-1.5 pl-2 font-medium">{c.ingredientName}</td>
+                                                                <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{c.totalQty.toLocaleString()} <span className="text-muted-foreground text-[10px]">{c.unit}</span></td>
+                                                                <td className="py-1.5 pr-2 text-right tabular-nums text-muted-foreground">{c.avgPerDay}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-8 gap-2 text-center text-muted-foreground">
+                                                <Link2 className="w-6 h-6 opacity-40" />
+                                                <p className="text-sm">No BOM-linked items in this range.</p>
+                                                <p className="text-[11px] max-w-xs">Link BOH recipes to PMIX items so their ingredient usage rolls up here.</p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            )}
+
                             {/* ── Category breakdown (Summary tab) ──────────────────── */}
                             {rangeTab === "summary" && (
                             <Card>

@@ -82,7 +82,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ? await db.recipeIngredient.findMany({
             where:   { recipeId: { in: recipeIds } },
             include: {
-                ingredient: { select: { id: true, name: true, recipeUnit: true, groupId: true, conversionRate: true, purchaseUnit: true } },
+                ingredient: { select: { id: true, name: true, recipeUnit: true, groupId: true, conversionRate: true, purchaseUnit: true, reportUnit: true } },
                 recipe:     { select: { id: true, yieldAmount: true } },
             },
         })
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Accumulate ingredient usage per date
     interface IngAgg {
         ingredientId: string; name: string; recipeUnit: string; groupId: string;
-        conversionRate: number; purchaseUnit: string;
+        conversionRate: number; purchaseUnit: string; reportUnit: string | null;
         byDate: number[]; total: number; menus: Set<string>;
     }
     const agg = new Map<string, IngAgg>();
@@ -124,6 +124,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 a = {
                     ingredientId: ing.id, name: ing.name, recipeUnit: ing.recipeUnit, groupId: ing.groupId,
                     conversionRate: Number(ing.conversionRate ?? 0), purchaseUnit: ing.purchaseUnit,
+                    reportUnit: ing.reportUnit ?? null,
                     byDate: new Array(dates.length).fill(0), total: 0, menus: new Set<string>(),
                 };
                 agg.set(ing.id, a);
@@ -151,6 +152,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             ingredientId: a.ingredientId, name: a.name,
             recipeUnit: a.recipeUnit, groupId: a.groupId,
             conversionRate: a.conversionRate, purchaseUnit: a.purchaseUnit,
+            reportUnit: a.reportUnit,
             byDate: a.byDate.map(q => +q.toFixed(3)),
             dowAvg,
             total: +a.total.toFixed(3),

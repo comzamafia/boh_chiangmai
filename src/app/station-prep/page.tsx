@@ -9,12 +9,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useAuth } from "@/components/auth-provider";
 import {
     Thermometer, Flame, Droplets, UtensilsCrossed, Soup, ChefHat, Coffee, Wine,
-    Loader2, Plus, Pencil, Carrot, Play, Search, AlertTriangle, ChevronDown, ListChecks, X,
+    Loader2, Plus, Pencil, Carrot, Play, Search, AlertTriangle, ChevronDown, ListChecks, X, FileDown, FileSpreadsheet,
 } from "lucide-react";
 import {
     reportStationsApi, type ReportStation, type StationReport, type PmixMenuName,
 } from "@/lib/api";
 import { unitOptions, convertQty, fmtQty } from "@/lib/report-units";
+import { exportStationPrepPDF, exportStationPrepCSV, type StationPrepExport } from "@/lib/station-prep-pdf";
 
 const ICONS: Record<string, React.ElementType> = {
     utensils: UtensilsCrossed, droplets: Droplets, flame: Flame, thermometer: Thermometer,
@@ -66,9 +67,9 @@ export default function StationPrepPage() {
         try {
             const r = await reportStationsApi.report(station.id, days);
             setReport(r);
-            // default each ingredient to its recipe unit
+            // default each ingredient to its saved preferred unit (else recipe unit)
             const u: Record<string, string> = {};
-            r.ingredients.forEach(i => { u[i.ingredientId] = i.recipeUnit; });
+            r.ingredients.forEach(i => { u[i.ingredientId] = i.reportUnit ?? i.recipeUnit; });
             setUnits(u);
         } catch { setReport(null); }
         finally { setReportLoading(false); }
@@ -168,7 +169,7 @@ export default function StationPrepPage() {
                                 </CardContent></Card>
                             ) : (
                                 <ReportTable report={report} view={view} units={units} setUnits={setUnits}
-                                    expanded={expanded} setExpanded={setExpanded} />
+                                    expanded={expanded} setExpanded={setExpanded} canManage={canManage} />
                             )}
                         </>
                     )}
@@ -190,16 +191,51 @@ export default function StationPrepPage() {
 }
 
 // ─── Report table ───────────────────────────────────────────────────────────
-function ReportTable({ report, view, units, setUnits, expanded, setExpanded }: {
+function ReportTable({ report, view, units, setUnits, expanded, setExpanded, canManage }: {
     report: StationReport; view: "weekday" | "dated";
     units: Record<string, string>; setUnits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
     expanded: Set<string>; setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
+    canManage: boolean;
 }) {
     const cols = view === "weekday" ? DOW : report.dates.map(d => d.slice(5));
     const valuesFor = (ing: StationReport["ingredients"][number]) => view === "weekday" ? ing.dowAvg : ing.byDate;
 
+    function changeUnit(ing: StationReport["ingredients"][number], unit: string) {
+        setUnits(u => ({ ...u, [ing.ingredientId]: unit }));
+        if (canManage) reportStationsApi.setReportUnit(ing.ingredientId, unit === ing.recipeUnit ? null : unit).catch(() => {});
+    }
+
+    function buildExport(): StationPrepExport {
+        return {
+            stationName: report.station.name,
+            view, days: report.days, columns: cols, showTotal: view === "dated",
+            rows: report.ingredients.map(ing => {
+                const unit = units[ing.ingredientId] ?? ing.recipeUnit;
+                const conv = (q: number) => { const v = convertQty(q, unit, ing); return v === null ? q : v; };
+                return {
+                    name: ing.name, unit,
+                    values: valuesFor(ing).map(q => q > 0 ? fmtQty(conv(q)) : ""),
+                    total: view === "dated" ? fmtQty(conv(ing.total)) : undefined,
+                    rop: ing.rop !== null ? fmtQty(conv(ing.rop)) : "",
+                    menus: ing.menus.join("; "),
+                };
+            }),
+            unlinkedMenus: report.unlinkedMenus,
+        };
+    }
+
     return (
         <div className="space-y-3">
+            {report.ingredients.length > 0 && (
+                <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportStationPrepCSV(buildExport())}>
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportStationPrepPDF(buildExport())}>
+                        <FileDown className="w-3.5 h-3.5" /> PDF
+                    </Button>
+                </div>
+            )}
             {report.unlinkedMenus.length > 0 && (
                 <div className="flex items-start gap-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -235,6 +271,7 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded }: {
                                         const opts = unitOptions(ing);
                                         const conv = (q: number) => { const v = convertQty(q, unit, ing); return v === null ? q : v; };
                                         const vals = valuesFor(ing);
+                                        const ropConv = ing.rop !== null ? conv(ing.rop) : null;
                                         const isOpen = expanded.has(ing.ingredientId);
                                         return (
                                             <Fragment key={ing.ingredientId}>
@@ -247,14 +284,21 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded }: {
                                                         </button>
                                                     </td>
                                                     <td className="py-1.5 px-1">
-                                                        <select value={unit} onChange={e => setUnits(u => ({ ...u, [ing.ingredientId]: e.target.value }))}
+                                                        <select value={unit} onChange={e => changeUnit(ing, e.target.value)}
                                                             className="h-7 rounded-md border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40">
                                                             {opts.map(o => <option key={o} value={o}>{o}</option>)}
                                                         </select>
                                                     </td>
-                                                    {vals.map((q, i) => (
-                                                        <td key={i} className="py-1.5 px-2 text-right tabular-nums">{q > 0 ? fmtQty(conv(q)) : <span className="text-muted-foreground/40">·</span>}</td>
-                                                    ))}
+                                                    {vals.map((q, i) => {
+                                                        const cv = conv(q);
+                                                        const over = ropConv !== null && ropConv > 0 && cv > ropConv;
+                                                        return (
+                                                            <td key={i} className={`py-1.5 px-2 text-right tabular-nums ${over ? "bg-amber-100/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold rounded" : ""}`}
+                                                                title={over ? "Exceeds reorder point" : undefined}>
+                                                                {q > 0 ? fmtQty(cv) : <span className="text-muted-foreground/40">·</span>}
+                                                            </td>
+                                                        );
+                                                    })}
                                                     {view === "dated" && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmtQty(conv(ing.total))}</td>}
                                                     <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{ing.rop !== null ? fmtQty(conv(ing.rop)) : "—"}</td>
                                                 </tr>
@@ -276,7 +320,7 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded }: {
                         {view === "weekday"
                             ? `Average usage per weekday over the last ${report.days} days (${report.linkedMenuCount} linked menu(s)). ROP = reorder point.`
                             : `Actual usage per day over the last ${report.days} days. ROP = reorder point.`}
-                        {" "}Pick a display unit per ingredient. Numbers are estimated from linked recipe BOM × qty sold.
+                        {" "}Pick a display unit per ingredient (saved for next time). <span className="px-1 rounded bg-amber-100/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">Amber</span> = a day&apos;s usage exceeds the reorder point. Numbers are estimated from linked recipe BOM × qty sold.
                     </p>
                 </CardContent>
             </Card>

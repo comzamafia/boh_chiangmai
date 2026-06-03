@@ -73,6 +73,7 @@ model Ingredient {
   storageAreaId          String?             // V3: physical storage location
   storageArea            StorageArea?        @relation(fields: [storageAreaId], references: [id])
   averageCostPerBaseUnit Decimal?            @db.Decimal(10, 6) // V3: MAC — THB per recipe unit
+  reportUnit             String?             // preferred display unit for the Station Prep Report
   imageUrl               String?
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt

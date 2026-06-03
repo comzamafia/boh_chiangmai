@@ -558,6 +558,7 @@ export interface PmixMenuName {
 export interface ReportIngredient {
     ingredientId: string; name: string;
     recipeUnit: string; groupId: string; conversionRate: number; purchaseUnit: string;
+    reportUnit: string | null;  // saved preferred display unit
     byDate: number[];   // aligned to dates[]
     dowAvg: number[];   // Mon..Sun average per occurrence
     total: number;
@@ -588,6 +589,8 @@ export const reportStationsApi = {
     report: (id: string, days: number) =>
         apiFetch<StationReport>(`/report-stations/${id}/report?days=${days}`, { cache: "no-store" }),
     menuNames: () => apiFetch<{ items: PmixMenuName[] }>("/pmix/menu-names", { cache: "no-store" }),
+    setReportUnit: (ingredientId: string, unit: string | null) =>
+        apiFetch<{ ok: boolean }>("/report-stations/report-unit", { method: "PUT", body: JSON.stringify({ ingredientId, unit }) }),
 };
 
 // ─── Prep Kanban board ──────────────────────────────────────────────────────

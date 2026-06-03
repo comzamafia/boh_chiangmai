@@ -547,6 +547,49 @@ export const prepStationsApi = {
             .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
 };
 
+// ─── Station Prep Report ────────────────────────────────────────────────────
+export interface ReportStation {
+    id: string; name: string; icon: string; color: string; sortOrder: number;
+    menus: string[];
+}
+export interface PmixMenuName {
+    itemName: string; category: string; linked: boolean; totalQty: number;
+}
+export interface ReportIngredient {
+    ingredientId: string; name: string;
+    recipeUnit: string; groupId: string; conversionRate: number; purchaseUnit: string;
+    byDate: number[];   // aligned to dates[]
+    dowAvg: number[];   // Mon..Sun average per occurrence
+    total: number;
+    rop: number | null; // reorder point in recipe units
+    menus: string[];
+}
+export interface StationReport {
+    station: { id: string; name: string; icon: string; color: string };
+    days: number;
+    dates: string[];
+    dowCounts: number[];
+    ingredients: ReportIngredient[];
+    unlinkedMenus: string[];
+    assignedCount: number;
+    linkedMenuCount: number;
+}
+
+export const reportStationsApi = {
+    list:   () => apiFetch<ReportStation[]>("/report-stations", { cache: "no-store" }),
+    create: (data: { name: string; icon?: string; color?: string }) =>
+        apiFetch<ReportStation>("/report-stations", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ name: string; icon: string; color: string }>) =>
+        apiFetch<ReportStation>(`/report-stations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+        fetch(`/api/report-stations/${id}`, { method: "DELETE" }).then(r => ({ ok: r.ok })),
+    setMenus: (id: string, itemNames: string[]) =>
+        apiFetch<{ ok: boolean; count: number; menus: string[] }>(`/report-stations/${id}/menus`, { method: "PUT", body: JSON.stringify({ itemNames }) }),
+    report: (id: string, days: number) =>
+        apiFetch<StationReport>(`/report-stations/${id}/report?days=${days}`, { cache: "no-store" }),
+    menuNames: () => apiFetch<{ items: PmixMenuName[] }>("/pmix/menu-names", { cache: "no-store" }),
+};
+
 // ─── Prep Kanban board ──────────────────────────────────────────────────────
 export interface PrepCard {
     id?:          string;   // board-task id (absent for Task List items)

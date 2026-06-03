@@ -638,3 +638,32 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+// ─── Station Prep Report ─────────────────────────────────────────────────────
+// Stations that own a set of PMIX menu items; "Run Report" explodes those menus
+// into ingredient prep quantities (per weekday avg or per dated day) for planning.
+model ReportStation {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String   @default("utensils")
+  color     String   @default("bg-slate-500")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  menus ReportStationMenu[]
+
+  @@map("report_stations")
+}
+
+model ReportStationMenu {
+  id        String        @id @default(cuid())
+  stationId String
+  station   ReportStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  itemName  String        // PMIX PmixItem.itemName assigned to this station
+  createdAt DateTime      @default(now())
+
+  @@unique([stationId, itemName])
+  @@index([stationId])
+  @@map("report_station_menus")
+}

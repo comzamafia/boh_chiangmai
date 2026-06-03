@@ -6,7 +6,7 @@ import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText,
     PieChart, Calendar, ClipboardList,
-    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell,
+    Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell, Carrot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
@@ -38,6 +38,7 @@ const navItems: NavItem[] = [
     { name: "Purchase Orders",href: "/purchase-orders",    icon: ClipboardList, slug: "purchase-orders",  group: "ops" },
     { name: "Production",     href: "/production-planning",icon: Calendar,      slug: "production",       group: "ops" },
     { name: "Prep List",      href: "/prep-list",          icon: ClipboardList, slug: "prep-list",        group: "ops" },
+    { name: "Station Prep",   href: "/station-prep",       icon: Carrot,        slug: "station-prep",     group: "ops" },
     { name: "PMIX Analytics", href: "/analysis/pmix",          icon: PieChart,  slug: "pmix-dashboard",   group: "insights" },
     { name: "PMIX Dashboard", href: "/analysis/pmix/dashboard", icon: BarChart2, slug: "pmix-dashboard",   group: "insights" },
     { name: "Reports",        href: "/reports",            icon: FileText,      slug: "reports",          group: "insights" },

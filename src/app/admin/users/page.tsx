@@ -66,6 +66,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "settings-pmix-rules": "Settings: PMIX Classification Rules",
     "reports": "Reports (PAR/ROP PDF)",
     "prep-list": "Prep List",
+    "station-prep": "Station Prep Report",
 };
 
 interface UserRow {

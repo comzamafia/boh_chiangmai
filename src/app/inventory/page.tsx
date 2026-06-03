@@ -37,7 +37,7 @@ import {
     AlertCircle, PackagePlus, Warehouse, History, Search,
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
     CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
-    DollarSign, TrendingUp, RefreshCw, FileDown,
+    DollarSign, TrendingUp, RefreshCw, FileDown, SlidersHorizontal,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DataPagination, paginate } from "@/components/ui/data-pagination";
@@ -169,6 +169,12 @@ export default function InventoryPage() {
     const [addOpen,     setAddOpen]     = useState(false);
     const [addForm,     setAddForm]     = useState({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
     const [addSearch,   setAddSearch]   = useState("");
+
+    // Edit PAR Min / ROP / Max dialog
+    const [parEdit,   setParEdit]   = useState<InventoryItem | null>(null);
+    const [parForm,   setParForm]   = useState({ parMin: "", reorderPoint: "", parMax: "", leadTimeDays: "1" });
+    const [parSaving, setParSaving] = useState(false);
+    const [parError,  setParError]  = useState<string | null>(null);
 
     // Receive goods form
     const [rcvForm,     setRcvForm]     = useState({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
@@ -305,6 +311,33 @@ export default function InventoryPage() {
         if (!confirm("Remove this ingredient from inventory tracking?")) return;
         await inventoryApi.delete(id);
         setItems(prev => prev.filter(i => i.id !== id));
+    }
+
+    // ── Inline PAR Min / ROP / Max editing ──────────────────────────────────────
+    function openParEdit(item: InventoryItem) {
+        setParForm({
+            parMin:       Number(item.parMin).toString(),
+            reorderPoint: Number(item.reorderPoint).toString(),
+            parMax:       Number(item.parMax).toString(),
+            leadTimeDays: Number(item.leadTimeDays ?? 1).toString(),
+        });
+        setParEdit(item);
+    }
+    async function saveParEdit() {
+        if (!parEdit) return;
+        const parMin = Number(parForm.parMin || 0);
+        const reorderPoint = Number(parForm.reorderPoint || 0);
+        const parMax = Number(parForm.parMax || 0);
+        if (parMax > 0 && parMin > parMax) { setParError("PAR Min cannot exceed PAR Max."); return; }
+        setParError(null);
+        setParSaving(true);
+        try {
+            const updated = await inventoryApi.update(parEdit.id, {
+                parMin, reorderPoint, parMax, leadTimeDays: Number(parForm.leadTimeDays || 1),
+            });
+            setItems(prev => prev.map(i => i.id === parEdit.id ? { ...i, ...updated } : i));
+            setParEdit(null);
+        } finally { setParSaving(false); }
     }
 
     async function handleReceive() {
@@ -604,14 +637,23 @@ export default function InventoryPage() {
                                             <TableCell className="hidden md:table-cell">
                                                 <StockBar item={item} />
                                             </TableCell>
-                                            <TableCell className="hidden lg:table-cell text-right text-xs text-muted-foreground tabular-nums">
-                                                {Number(item.parMin).toFixed(0)} / {Number(item.reorderPoint).toFixed(0)} / {Number(item.parMax).toFixed(0)}
+                                            <TableCell className="hidden lg:table-cell text-right text-xs tabular-nums">
+                                                <button onClick={() => openParEdit(item)}
+                                                    className="text-muted-foreground hover:text-primary hover:underline decoration-dotted underline-offset-2 transition-colors"
+                                                    title="Edit PAR Min / ROP / Max">
+                                                    {Number(item.parMin).toFixed(0)} / {Number(item.reorderPoint).toFixed(0)} / {Number(item.parMax).toFixed(0)}
+                                                </button>
                                             </TableCell>
                                             <TableCell><StatusBadge status={status} /></TableCell>
                                             <TableCell>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleRemove(item.id)}>
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
+                                                <div className="flex items-center justify-end gap-0.5">
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit PAR Min / ROP / Max" onClick={() => openParEdit(item)}>
+                                                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Remove from tracking" onClick={() => handleRemove(item.id)}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );
@@ -1450,6 +1492,51 @@ export default function InventoryPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* ══ EDIT PAR LEVELS DIALOG ════════════════════════════════════════ */}
+            <Dialog open={!!parEdit} onOpenChange={v => { if (!v) { setParEdit(null); setParError(null); } }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Edit PAR Levels</DialogTitle>
+                        <DialogDescription>
+                            {parEdit?.ingredient.name}
+                            {(parEdit?.ingredient as (Ingredient & { storageArea?: { name: string } | null }))?.storageArea?.name
+                                ? ` · ${(parEdit?.ingredient as Ingredient & { storageArea?: { name: string } | null }).storageArea!.name}`
+                                : ""}
+                            {" "}— values in {parEdit?.ingredient.recipeUnit}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid grid-cols-3 gap-3 py-2">
+                        <div className="space-y-1">
+                            <Label className="text-xs">Safety Stock (PAR Min)</Label>
+                            <Input type="number" min={0} value={parForm.parMin}
+                                onChange={e => setParForm(f => ({ ...f, parMin: e.target.value }))} autoFocus />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Reorder Point (ROP)</Label>
+                            <Input type="number" min={0} value={parForm.reorderPoint}
+                                onChange={e => setParForm(f => ({ ...f, reorderPoint: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Max Stock (PAR Max)</Label>
+                            <Input type="number" min={0} value={parForm.parMax}
+                                onChange={e => setParForm(f => ({ ...f, parMax: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">Lead Time (days)</Label>
+                        <Input type="number" min={1} value={parForm.leadTimeDays} className="w-28"
+                            onChange={e => setParForm(f => ({ ...f, leadTimeDays: e.target.value }))} />
+                    </div>
+                    {parError && <p className="text-xs text-destructive">{parError}</p>}
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={() => setParEdit(null)} disabled={parSaving}>Cancel</Button>
+                        <Button size="sm" onClick={saveParEdit} disabled={parSaving}>
+                            {parSaving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />} Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* ══ ADD TO TRACKING DIALOG ════════════════════════════════════════ */}
             <Dialog open={addOpen} onOpenChange={v => { setAddOpen(v); if (!v) { setAddSearch(""); setAddForm({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" }); } }}>

@@ -36,6 +36,7 @@ export const ALL_SLUGS = [
     "reports",
     "prep-list",
     "station-prep",
+    "stock-count",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -47,17 +48,17 @@ export const ROLE_DEFAULTS: Record<Role, NavSlug[]> = {
         "ingredients", "import-ingredients", "suppliers", "import-suppliers", "inventory",
         "purchases", "purchase-orders", "analysis", "production", "admin-audit",
         "recipes-manage-categories", "settings-portion-standards", "pmix-dashboard",
-        "admin-notifications", "settings-pmix-rules", "reports", "prep-list", "station-prep",
+        "admin-notifications", "settings-pmix-rules", "reports", "prep-list", "station-prep", "stock-count",
     ],
     chef: [
         "home", "dashboard", "daily-sales", "recipes", "recipes-new", "import-recipes", "menu-items",
-        "ingredients", "import-ingredients", "equipment", "inventory", "production", "prep-list", "station-prep",
+        "ingredients", "import-ingredients", "equipment", "inventory", "production", "prep-list", "station-prep", "stock-count",
     ],
     analyst: [
         "home", "dashboard", "daily-sales", "analysis", "pmix-dashboard", "reports",
     ],
     staff: [
-        "home", "dashboard", "daily-sales", "recipes", "production", "prep-list",
+        "home", "dashboard", "daily-sales", "recipes", "production", "prep-list", "stock-count",
     ],
 };
 
@@ -105,6 +106,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "reports": "/reports",
     "prep-list": "/prep-list",
     "station-prep": "/station-prep",
+    "stock-count": "/stock-count",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

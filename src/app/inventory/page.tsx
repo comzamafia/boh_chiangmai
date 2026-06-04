@@ -10,8 +10,6 @@ import {
     type DessertHeatmapResult, type BeverageHeatmapResult, type CurryHeatmapResult,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
-import StockCountSheet from "@/components/inventory/StockCountSheet";
-import StockCountGuide from "@/components/inventory/StockCountGuide";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
 import { exportHeatmapToPDF } from "@/lib/heatmap-pdf-export";
 import { useCurrency } from "@/components/currency-context";
@@ -1052,18 +1050,19 @@ export default function InventoryPage() {
                     )}
                 </TabsContent>
 
-                {/* ══ STOCK COUNT (STOCKTAKE) ══════════════════════════════════════ */}
+                {/* ══ STOCK COUNT — moved to its own page ══════════════════════════ */}
                 <TabsContent value="stocktake" className="mt-4 space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <h3 className="text-lg font-semibold">Physical Stock Count</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Count what you see on the shelf — whole cases, loose units — and the system converts automatically.
+                    <Card>
+                        <CardContent className="py-12 flex flex-col items-center text-center gap-3">
+                            <ClipboardList className="w-8 h-8 text-muted-foreground/40" />
+                            <p className="font-semibold">Physical Stock Count has moved</p>
+                            <p className="text-sm text-muted-foreground max-w-sm">
+                                Counting is now organised by storage area for faster work. Open the new
+                                <strong> Stock Count</strong> page from the sidebar.
                             </p>
-                        </div>
-                        <StockCountGuide />
-                    </div>
-                    <StockCountSheet items={items} onSaved={loadData} />
+                            <a href="/stock-count"><Button size="sm"><ClipboardList className="w-4 h-4 mr-1.5" /> Go to Stock Count</Button></a>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* ══ TRANSACTION HISTORY ═════════════════════════════════════════ */}

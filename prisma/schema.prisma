@@ -668,3 +668,18 @@ model ReportStationMenu {
   @@index([stationId])
   @@map("report_station_menus")
 }
+
+// ─── Physical Stock Count — per Storage Area ─────────────────────────────────
+// Lets the same ingredient be counted in several storage areas; the rolled-up
+// total (sum across areas) becomes the ingredient's currentStock.
+model StorageAreaCount {
+  id            String   @id @default(cuid())
+  ingredientId  String
+  storageAreaId String
+  recipeQty     Decimal  @db.Decimal(12, 4)   // counted amount in recipe units
+  countedAt     DateTime @default(now())
+
+  @@unique([ingredientId, storageAreaId])
+  @@index([storageAreaId])
+  @@map("storage_area_counts")
+}

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText,
-    PieChart, Calendar, ClipboardList,
+    PieChart, Calendar, ClipboardList, ClipboardCheck,
     Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell, Carrot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ const navItems: NavItem[] = [
     { name: "Ingredients",    href: "/ingredients",        icon: ShoppingCart,  slug: "ingredients",      group: "kitchen" },
     { name: "Equipment",      href: "/equipment",          icon: Wrench,        slug: "equipment",        group: "kitchen" },
     { name: "Inventory",      href: "/inventory",          icon: Package,       slug: "inventory",        group: "ops" },
+    { name: "Stock Count",    href: "/stock-count",        icon: ClipboardCheck, slug: "stock-count",     group: "ops" },
     { name: "Suppliers",      href: "/suppliers",          icon: Users,         slug: "suppliers",        group: "ops" },
     { name: "Purchases",      href: "/purchase-history",   icon: FileText,      slug: "purchases",        group: "ops" },
     { name: "Purchase Orders",href: "/purchase-orders",    icon: ClipboardList, slug: "purchase-orders",  group: "ops" },

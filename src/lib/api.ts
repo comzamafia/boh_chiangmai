@@ -547,6 +547,14 @@ export const prepStationsApi = {
             .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
 };
 
+// ─── Physical Stock Count (per storage area) ────────────────────────────────
+export const stockCountApi = {
+    areaCounts: (areaId: string) =>
+        apiFetch<{ counts: Record<string, number>; lastCountedAt: string | null }>(`/stock-count?areaId=${encodeURIComponent(areaId)}`, { cache: "no-store" }),
+    save: (areaId: string, counts: { ingredientId: string; recipeQty: number }[]) =>
+        apiFetch<{ ok: boolean; updated: number }>("/stock-count", { method: "POST", body: JSON.stringify({ areaId, counts }) }),
+};
+
 // ─── Station Prep Report ────────────────────────────────────────────────────
 export interface ReportStation {
     id: string; name: string; icon: string; color: string; sortOrder: number;

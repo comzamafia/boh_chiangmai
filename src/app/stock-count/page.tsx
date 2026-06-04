@@ -13,10 +13,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
     Loader2, ClipboardCheck, ChevronLeft, ChevronRight, Search, Plus, Thermometer,
-    Warehouse, Check, Snowflake, FileDown, Printer, ListFilter,
+    Warehouse, Check, Snowflake, FileDown, Printer, ListFilter, Boxes, Package, Pencil,
 } from "lucide-react";
 import {
     inventoryApi, storageAreasApi, stockCountApi,
@@ -140,6 +141,7 @@ function AreaCount({ area, items, onBack, onSaved }: {
     const [savedMsg, setSavedMsg] = useState<string | null>(null);
     const [remainingOnly, setRemainingOnly] = useState(false);
     const [hydrated, setHydrated] = useState(false);
+    const [packEdit, setPackEdit] = useState<InventoryItem | null>(null);
 
     const draftKey = area ? `sc-draft-${area.id}` : "";
     const extraKey = area ? `sc-extra-${area.id}` : "";
@@ -294,7 +296,8 @@ function AreaCount({ area, items, onBack, onSaved }: {
                         </div>
                         {list.map(it => (
                             <CountCard key={it.id} item={it} row={draft[it.id] ?? EMPTY} onSet={set}
-                                last={counts[it.ingredientId]} isExtra={(it.ingredient.storageAreaId ?? null) !== area?.id} />
+                                last={counts[it.ingredientId]} isExtra={(it.ingredient.storageAreaId ?? null) !== area?.id}
+                                onEditPack={() => setPackEdit(it)} />
                         ))}
                     </div>
                 ))
@@ -334,13 +337,19 @@ function AreaCount({ area, items, onBack, onSaved }: {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {packEdit && (
+                <PackEditor item={packEdit}
+                    onClose={() => setPackEdit(null)}
+                    onSaved={async () => { setPackEdit(null); await onSaved(); }} />
+            )}
         </div>
     );
 }
 
 // ─── Single count card ──────────────────────────────────────────────────────
-function CountCard({ item, row, onSet, last, isExtra }: {
-    item: InventoryItem; row: Row; onSet: (id: string, f: keyof Row, v: string) => void; last?: number; isExtra: boolean;
+function CountCard({ item, row, onSet, last, isExtra, onEditPack }: {
+    item: InventoryItem; row: Row; onSet: (id: string, f: keyof Row, v: string) => void; last?: number; isExtra: boolean; onEditPack: () => void;
 }) {
     const cfg = cfgOf(item);
     const entry = entryOf(row);
@@ -363,7 +372,21 @@ function CountCard({ item, row, onSet, last, isExtra }: {
                             {last != null && <span> · last here: {fmt(last)} {cfg.recipeUnit}</span>}
                         </p>
                     </div>
-                    {has && <Check className="w-4 h-4 text-primary shrink-0" />}
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Pack / case size chip — set once, then count in cases */}
+                        {hasPack(cfg) ? (
+                            <button onClick={onEditPack} title="Edit pack size"
+                                className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+                                <Boxes className="w-3 h-3" /> 1 {cfg.packUnit} = {fmt(cfg.packSize!)} {cfg.purchaseUnit} <Pencil className="w-2.5 h-2.5 opacity-60" />
+                            </button>
+                        ) : (
+                            <button onClick={onEditPack} title="Set pack / case size"
+                                className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                                <Package className="w-3 h-3" /> Set pack size
+                            </button>
+                        )}
+                        {has && <Check className="w-4 h-4 text-primary" />}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -395,5 +418,68 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
                 placeholder="0" className="h-11 w-20 text-center text-base tabular-nums" />
             <span className="text-[10px] text-muted-foreground mt-0.5 max-w-[80px] truncate">{label}</span>
         </div>
+    );
+}
+
+// ─── Pack / case size editor (set "1 Case = 50 lb" once, reuse forever) ──────
+function PackEditor({ item, onClose, onSaved }: { item: InventoryItem; onClose: () => void; onSaved: () => void | Promise<void> }) {
+    const cfg = cfgOf(item);
+    const [unit, setUnit] = useState(item.packUnit ?? "Case");
+    const [size, setSize] = useState(item.packSize != null ? String(Number(item.packSize)) : "");
+    const [saving, setSaving] = useState(false);
+    const sizeNum = num(size);
+    const previewRecipe = sizeNum > 0 ? sizeNum * cfg.conversionRate : 0;
+
+    async function save(clear = false) {
+        setSaving(true);
+        try {
+            await inventoryApi.update(item.id, {
+                packUnit: clear ? null : (unit.trim() || null),
+                packSize: clear ? null : (sizeNum > 0 ? sizeNum : null),
+            });
+            await onSaved();
+        } finally { setSaving(false); }
+    }
+
+    return (
+        <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><Boxes className="w-4 h-4 text-amber-600" /> Pack / Case size</DialogTitle>
+                    <DialogDescription>{item.ingredient.name}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                        <div className="space-y-1">
+                            <Label className="text-xs">Pack name</Label>
+                            <Input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Case / Box / Bag" className="h-10" />
+                        </div>
+                        <span className="pb-2.5 text-muted-foreground text-sm">=</span>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Size ({cfg.purchaseUnit})</Label>
+                            <Input type="number" min={0} inputMode="decimal" value={size}
+                                onChange={e => setSize(e.target.value)} placeholder="50" className="h-10 text-right" />
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5 text-sm">
+                        <p className="font-medium">1 {unit.trim() || "pack"} = <span className="tabular-nums text-amber-700 dark:text-amber-300">{sizeNum > 0 ? fmt(sizeNum) : "—"} {cfg.purchaseUnit}</span></p>
+                        {sizeNum > 0 && (
+                            <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">= {fmt(previewRecipe)} {cfg.recipeUnit} (1 {cfg.purchaseUnit} = {fmt(cfg.conversionRate)} {cfg.recipeUnit})</p>
+                        )}
+                    </div>
+                </div>
+                <DialogFooter className="flex-row justify-between gap-2">
+                    {hasPack(cfg)
+                        ? <Button variant="ghost" size="sm" onClick={() => save(true)} disabled={saving} className="text-red-600 hover:text-red-700">Remove pack</Button>
+                        : <span />}
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+                        <Button size="sm" onClick={() => save(false)} disabled={saving || sizeNum <= 0}>
+                            {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save
+                        </Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

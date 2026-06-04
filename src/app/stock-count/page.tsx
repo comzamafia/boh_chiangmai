@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Loader2, ClipboardCheck, ChevronLeft, ChevronRight, Search, Plus, Thermometer,
-    Warehouse, Check, Snowflake,
+    Warehouse, Check, Snowflake, FileDown, Printer, ListFilter,
 } from "lucide-react";
 import {
     inventoryApi, storageAreasApi, stockCountApi,
@@ -26,6 +26,7 @@ import {
     type StockUnitConfig, type CountEntry,
     hasPack, countToRecipeUnits, countHasValue, describeBreakdown, recipeToPurchase, recipeToPacks,
 } from "@/lib/stock-units";
+import { exportBlankCountSheet, exportFilledCountSheet } from "@/lib/stock-count-pdf";
 
 type Row = { packs: string; purchase: string; recipe: string };
 const EMPTY: Row = { packs: "", purchase: "", recipe: "" };
@@ -137,14 +138,35 @@ function AreaCount({ area, items, onBack, onSaved }: {
     const [addOpen, setAddOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savedMsg, setSavedMsg] = useState<string | null>(null);
+    const [remainingOnly, setRemainingOnly] = useState(false);
+    const [hydrated, setHydrated] = useState(false);
 
+    const draftKey = area ? `sc-draft-${area.id}` : "";
+    const extraKey = area ? `sc-extra-${area.id}` : "";
+
+    // Load: server per-area counts + locally-saved draft (survives refresh / phone sleep)
     useEffect(() => {
         if (!area) return;
+        let savedExtra: string[] = [];
+        try {
+            const d = localStorage.getItem(draftKey); if (d) setDraft(JSON.parse(d));
+            const e = localStorage.getItem(extraKey); if (e) savedExtra = JSON.parse(e);
+        } catch { /* ignore */ }
         stockCountApi.areaCounts(area.id).then(d => {
             setCounts(d.counts);
-            setExtra(new Set(Object.keys(d.counts)));   // already-counted-here items show up even if home area differs
-        }).catch(() => {});
-    }, [area]);
+            setExtra(new Set([...Object.keys(d.counts), ...savedExtra]));
+        }).catch(() => setExtra(new Set(savedExtra)))
+          .finally(() => setHydrated(true));
+    }, [area, draftKey, extraKey]);
+
+    // Auto-save draft + extras to localStorage on every change (after hydration)
+    useEffect(() => {
+        if (!hydrated || !area) return;
+        try {
+            localStorage.setItem(draftKey, JSON.stringify(draft));
+            localStorage.setItem(extraKey, JSON.stringify([...extra]));
+        } catch { /* ignore */ }
+    }, [draft, extra, hydrated, area, draftKey, extraKey]);
 
     // Items belonging to THIS area = home-area items ∪ extras (multi-area + found-here)
     const areaItems = useMemo(() => {
@@ -152,19 +174,25 @@ function AreaCount({ area, items, onBack, onSaved }: {
         return items.filter(i => (i.ingredient.storageAreaId ?? null) === area.id || extra.has(i.ingredientId));
     }, [items, area, extra]);
 
-    // Group by category
+    const isCounted = (i: InventoryItem) => countHasValue(entryOf(draft[i.id] ?? EMPTY));
+
+    // Group by category. "Remaining only" hides items already SAVED this round
+    // (based on persisted per-area counts) so typing never makes a row vanish.
     const groups = useMemo(() => {
         const m = new Map<string, InventoryItem[]>();
         for (const it of areaItems) {
+            if (remainingOnly && counts[it.ingredientId] != null) continue;
             const cat = it.ingredient.category?.name ?? "Uncategorized";
             (m.get(cat) ?? m.set(cat, []).get(cat)!).push(it);
         }
         return [...m.entries()].sort(([a], [b]) => a === "Uncategorized" ? 1 : b === "Uncategorized" ? -1 : a.localeCompare(b))
             .map(([cat, list]) => [cat, list.sort((x, y) => x.ingredient.name.localeCompare(y.ingredient.name))] as const);
-    }, [areaItems]);
+    }, [areaItems, remainingOnly, counts]);
 
     const set = (id: string, field: keyof Row, v: string) => setDraft(d => ({ ...d, [id]: { ...(d[id] ?? EMPTY), [field]: v } }));
-    const countedIds = areaItems.filter(i => countHasValue(entryOf(draft[i.id] ?? EMPTY))).map(i => i.id);
+    const countedIds = areaItems.filter(isCounted).map(i => i.id);
+    const total = areaItems.length;
+    const pct = total > 0 ? Math.round((countedIds.length / total) * 100) : 0;
 
     async function save() {
         if (countedIds.length === 0 || !area) return;
@@ -177,9 +205,42 @@ function AreaCount({ area, items, onBack, onSaved }: {
             const res = await stockCountApi.save(area.id, payload);
             setSavedMsg(`Saved ${res.updated} item${res.updated !== 1 ? "s" : ""}.`);
             setDraft({});
+            try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
             const d = await stockCountApi.areaCounts(area.id); setCounts(d.counts);
             await onSaved();
         } finally { setSaving(false); }
+    }
+
+    // ── PDF exports ─────────────────────────────────────────────────────────
+    function catGroups<T>(map: (i: InventoryItem) => T | null) {
+        const m = new Map<string, T[]>();
+        for (const it of areaItems) {
+            const v = map(it); if (v == null) continue;
+            const cat = it.ingredient.category?.name ?? "Uncategorized";
+            (m.get(cat) ?? m.set(cat, []).get(cat)!).push(v);
+        }
+        return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([category, items]) => ({ category, items }));
+    }
+    function printBlank() {
+        if (!area) return;
+        exportBlankCountSheet(area.name, catGroups(it => {
+            const cfg = cfgOf(it);
+            const hint = [hasPack(cfg) ? `${cfg.packUnit}(${cfg.packSize} ${cfg.purchaseUnit})` : null, cfg.purchaseUnit, cfg.recipeUnit].filter(Boolean).join(" / ");
+            return { name: it.ingredient.name, unitsHint: hint, system: `${fmt(Number(it.currentStock))} ${cfg.recipeUnit}` };
+        }));
+    }
+    function exportFilled() {
+        if (!area) return;
+        exportFilledCountSheet(area.name, catGroups(it => {
+            if (!isCounted(it)) return null;
+            const cfg = cfgOf(it); const e = entryOf(draft[it.id] ?? EMPTY); const t = countToRecipeUnits(e, cfg);
+            const v = t - Number(it.currentStock);
+            return {
+                name: it.ingredient.name, counted: describeBreakdown(e, cfg),
+                total: `${fmt(t)} ${cfg.recipeUnit}`, system: `${fmt(Number(it.currentStock))} ${cfg.recipeUnit}`,
+                variance: `${v > 0 ? "+" : ""}${fmt(v)}`,
+            };
+        }));
     }
 
     // Add-found-here candidates: any tracked item not already in this area
@@ -189,12 +250,34 @@ function AreaCount({ area, items, onBack, onSaved }: {
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-center gap-2 sticky top-0 bg-background z-10 py-1">
-                <Button variant="outline" size="sm" onClick={onBack} className="gap-1"><ChevronLeft className="w-4 h-4" /> Areas</Button>
-                <div className="min-w-0">
-                    <p className="font-semibold truncate flex items-center gap-1.5"><Warehouse className="w-4 h-4 text-muted-foreground" />{area?.name}</p>
+            <div className="sticky top-0 bg-background z-10 pt-1 pb-2 space-y-2">
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={onBack} className="gap-1"><ChevronLeft className="w-4 h-4" /> Areas</Button>
+                    <div className="min-w-0">
+                        <p className="font-semibold truncate flex items-center gap-1.5"><Warehouse className="w-4 h-4 text-muted-foreground" />{area?.name}</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="ml-auto gap-1" onClick={() => setAddOpen(true)}><Plus className="w-4 h-4" /> Add item</Button>
                 </div>
-                <Button size="sm" variant="outline" className="ml-auto gap-1" onClick={() => setAddOpen(true)}><Plus className="w-4 h-4" /> Add item</Button>
+                {/* Progress + tools */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex-1 min-w-[120px]">
+                        <div className="flex justify-between text-[11px] text-muted-foreground mb-0.5">
+                            <span>{countedIds.length} / {total} counted</span><span className="tabular-nums">{pct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                            <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                    </div>
+                    <Button variant={remainingOnly ? "default" : "outline"} size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setRemainingOnly(v => !v)}>
+                        <ListFilter className="w-3.5 h-3.5" /> {remainingOnly ? "Showing remaining" : "Remaining only"}
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={printBlank} title="Printable blank sheet">
+                        <Printer className="w-3.5 h-3.5" /> Sheet
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportFilled} disabled={countedIds.length === 0} title="Export counted as PDF">
+                        <FileDown className="w-3.5 h-3.5" /> PDF
+                    </Button>
+                </div>
             </div>
 
             {areaItems.length === 0 ? (
@@ -204,7 +287,7 @@ function AreaCount({ area, items, onBack, onSaved }: {
             ) : (
                 groups.map(([cat, list]) => (
                     <div key={cat} className="space-y-2">
-                        <div className="flex items-center gap-2 sticky top-12 bg-background/95 backdrop-blur z-[5] py-1">
+                        <div className="flex items-center gap-2 py-1">
                             <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{cat}</h3>
                             <span className="text-[10px] text-muted-foreground">{list.length}</span>
                             <div className="flex-1 h-px bg-border" />

@@ -190,7 +190,7 @@ export async function GET(req: NextRequest) {
         ? await prisma.recipeIngredient.findMany({
             where: { recipeId: { in: recipeIds } },
             include: {
-                ingredient: { select: { id: true, name: true, recipeUnit: true, groupId: true } },
+                ingredient: { select: { id: true, name: true, recipeUnit: true, groupId: true, category: { select: { name: true } } } },
                 recipe: { select: { id: true, name: true, yieldAmount: true } },
             },
         })
@@ -199,7 +199,7 @@ export async function GET(req: NextRequest) {
     // Aggregate ingredient consumption across all linked items
     const consumptionMap: Record<string, {
         ingredientId: string; ingredientName: string; unit: string;
-        totalQty: number; groupId: string;
+        totalQty: number; groupId: string; category: string | null;
     }> = {};
 
     for (const item of linkedItems) {
@@ -216,6 +216,7 @@ export async function GET(req: NextRequest) {
                     unit: ri.ingredient.recipeUnit,
                     totalQty: 0,
                     groupId: ri.ingredient.groupId,
+                    category: ri.ingredient.category?.name ?? null,
                 };
             }
             consumptionMap[key].totalQty += totalUsed;

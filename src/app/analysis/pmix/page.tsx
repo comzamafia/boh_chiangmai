@@ -90,6 +90,26 @@ const fmt    = (n: number) => n.toLocaleString("en-CA", { minimumFractionDigits:
 const fmtN   = (n: number) => n.toLocaleString();
 const fmtD   = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
 
+// Group Ingredient Depletion by food category, ordered by prep priority:
+// 1) Protein  2) Sauce & Curry  3) Noodles  4) Vegetable  5) Other
+const DEPLETION_BUCKETS: { label: string; test: RegExp; dot: string; bar: string }[] = [
+    { label: "Protein",        test: /protein|meat|seafood|poultry|chicken|beef|pork|duck|fish|shrimp|prawn|crab|egg|tofu/i, dot: "bg-rose-500",    bar: "#f43f5e" },
+    { label: "Sauce & Curry",  test: /sauce|curry|paste|condiment|seasoning|stock|broth|marinad/i,                          dot: "bg-amber-500",   bar: "#f59e0b" },
+    { label: "Noodles",        test: /noodle|pasta|rice|grain|flour|starch|wrapper|vermicelli/i,                            dot: "bg-yellow-600",  bar: "#ca8a04" },
+    { label: "Vegetable",      test: /veg|herb|produce|mushroom|salad|green|onion|garlic|chili|pepper/i,                    dot: "bg-emerald-500", bar: "#22c55e" },
+];
+function depletionBucket(category: string | null): number {
+    const c = category ?? "";
+    const idx = DEPLETION_BUCKETS.findIndex(b => b.test.test(c));
+    return idx === -1 ? DEPLETION_BUCKETS.length : idx;
+}
+function groupConsumptionByCategory<T extends { totalQty: number; category: string | null }>(items: T[]) {
+    const buckets = [...DEPLETION_BUCKETS, { label: "Other", test: /.^/, dot: "bg-slate-400", bar: "#94a3b8" }];
+    return buckets
+        .map((b, i) => ({ ...b, items: items.filter(it => depletionBucket(it.category) === i).sort((a, b2) => b2.totalQty - a.totalQty) }))
+        .filter(g => g.items.length > 0);
+}
+
 type Tab = "bcg" | "prep" | "qc" | "bom" | "summary" | "portion" | "ingsum";
 
 const TABS: { key: Tab; label: string; short: string; icon: React.ReactNode; color: string }[] = [
@@ -2455,29 +2475,37 @@ export default function PmixDashboardPage() {
                                                 <p className="text-xs text-muted-foreground mt-0.5">Based on qty sold × BOM ratios (linked items only)</p>
                                             </CardHeader>
                                             <CardContent className="p-0">
-                                                <div className="divide-y">
-                                                    {bomData.consumption.map((c, i) => {
-                                                        const maxQty = bomData.consumption[0]?.totalQty ?? 1;
-                                                        return (
-                                                            <div key={c.ingredientId} className="flex items-center gap-3 px-5 py-3">
-                                                                <span className="text-xs text-muted-foreground w-5 tabular-nums shrink-0">{i + 1}</span>
-                                                                <div className="flex-1 min-w-0 space-y-1">
-                                                                    <div className="flex items-center justify-between gap-2">
-                                                                        <p className="text-sm font-medium truncate">{c.ingredientName}</p>
-                                                                        <div className="flex items-center gap-1.5 shrink-0">
-                                                                            <span className="text-sm font-bold tabular-nums">
-                                                                                {c.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                                                            </span>
-                                                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{c.unit}</Badge>
+                                                {(() => {
+                                                    const maxQty = Math.max(1, ...bomData.consumption.map(c => c.totalQty));
+                                                    const grouped = groupConsumptionByCategory(bomData.consumption);
+                                                    return grouped.map(g => (
+                                                        <div key={g.label}>
+                                                            <div className="flex items-center gap-2 px-5 py-2 bg-muted/40 border-y border-border sticky top-0 z-[1]">
+                                                                <span className={`w-2 h-2 rounded-full ${g.dot}`} />
+                                                                <span className="text-xs font-bold uppercase tracking-wide">{g.label}</span>
+                                                                <span className="text-[10px] text-muted-foreground">{g.items.length}</span>
+                                                            </div>
+                                                            <div className="divide-y">
+                                                                {g.items.map(c => (
+                                                                    <div key={c.ingredientId} className="flex items-center gap-3 px-5 py-3">
+                                                                        <div className="flex-1 min-w-0 space-y-1">
+                                                                            <div className="flex items-center justify-between gap-2">
+                                                                                <p className="text-sm font-medium truncate">{c.ingredientName}
+                                                                                    {c.category && <span className="text-[10px] text-muted-foreground ml-1.5">· {c.category}</span>}
+                                                                                </p>
+                                                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                                                    <span className="text-sm font-bold tabular-nums">{c.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{c.unit}</Badge>
+                                                                                </div>
+                                                                            </div>
+                                                                            <ProgressBar value={c.totalQty} max={maxQty} color={g.bar} />
                                                                         </div>
                                                                     </div>
-                                                                    <ProgressBar value={c.totalQty} max={maxQty} color="#22c55e" />
-                                                                </div>
-                                                                <Badge variant="secondary" className="text-[10px] shrink-0 h-5">{c.groupId}</Badge>
+                                                                ))}
                                                             </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                        </div>
+                                                    ));
+                                                })()}
                                             </CardContent>
                                         </Card>
                                     )}

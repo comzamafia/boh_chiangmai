@@ -1192,6 +1192,7 @@ export interface PmixConsumptionItem {
     unit:           string;
     totalQty:       number;
     groupId:        string;
+    category:       string | null;  // ingredient food category (for grouping)
 }
 
 export interface PmixAnalytics {

@@ -15,6 +15,9 @@ import StockCountGuide from "@/components/inventory/StockCountGuide";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
 import { exportHeatmapToPDF } from "@/lib/heatmap-pdf-export";
 import { useCurrency } from "@/components/currency-context";
+import {
+    hasPack, recipeUnitsPerPack, recipeUnitsPerPurchase, recipeToPacks, type StockUnitConfig,
+} from "@/lib/stock-units";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,9 +173,9 @@ export default function InventoryPage() {
     const [addForm,     setAddForm]     = useState({ ingredientId: "", parMin: "", parMax: "", reorderPoint: "", leadTimeDays: "1" });
     const [addSearch,   setAddSearch]   = useState("");
 
-    // Edit PAR Min / ROP / Max dialog
+    // Edit PAR Min / ROP / Max dialog (values entered in the selected `unit`)
     const [parEdit,   setParEdit]   = useState<InventoryItem | null>(null);
-    const [parForm,   setParForm]   = useState({ parMin: "", reorderPoint: "", parMax: "", leadTimeDays: "1" });
+    const [parForm,   setParForm]   = useState({ unit: "", parMin: "", reorderPoint: "", parMax: "", leadTimeDays: "1", packUnit: "", packSize: "" });
     const [parSaving, setParSaving] = useState(false);
     const [parError,  setParError]  = useState<string | null>(null);
 
@@ -313,27 +316,74 @@ export default function InventoryPage() {
         setItems(prev => prev.filter(i => i.id !== id));
     }
 
-    // ── Inline PAR Min / ROP / Max editing ──────────────────────────────────────
+    // ── Inline PAR Min / ROP / Max editing (in recipe / purchase / pack units) ──
+    function cfgFor(ing: Ingredient, packUnit: string | null, packSize: number | null): StockUnitConfig {
+        return {
+            recipeUnit:     ing.recipeUnit,
+            purchaseUnit:   ing.purchaseUnit,
+            conversionRate: Number(ing.conversionRate || 1),
+            packUnit:       packUnit?.trim() || null,
+            packSize:       packSize && packSize > 0 ? packSize : null,
+        };
+    }
+    function unitToRecipe(qty: number, unit: string, cfg: StockUnitConfig): number {
+        if (unit === cfg.packUnit)     return qty * recipeUnitsPerPack(cfg);
+        if (unit === cfg.purchaseUnit) return qty * recipeUnitsPerPurchase(cfg);
+        return qty; // recipe unit
+    }
+    function recipeToUnit(recipeQty: number, unit: string, cfg: StockUnitConfig): number {
+        if (unit === cfg.packUnit)     { const p = recipeUnitsPerPack(cfg);     return p > 0 ? recipeQty / p : recipeQty; }
+        if (unit === cfg.purchaseUnit) { const p = recipeUnitsPerPurchase(cfg); return p > 0 ? recipeQty / p : recipeQty; }
+        return recipeQty;
+    }
+    const trimN = (n: number) => Number.isFinite(n) ? String(Math.round(n * 1000) / 1000) : "0";
+    function parUnitOptions(cfg: StockUnitConfig): string[] {
+        const opts = [cfg.recipeUnit];
+        if (cfg.purchaseUnit && cfg.purchaseUnit !== cfg.recipeUnit) opts.push(cfg.purchaseUnit);
+        if (hasPack(cfg) && cfg.packUnit) opts.push(cfg.packUnit);
+        return [...new Set(opts)];
+    }
+
     function openParEdit(item: InventoryItem) {
+        const cfg  = cfgFor(item.ingredient, item.packUnit ?? null, item.packSize ?? null);
+        const unit = hasPack(cfg) && cfg.packUnit ? cfg.packUnit : cfg.recipeUnit;
         setParForm({
-            parMin:       Number(item.parMin).toString(),
-            reorderPoint: Number(item.reorderPoint).toString(),
-            parMax:       Number(item.parMax).toString(),
+            unit,
+            parMin:       trimN(recipeToUnit(Number(item.parMin), unit, cfg)),
+            reorderPoint: trimN(recipeToUnit(Number(item.reorderPoint), unit, cfg)),
+            parMax:       trimN(recipeToUnit(Number(item.parMax), unit, cfg)),
             leadTimeDays: Number(item.leadTimeDays ?? 1).toString(),
+            packUnit:     item.packUnit ?? "",
+            packSize:     item.packSize != null ? String(item.packSize) : "",
         });
+        setParError(null);
         setParEdit(item);
+    }
+    // Re-express the current PAR inputs when the entry unit changes (keep amount equal)
+    function changeParUnit(newUnit: string) {
+        if (!parEdit) return;
+        const cfg = cfgFor(parEdit.ingredient, parForm.packUnit || null, parForm.packSize ? Number(parForm.packSize) : null);
+        const old = parForm.unit;
+        const re = (v: string) => trimN(recipeToUnit(unitToRecipe(Number(v || 0), old, cfg), newUnit, cfg));
+        setParForm(f => ({ ...f, unit: newUnit, parMin: re(f.parMin), reorderPoint: re(f.reorderPoint), parMax: re(f.parMax) }));
     }
     async function saveParEdit() {
         if (!parEdit) return;
-        const parMin = Number(parForm.parMin || 0);
-        const reorderPoint = Number(parForm.reorderPoint || 0);
-        const parMax = Number(parForm.parMax || 0);
+        const packUnit = parForm.packUnit.trim() || null;
+        const packSize = parForm.packSize ? Number(parForm.packSize) : null;
+        const cfg = cfgFor(parEdit.ingredient, packUnit, packSize);
+        // Guard: entering values in a pack unit that isn't configured
+        if (parForm.unit === packUnit && !hasPack(cfg)) { setParError("Set the pack size first to use this unit."); return; }
+        const toR = (v: string) => Math.round(unitToRecipe(Number(v || 0), parForm.unit, cfg) * 10000) / 10000;
+        const parMin = toR(parForm.parMin), reorderPoint = toR(parForm.reorderPoint), parMax = toR(parForm.parMax);
         if (parMax > 0 && parMin > parMax) { setParError("PAR Min cannot exceed PAR Max."); return; }
         setParError(null);
         setParSaving(true);
         try {
             const updated = await inventoryApi.update(parEdit.id, {
-                parMin, reorderPoint, parMax, leadTimeDays: Number(parForm.leadTimeDays || 1),
+                parMin, reorderPoint, parMax,
+                leadTimeDays: Number(parForm.leadTimeDays || 1),
+                packUnit, packSize,
             });
             setItems(prev => prev.map(i => i.id === parEdit.id ? { ...i, ...updated } : i));
             setParEdit(null);
@@ -641,7 +691,13 @@ export default function InventoryPage() {
                                                 <button onClick={() => openParEdit(item)}
                                                     className="text-muted-foreground hover:text-primary hover:underline decoration-dotted underline-offset-2 transition-colors"
                                                     title="Edit PAR Min / ROP / Max">
-                                                    {Number(item.parMin).toFixed(0)} / {Number(item.reorderPoint).toFixed(0)} / {Number(item.parMax).toFixed(0)}
+                                                    {(() => {
+                                                        const cfg = cfgFor(item.ingredient, item.packUnit ?? null, item.packSize ?? null);
+                                                        const packed = hasPack(cfg);
+                                                        const fmt = (r: number) => { const p = packed ? recipeToPacks(r, cfg) : null; return p != null ? trimN(p) : Number(r).toFixed(0); };
+                                                        const unit = packed ? cfg.packUnit : item.ingredient.recipeUnit;
+                                                        return `${fmt(Number(item.parMin))} / ${fmt(Number(item.reorderPoint))} / ${fmt(Number(item.parMax))} ${unit ?? ""}`;
+                                                    })()}
                                                 </button>
                                             </TableCell>
                                             <TableCell><StatusBadge status={status} /></TableCell>
@@ -1506,29 +1562,80 @@ export default function InventoryPage() {
                             {" "}— values in {parEdit?.ingredient.recipeUnit}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid grid-cols-3 gap-3 py-2">
-                        <div className="space-y-1">
-                            <Label className="text-xs">Safety Stock (PAR Min)</Label>
-                            <Input type="number" min={0} value={parForm.parMin}
-                                onChange={e => setParForm(f => ({ ...f, parMin: e.target.value }))} autoFocus />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-xs">Reorder Point (ROP)</Label>
-                            <Input type="number" min={0} value={parForm.reorderPoint}
-                                onChange={e => setParForm(f => ({ ...f, reorderPoint: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-xs">Max Stock (PAR Max)</Label>
-                            <Input type="number" min={0} value={parForm.parMax}
-                                onChange={e => setParForm(f => ({ ...f, parMax: e.target.value }))} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">Lead Time (days)</Label>
-                        <Input type="number" min={1} value={parForm.leadTimeDays} className="w-28"
-                            onChange={e => setParForm(f => ({ ...f, leadTimeDays: e.target.value }))} />
-                    </div>
-                    {parError && <p className="text-xs text-destructive">{parError}</p>}
+                    {parEdit && (() => {
+                        const cfg = cfgFor(parEdit.ingredient, parForm.packUnit || null, parForm.packSize ? Number(parForm.packSize) : null);
+                        const opts = parUnitOptions(cfg);
+                        const previewRecipe = (v: string) => {
+                            const r = unitToRecipe(Number(v || 0), parForm.unit, cfg);
+                            return parForm.unit === cfg.recipeUnit ? null : `≈ ${trimN(r)} ${cfg.recipeUnit}`;
+                        };
+                        return (
+                            <div className="space-y-4 py-1">
+                                {/* Pack config */}
+                                <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                                    <Label className="text-xs font-semibold">Pack / Case size <span className="font-normal text-muted-foreground">(so you can plan in boxes)</span></Label>
+                                    <div className="flex items-end gap-2 flex-wrap text-sm">
+                                        <span className="text-muted-foreground pb-2">1</span>
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground">Pack name</Label>
+                                            <Input value={parForm.packUnit} placeholder="Case / Box / Pack" className="h-9 w-32"
+                                                onChange={e => setParForm(f => ({ ...f, packUnit: e.target.value }))} />
+                                        </div>
+                                        <span className="text-muted-foreground pb-2">=</span>
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground">Size</Label>
+                                            <Input type="number" min={0} value={parForm.packSize} placeholder="e.g. 50" className="h-9 w-24"
+                                                onChange={e => setParForm(f => ({ ...f, packSize: e.target.value }))} />
+                                        </div>
+                                        <span className="text-muted-foreground pb-2">{parEdit.ingredient.purchaseUnit}</span>
+                                    </div>
+                                    {hasPack(cfg) && (
+                                        <p className="text-[11px] text-muted-foreground">1 {cfg.packUnit} = {trimN(recipeUnitsPerPack(cfg))} {cfg.recipeUnit}</p>
+                                    )}
+                                </div>
+
+                                {/* Entry unit */}
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Enter PAR levels in</Label>
+                                    <Select value={opts.includes(parForm.unit) ? parForm.unit : cfg.recipeUnit} onValueChange={changeParUnit}>
+                                        <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {opts.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* PAR inputs */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Safety (PAR Min)</Label>
+                                        <Input type="number" min={0} value={parForm.parMin} autoFocus
+                                            onChange={e => setParForm(f => ({ ...f, parMin: e.target.value }))} />
+                                        {previewRecipe(parForm.parMin) && <p className="text-[10px] text-muted-foreground tabular-nums">{previewRecipe(parForm.parMin)}</p>}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Reorder (ROP)</Label>
+                                        <Input type="number" min={0} value={parForm.reorderPoint}
+                                            onChange={e => setParForm(f => ({ ...f, reorderPoint: e.target.value }))} />
+                                        {previewRecipe(parForm.reorderPoint) && <p className="text-[10px] text-muted-foreground tabular-nums">{previewRecipe(parForm.reorderPoint)}</p>}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Max (PAR Max)</Label>
+                                        <Input type="number" min={0} value={parForm.parMax}
+                                            onChange={e => setParForm(f => ({ ...f, parMax: e.target.value }))} />
+                                        {previewRecipe(parForm.parMax) && <p className="text-[10px] text-muted-foreground tabular-nums">{previewRecipe(parForm.parMax)}</p>}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Lead Time (days)</Label>
+                                    <Input type="number" min={1} value={parForm.leadTimeDays} className="w-28"
+                                        onChange={e => setParForm(f => ({ ...f, leadTimeDays: e.target.value }))} />
+                                </div>
+                                {parError && <p className="text-xs text-destructive">{parError}</p>}
+                            </div>
+                        );
+                    })()}
                     <DialogFooter>
                         <Button variant="outline" size="sm" onClick={() => setParEdit(null)} disabled={parSaving}>Cancel</Button>
                         <Button size="sm" onClick={saveParEdit} disabled={parSaving}>

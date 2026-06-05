@@ -13,6 +13,7 @@ import {
     type FoodCostVarianceResult,
 } from "@/lib/api";
 import { exportParReportToPDF } from "@/lib/par-report-pdf";
+import { useAuth } from "@/components/auth-provider";
 
 function daysAgoIso(n: number) {
     const d = new Date(); d.setDate(d.getDate() - n);
@@ -21,6 +22,8 @@ function daysAgoIso(n: number) {
 function thb(n: number) { return `฿${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 
 export default function ReportsPage() {
+    const { permittedSlugs } = useAuth();
+    const canDownload = permittedSlugs.includes("reports-download");
     const [days, setDays] = useState(7);
 
     const [protein,   setProtein]   = useState<ProteinHeatmapResult  | null>(null);
@@ -179,12 +182,17 @@ export default function ReportsPage() {
                             No PMIX data found in the last {days} days. Upload a PMIX report in{" "}
                             <a href="/analysis/pmix" className="underline text-primary">PMIX Analytics</a> first.
                         </p>
-                    ) : (
+                    ) : canDownload ? (
                         <Button onClick={handleExport} disabled={!hasAny}
                             className="gap-2 bg-primary hover:bg-primary/90">
                             <FileDown className="w-4 h-4" />
                             Download PDF Report ({days}-day window)
                         </Button>
+                    ) : (
+                        <p className="text-sm text-muted-foreground italic flex items-center gap-2">
+                            <FileDown className="w-4 h-4 opacity-50" />
+                            You can view this report but don&apos;t have download permission. Ask an admin to grant <strong>Reports — Download PDF</strong>.
+                        </p>
                     )}
                 </CardContent>
             </Card>

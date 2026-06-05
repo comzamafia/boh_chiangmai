@@ -76,7 +76,8 @@ export default function StockCountPage() {
 
             {!areaId
                 ? <AreaPicker areas={areas} items={items} onPick={setAreaId} />
-                : <AreaCount key={areaId} area={area} items={items} onBack={() => setAreaId(null)} onSaved={load} />}
+                : <AreaCount key={areaId} area={area} items={items} onBack={() => setAreaId(null)} onSaved={load}
+                    onStockUpdated={m => setItems(prev => prev.map(i => m[i.ingredientId] != null ? { ...i, currentStock: m[i.ingredientId] } : i))} />}
         </div>
     );
 }
@@ -129,8 +130,9 @@ function AreaPicker({ areas, items, onPick }: { areas: StorageArea[]; items: Inv
 }
 
 // ─── Area count sheet ───────────────────────────────────────────────────────
-function AreaCount({ area, items, onBack, onSaved }: {
-    area: StorageArea | null; items: InventoryItem[]; onBack: () => void; onSaved: () => void | Promise<void>;
+function AreaCount({ area, items, onBack, onSaved, onStockUpdated }: {
+    area: StorageArea | null; items: InventoryItem[]; onBack: () => void;
+    onSaved: () => void | Promise<void>; onStockUpdated: (m: Record<string, number>) => void;
 }) {
     const [draft, setDraft]   = useState<Record<string, Row>>({});
     const [extra, setExtra]   = useState<Set<string>>(new Set());   // ingredientIds added "found here"
@@ -205,11 +207,12 @@ function AreaCount({ area, items, onBack, onSaved }: {
                 return { ingredientId: it.ingredientId, recipeQty: countToRecipeUnits(entryOf(draft[id] ?? EMPTY), cfgOf(it)) };
             });
             const res = await stockCountApi.save(area.id, payload);
-            setSavedMsg(`Saved ${res.updated} item${res.updated !== 1 ? "s" : ""}.`);
+            // Real-time: push new rolled-up stock into the parent's items (no full reload)
+            onStockUpdated(Object.fromEntries(res.updated.map(u => [u.ingredientId, u.currentStock])));
+            setSavedMsg(`Saved ${res.updated.length} item${res.updated.length !== 1 ? "s" : ""} · stock updated.`);
             setDraft({});
             try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
             const d = await stockCountApi.areaCounts(area.id); setCounts(d.counts);
-            await onSaved();
         } finally { setSaving(false); }
     }
 
@@ -368,8 +371,15 @@ function CountCard({ item, row, onSet, last, isExtra, onEditPack }: {
                             {isExtra && <Badge variant="outline" className="text-[9px] py-0">also here</Badge>}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                            On system: {fmt(current)} {cfg.recipeUnit}
-                            {last != null && <span> · last here: {fmt(last)} {cfg.recipeUnit}</span>}
+                            <span className="font-semibold text-foreground">
+                                On system: {hasPack(cfg) && recipeToPacks(current, cfg) != null
+                                    ? `${fmt(recipeToPacks(current, cfg)!)} ${cfg.packUnit}`
+                                    : `${fmt(current)} ${cfg.recipeUnit}`}
+                            </span>
+                            {hasPack(cfg) && <span className="ml-1">({fmt(current)} {cfg.recipeUnit})</span>}
+                            {last != null && <span> · last here: {hasPack(cfg) && recipeToPacks(last, cfg) != null
+                                ? `${fmt(recipeToPacks(last, cfg)!)} ${cfg.packUnit}`
+                                : `${fmt(last)} ${cfg.recipeUnit}`}</span>}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

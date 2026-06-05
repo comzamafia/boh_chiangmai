@@ -552,7 +552,7 @@ export const stockCountApi = {
     areaCounts: (areaId: string) =>
         apiFetch<{ counts: Record<string, number>; lastCountedAt: string | null }>(`/stock-count?areaId=${encodeURIComponent(areaId)}`, { cache: "no-store" }),
     save: (areaId: string, counts: { ingredientId: string; recipeQty: number }[]) =>
-        apiFetch<{ ok: boolean; updated: number }>("/stock-count", { method: "POST", body: JSON.stringify({ areaId, counts }) }),
+        apiFetch<{ ok: boolean; updated: { ingredientId: string; currentStock: number }[] }>("/stock-count", { method: "POST", body: JSON.stringify({ areaId, counts }) }),
 };
 
 // ─── Station Prep Report ────────────────────────────────────────────────────

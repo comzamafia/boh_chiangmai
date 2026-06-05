@@ -675,7 +675,17 @@ export default function InventoryPage() {
                                             </TableCell>
                                             <TableCell className="hidden sm:table-cell text-muted-foreground">{item.ingredient.recipeUnit}</TableCell>
                                             <TableCell className="text-right tabular-nums font-semibold">
-                                                {Number(item.currentStock).toFixed(1)}
+                                                {(() => {
+                                                    const cfg = cfgFor(item.ingredient, item.packUnit ?? null, item.packSize ?? null);
+                                                    if (hasPack(cfg)) {
+                                                        const p = recipeToPacks(Number(item.currentStock), cfg);
+                                                        return <>
+                                                            {p != null ? trimN(p) : "—"} <span className="text-xs font-normal text-muted-foreground">{cfg.packUnit}</span>
+                                                            <span className="block text-[10px] font-normal text-muted-foreground/70">{Number(item.currentStock).toFixed(1)} {cfg.recipeUnit}</span>
+                                                        </>;
+                                                    }
+                                                    return Number(item.currentStock).toFixed(1);
+                                                })()}
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums">
                                                 <span className="font-semibold text-emerald-700 dark:text-emerald-400">

@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
-    let updated = 0;
+    const updated: { ingredientId: string; currentStock: number }[] = [];
 
     for (const c of counts) {
         if (!c.ingredientId) continue;
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
             }),
             db.inventoryItem.update({ where: { id: invItem.id }, data: { currentStock: total, lastCountDate: now } }),
         ]);
-        updated += 1;
+        updated.push({ ingredientId: c.ingredientId, currentStock: total });
     }
 
     return NextResponse.json({ ok: true, updated });

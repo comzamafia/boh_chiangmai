@@ -708,7 +708,19 @@ export default function InventoryPage() {
                                                     })()}
                                                 </button>
                                             </TableCell>
-                                            <TableCell><StatusBadge status={status} /></TableCell>
+                                            <TableCell>
+                                                <StatusBadge status={status} />
+                                                {status !== "ok" && (() => {
+                                                    const cfg  = cfgFor(item.ingredient, item.packUnit ?? null, item.packSize ?? null);
+                                                    const need = Math.max(0, Number(item.parMax) - Number(item.currentStock)); // recipe units to reach PAR Max
+                                                    if (need <= 0) return null;
+                                                    let qty: number, unit: string;
+                                                    if (hasPack(cfg))                 { qty = Math.ceil(need / recipeUnitsPerPack(cfg));     unit = cfg.packUnit!; }
+                                                    else if (cfg.conversionRate > 1)  { qty = Math.ceil(need / recipeUnitsPerPurchase(cfg)); unit = cfg.purchaseUnit; }
+                                                    else                              { qty = Math.ceil(need);                               unit = cfg.recipeUnit; }
+                                                    return <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5 whitespace-nowrap">Order ~{qty} {unit}</div>;
+                                                })()}
+                                            </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center justify-end gap-0.5">
                                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit PAR Min / ROP / Max" onClick={() => openParEdit(item)}>

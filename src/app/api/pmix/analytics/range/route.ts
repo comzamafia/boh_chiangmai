@@ -87,15 +87,24 @@ export async function GET(req: NextRequest) {
         where:   { type: { in: ["modifier", "base"] } },
         include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
     });
-    const stdByName = new Map<string, { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string }>();
+    type StdVal = { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string };
+    const stdByName    = new Map<string, StdVal>();
+    const stdByIngName = new Map<string, StdVal>();
     for (const s of standards) {
-        stdByName.set(String(s.itemName).toLowerCase().trim(), {
+        const v: StdVal = {
             portionSize:    Number(s.portionSize),
             portionUnit:    s.portionUnit,
             ingredientName: s.ingredient?.name ?? s.itemName,
             ingredientId:   s.ingredientId,
-        });
+        };
+        stdByName.set(String(s.itemName).toLowerCase().trim(), v);
+        const ingKey = (s.ingredient?.name ?? "").toLowerCase().trim();
+        if (ingKey && !stdByIngName.has(ingKey)) stdByIngName.set(ingKey, v);
     }
+    const lookupStd = (proteinType: string) => {
+        const k = proteinType.toLowerCase().trim();
+        return stdByName.get(k) ?? stdByIngName.get(k);
+    };
 
     const dateSet = new Set(
         uploads.map((u: { businessDate: Date | null; uploadedAt: Date }) =>
@@ -285,7 +294,7 @@ export async function GET(req: NextRequest) {
 
     // ─── Sort helpers ─────────────────────────────────────────────────────────
     function withPortion(proteinType: string, qty: number) {
-        const std = stdByName.get(proteinType.toLowerCase().trim());
+        const std = lookupStd(proteinType);
         const avg = dayCount > 0 ? +(qty / dayCount).toFixed(1) : 0;
         if (!std) return { proteinType, qty, avgQtyPerDay: avg, totalUsed: null as number | null, portionSize: null as number | null, portionUnit: null as string | null, ingredientName: null as string | null, extraUsed: 0 };
         return {
@@ -335,7 +344,7 @@ export async function GET(req: NextRequest) {
         // (0 main orders; Total We Use = the extra usage).
         for (const [base, ex] of extraAgg) {
             if (consumed.has(base)) continue;
-            const std = stdByName.get(base);
+            const std = stdByName.get(base) ?? stdByIngName.get(base);
             proteinTotals.push({
                 proteinType:    ex.display,
                 qty:            0,

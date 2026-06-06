@@ -47,19 +47,26 @@ export async function GET(req: NextRequest) {
     const standards = await db.portionStandard.findMany({
         include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
     });
-    const stdByName = new Map<string, {
-        ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string;
-    }>();
+    type StdVal = { ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string };
+    const stdByName    = new Map<string, StdVal>();   // keyed by the standard's itemName
+    const stdByIngName = new Map<string, StdVal>();   // fallback: keyed by the ingredient's name
     for (const s of standards) {
         if (s.type === "modifier" || s.type === "base") {
-            stdByName.set(String(s.itemName).toLowerCase().trim(), {
+            const v: StdVal = {
                 ingredientName: s.ingredient?.name ?? s.itemName,
                 portionSize:    Number(s.portionSize),
                 portionUnit:    s.portionUnit,
                 ingredientId:   s.ingredientId,
-            });
+            };
+            stdByName.set(String(s.itemName).toLowerCase().trim(), v);
+            const ingKey = (s.ingredient?.name ?? "").toLowerCase().trim();
+            if (ingKey && !stdByIngName.has(ingKey)) stdByIngName.set(ingKey, v);
         }
     }
+    const lookupStd = (proteinType: string) => {
+        const k = proteinType.toLowerCase().trim();
+        return stdByName.get(k) ?? stdByIngName.get(k);
+    };
 
     // 4. Item rules (sorted priority desc)
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
@@ -176,7 +183,7 @@ export async function GET(req: NextRequest) {
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
     function withPortion(proteinType: string, qty: number): ByType {
-        const std = stdByName.get(proteinType.toLowerCase().trim());
+        const std = lookupStd(proteinType);
         if (!std) return { proteinType, qty, totalUsed: null, portionSize: null, portionUnit: null, ingredientName: null, extraUsed: 0 };
         return {
             proteinType,

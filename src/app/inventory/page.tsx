@@ -8,6 +8,7 @@ import {
     Ingredient, Supplier, StorageArea, IngredientSupplier,
     type IngredientTrendResult, type ProteinHeatmapResult,
     type DessertHeatmapResult, type BeverageHeatmapResult, type CurryHeatmapResult,
+    type ParSuggestion,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
@@ -38,7 +39,7 @@ import {
     AlertCircle, PackagePlus, Warehouse, History, Search,
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
     CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
-    DollarSign, TrendingUp, RefreshCw, FileDown, SlidersHorizontal,
+    DollarSign, TrendingUp, RefreshCw, FileDown, SlidersHorizontal, Sparkles,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DataPagination, paginate } from "@/components/ui/data-pagination";
@@ -176,6 +177,11 @@ export default function InventoryPage() {
     const [parForm,   setParForm]   = useState({ unit: "", parMin: "", reorderPoint: "", parMax: "", leadTimeDays: "1", packUnit: "", packSize: "" });
     const [parSaving, setParSaving] = useState(false);
     const [parError,  setParError]  = useState<string | null>(null);
+
+    // Auto-fill PAR from PMIX usage
+    const [parDays,     setParDays]     = useState(30);
+    const [parSug,      setParSug]      = useState<ParSuggestion[] | null>(null);
+    const [autoFilling, setAutoFilling] = useState(false);
 
     // Receive goods form
     const [rcvForm,     setRcvForm]     = useState({ ingredientId: "", purchaseQty: "", purchasePrice: "", date: today(), note: "" });
@@ -388,6 +394,51 @@ export default function InventoryPage() {
         } finally { setParSaving(false); }
     }
 
+    // ── Auto-fill PAR Min / ROP / Max from PMIX-derived demand ──────────────────
+    async function fetchParSuggestions(days: number): Promise<ParSuggestion[]> {
+        const res = await pmixApi.parSuggestions(days);
+        setParSug(res.suggestions);
+        return res.suggestions;
+    }
+    async function autoFillAllPar() {
+        setAutoFilling(true);
+        try {
+            const sugg = await fetchParSuggestions(parDays);
+            const toApply = sugg
+                .filter(s => s.hasHistory && s.suggestedParMin != null && s.suggestedROP != null && s.suggestedParMax != null)
+                .map(s => ({ inventoryItemId: s.inventoryItemId, parMin: s.suggestedParMin!, parMax: s.suggestedParMax!, reorderPoint: s.suggestedROP! }));
+            if (toApply.length === 0) {
+                alert("No PMIX usage history found in the selected window. Upload PMIX reports and link menu items to recipes first.");
+                return;
+            }
+            if (!confirm(`Auto-fill PAR Min / ROP / Max for ${toApply.length} ingredient(s) from the last ${parDays} days of PMIX usage?\n\nThis overwrites the current PAR values for those items.`)) return;
+            const r = await pmixApi.applyParSuggestions(toApply);
+            await loadData();
+            alert(`Updated PAR levels for ${r.applied} ingredient(s) based on PMIX demand.`);
+        } finally { setAutoFilling(false); }
+    }
+    // Fill the open PAR dialog from this item's PMIX suggestion (review before save)
+    async function autoFillOnePar() {
+        if (!parEdit) return;
+        setParSaving(true);
+        try {
+            const sugg = parSug ?? await fetchParSuggestions(parDays);
+            const s = sugg.find(x => x.inventoryItemId === parEdit.id);
+            if (!s || !s.hasHistory || s.suggestedParMin == null) {
+                setParError(`No PMIX usage history for this item in the last ${parDays} days.`);
+                return;
+            }
+            const cfg = cfgFor(parEdit.ingredient, parForm.packUnit || null, parForm.packSize ? Number(parForm.packSize) : null);
+            setParForm(f => ({
+                ...f,
+                parMin:       trimN(recipeToUnit(s.suggestedParMin!, f.unit, cfg)),
+                reorderPoint: trimN(recipeToUnit(s.suggestedROP!,    f.unit, cfg)),
+                parMax:       trimN(recipeToUnit(s.suggestedParMax!, f.unit, cfg)),
+            }));
+            setParError(null);
+        } finally { setParSaving(false); }
+    }
+
     async function handleReceive() {
         if (!rcvForm.ingredientId || !rcvForm.purchaseQty || !rcvForm.purchasePrice || !rcvForm.date) return;
         setSaving(true);
@@ -556,6 +607,19 @@ export default function InventoryPage() {
 
                 {/* ══ STOCK LEVELS ═══════════════════════════════════════════════ */}
                 <TabsContent value="stock" className="space-y-4 mt-4">
+
+                    {/* Auto-fill PAR from PMIX demand */}
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2">
+                        <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-xs text-muted-foreground mr-auto">Set PAR Min / ROP / Max automatically from PMIX usage (qty sold × recipe BOM).</span>
+                        <Select value={String(parDays)} onValueChange={v => setParDays(Number(v))}>
+                            <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                            <SelectContent>{[7, 14, 30, 60].map(d => <SelectItem key={d} value={String(d)}>{d} days</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={autoFillAllPar} disabled={autoFilling}>
+                            {autoFilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Auto-fill PAR
+                        </Button>
+                    </div>
 
                     {/* Level 1: Area Cards (when no area is selected AND storage areas exist) */}
                     {selectedAreaId === null && storageAreas.length > 0 ? (
@@ -1615,15 +1679,20 @@ export default function InventoryPage() {
                                     )}
                                 </div>
 
-                                {/* Entry unit */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Enter PAR levels in</Label>
-                                    <Select value={opts.includes(parForm.unit) ? parForm.unit : cfg.recipeUnit} onValueChange={changeParUnit}>
-                                        <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {opts.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                {/* Entry unit + auto-fill */}
+                                <div className="flex items-end justify-between gap-2 flex-wrap">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Enter PAR levels in</Label>
+                                        <Select value={opts.includes(parForm.unit) ? parForm.unit : cfg.recipeUnit} onValueChange={changeParUnit}>
+                                            <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                {opts.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={autoFillOnePar} disabled={parSaving}>
+                                        <Sparkles className="w-3.5 h-3.5 text-primary" /> Auto-fill from PMIX ({parDays}d)
+                                    </Button>
                                 </div>
 
                                 {/* PAR inputs */}

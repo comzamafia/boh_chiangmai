@@ -328,6 +328,9 @@ export const portionStandardsApi = {
     update: (id: string, data: Partial<Omit<PortionStandard, "id" | "ingredient" | "createdAt" | "updatedAt">>) =>
         apiFetch<PortionStandard>(`/portion-standards/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/portion-standards/${id}`, { method: "DELETE" }),
+    import: (rows: { ingredient: string; itemName: string; type?: string; portionSize: number | string; portionUnit: string; notes?: string }[]) =>
+        apiFetch<{ created: number; updated: number; errors: { row: number; reason: string }[] }>(
+            "/portion-standards/import", { method: "POST", body: JSON.stringify({ rows }) }),
 };
 
 // ─── PMIX Item Rules ──────────────────────────────────────────────────────────

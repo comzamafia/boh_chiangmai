@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import {
     UtensilsCrossed, Plus, Pencil, Trash2, Loader2, AlertCircle,
-    Search, Download, Info,
+    Search, Download, Info, Upload, FileSpreadsheet,
 } from "lucide-react";
 import { portionStandardsApi, ingredientsApi, type PortionStandard, type Ingredient } from "@/lib/api";
 
@@ -126,6 +126,8 @@ export default function PortionStandardsPage() {
     const [form,         setForm]        = useState<FormState>(EMPTY_FORM);
     const [search,       setSearch]      = useState("");
     const [typeFilter,   setTypeFilter]  = useState<string>("all");
+    const [importing,    setImporting]   = useState(false);
+    const [importResult, setImportResult] = useState<{ created: number; updated: number; errors: { row: number; reason: string }[] } | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -247,6 +249,66 @@ export default function PortionStandardsPage() {
         URL.revokeObjectURL(url);
     };
 
+    // ── Download Excel template (with an Ingredients reference sheet) ──
+    const handleTemplate = async () => {
+        const XLSX = await import("xlsx");
+        const headers = ["Ingredient", "Menu Item / Modifier", "Type", "Portion Size", "Unit", "Notes"];
+        const example = [
+            ["Chicken Breast", "Pad Thai", "base", 6, "oz", "main protein per plate"],
+            ["Chicken", "Extra Chicken", "modifier", 3, "oz", "add-on portion"],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...example]);
+        ws["!cols"] = [{ wch: 24 }, { wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 30 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Portion Standards");
+
+        const ref = XLSX.utils.aoa_to_sheet([
+            ["Valid Ingredient names — copy into column A (or use the SKU)"],
+            ...ingredients.map(i => [i.name, i.sku ?? ""]),
+        ]);
+        ref["!cols"] = [{ wch: 40 }, { wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, ref, "Ingredients");
+
+        const units = XLSX.utils.aoa_to_sheet([["Type: base | modifier"], ["Units:"], ...UNITS.map(u => [u])]);
+        XLSX.utils.book_append_sheet(wb, units, "Help");
+
+        XLSX.writeFile(wb, "portion-standards-template.xlsx");
+    };
+
+    // ── Import Excel / CSV ──
+    const pick = (o: Record<string, unknown>, names: string[]): string => {
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+        for (const k of Object.keys(o)) {
+            if (names.some(n => norm(k) === norm(n))) return String(o[k] ?? "");
+        }
+        return "";
+    };
+    const handleImportFile = async (file: File) => {
+        setImporting(true); setError(null);
+        try {
+            const XLSX = await import("xlsx");
+            const wb = XLSX.read(await file.arrayBuffer());
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+            const rows = json.map(o => ({
+                ingredient:  pick(o, ["ingredient", "ingredientname", "sku"]).trim(),
+                itemName:    pick(o, ["menuitemmodifier", "itemname", "item", "menuitem", "modifier"]).trim(),
+                type:        pick(o, ["type"]).trim() || "base",
+                portionSize: pick(o, ["portionsize", "size", "qty", "portion"]),
+                portionUnit: pick(o, ["unit", "portionunit"]).trim(),
+                notes:       pick(o, ["notes", "note"]).trim(),
+            })).filter(r => r.ingredient || r.itemName);
+
+            if (rows.length === 0) { setError("No data rows found. Use the template's column headers."); return; }
+
+            const res = await portionStandardsApi.import(rows);
+            setImportResult(res);
+            await load();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Import failed");
+        } finally { setImporting(false); }
+    };
+
     // ── Stats ──
     const baseCount = standards.filter(s => s.type === "base").length;
     const modCount  = standards.filter(s => s.type === "modifier").length;
@@ -266,7 +328,16 @@ export default function PortionStandardsPage() {
                         Define standard portion sizes per menu item — used by the Portion Calc tab in PMIX Analytics
                     </p>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 flex-wrap">
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl" onClick={handleTemplate}>
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> Template
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl" disabled={importing}
+                        onClick={() => document.getElementById("portion-import-input")?.click()}>
+                        {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Import
+                    </Button>
+                    <input id="portion-import-input" type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { handleImportFile(f); e.target.value = ""; } }} />
                     {standards.length > 0 && (
                         <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl hidden sm:flex" onClick={handleExport}>
                             <Download className="w-3.5 h-3.5" /> Export
@@ -609,6 +680,44 @@ export default function PortionStandardsPage() {
                             <Trash2 className="w-3.5 h-3.5" /> Delete
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Import result */}
+            <Dialog open={!!importResult} onOpenChange={o => { if (!o) setImportResult(null); }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Upload className="w-4 h-4 text-primary" /> Import complete</DialogTitle>
+                    </DialogHeader>
+                    {importResult && (
+                        <div className="space-y-3 py-1">
+                            <div className="flex gap-3">
+                                <div className="flex-1 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-center">
+                                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{importResult.created}</p>
+                                    <p className="text-[11px] text-muted-foreground">created</p>
+                                </div>
+                                <div className="flex-1 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-center">
+                                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{importResult.updated}</p>
+                                    <p className="text-[11px] text-muted-foreground">updated</p>
+                                </div>
+                                <div className="flex-1 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-center">
+                                    <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{importResult.errors.length}</p>
+                                    <p className="text-[11px] text-muted-foreground">skipped</p>
+                                </div>
+                            </div>
+                            {importResult.errors.length > 0 && (
+                                <div className="max-h-48 overflow-y-auto rounded-lg border border-border divide-y text-xs">
+                                    {importResult.errors.map((e, i) => (
+                                        <div key={i} className="flex gap-2 px-2.5 py-1.5">
+                                            <span className="text-muted-foreground shrink-0">Row {e.row}</span>
+                                            <span className="text-amber-700 dark:text-amber-400">{e.reason}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <DialogFooter><Button size="sm" onClick={() => setImportResult(null)}>Done</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

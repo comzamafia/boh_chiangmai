@@ -191,6 +191,8 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
     units: Record<string, string>; setUnits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
     canManage: boolean; onEditChain: (i: UsageReportItem) => void;
 }) {
+    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const toggle = (label: string) => setExpanded(s => { const n = new Set(s); if (n.has(label)) n.delete(label); else n.add(label); return n; });
     if (rows.length === 0) return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No usage in this window.</CardContent></Card>;
     return (
         <Card>
@@ -211,12 +213,17 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                 const conv = converterFor(item);
                                 const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
                                 const cell = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "—" : fmtChainQty(v); };
+                                const isOpen = expanded.has(item.label);
+                                const multi = conv.units.length > 1;
                                 return (
                                     <Fragment key={item.label}>
                                         <tr className="border-t border-border/40 hover:bg-muted/20">
-                                            <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[160px] truncate">
-                                                {item.label}
-                                                {!item.ingredientId && <Link2 className="inline w-3 h-3 ml-1 text-amber-500" />}
+                                            <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[160px]">
+                                                <button onClick={() => multi && toggle(item.label)} className={`flex items-center gap-1 text-left ${multi ? "hover:text-primary" : ""}`}>
+                                                    {multi && <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />}
+                                                    <span className="truncate">{item.label}</span>
+                                                    {!item.ingredientId && <Link2 className="inline w-3 h-3 ml-0.5 text-amber-500 shrink-0" />}
+                                                </button>
                                             </td>
                                             <td className="py-1.5 px-1">
                                                 <select value={unit} onChange={e => setUnits(u => ({ ...u, [item.label]: e.target.value }))}
@@ -235,6 +242,25 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                                 )}
                                             </td>
                                         </tr>
+                                        {isOpen && multi && (
+                                            <tr className="bg-muted/10">
+                                                <td colSpan={DOW.length + 4} className="px-3 py-2">
+                                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Total in every unit:</span>
+                                                        {conv.units.map(u => {
+                                                            const v = conv.convert(item.total, u);
+                                                            if (v == null) return null;
+                                                            return (
+                                                                <span key={u} className="inline-flex items-baseline gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
+                                                                    <span className="font-semibold tabular-nums">{fmtChainQty(v)}</span>
+                                                                    <span className="text-muted-foreground">{u}</span>
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
                                     </Fragment>
                                 );
                             })}

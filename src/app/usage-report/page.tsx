@@ -20,15 +20,6 @@ import {
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
 import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
 
-// Heat colour (light → dark red) for a value's share of the row max
-function heatStyle(value: number, rowMax: number): React.CSSProperties {
-    if (value <= 0 || rowMax <= 0) return {};
-    const t = Math.min(1, value / rowMax);
-    const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
-    const bg = `rgb(${lerp(254, 153)}, ${lerp(226, 27)}, ${lerp(226, 27)})`;
-    return { backgroundColor: bg, color: t > 0.55 ? "#fff" : "#450a0a" };
-}
-
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 type Tab = "protein" | "curry" | "dessert" | "beverage";
@@ -259,7 +250,6 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                 const cell = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "—" : fmtChainQty(v); };
                                 const isOpen = expanded.has(item.label);
                                 const multi = conv.units.length > 1;
-                                const rowMax = Math.max(1, ...item.byDow);
                                 return (
                                     <Fragment key={item.label}>
                                         <tr className="border-t border-border/40 hover:bg-muted/20">
@@ -277,8 +267,8 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                                 </select>
                                             </td>
                                             {item.byDow.map((q, i) => (
-                                                <td key={i} className="py-1.5 px-2 text-center tabular-nums font-medium rounded-sm" style={q > 0 ? heatStyle(q, rowMax) : undefined}>
-                                                    {q > 0 ? cell(q) : <span className="text-muted-foreground/40">·</span>}
+                                                <td key={i} className="py-1.5 px-2 text-center tabular-nums font-bold text-foreground">
+                                                    {q > 0 ? cell(q) : <span className="text-muted-foreground/40 font-normal">·</span>}
                                                 </td>
                                             ))}
                                             <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{cell(item.total)}</td>

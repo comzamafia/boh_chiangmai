@@ -10,8 +10,7 @@ import autoTable from "jspdf-autotable";
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const NAVY: [number, number, number] = [30, 41, 59];
 const MUTED: [number, number, number] = [148, 163, 184];
-const HEAT_LIGHT: [number, number, number] = [254, 226, 226];
-const HEAT_DARK:  [number, number, number] = [153, 27, 27];
+const INK:  [number, number, number] = [17, 24, 39];   // strong near-black for data text
 
 export interface UsageExportRow {
     label: string;
@@ -29,15 +28,6 @@ export interface UsageReportExport {
     iceCream: UsageFlavorRow[];
     fileLabel?: string;   // e.g. "main-protein" — used in the filename
 }
-
-const heat = (t: number): [number, number, number] => {
-    const c = Math.max(0, Math.min(1, t));
-    return [
-        Math.round(HEAT_LIGHT[0] + (HEAT_DARK[0] - HEAT_LIGHT[0]) * c),
-        Math.round(HEAT_LIGHT[1] + (HEAT_DARK[1] - HEAT_LIGHT[1]) * c),
-        Math.round(HEAT_LIGHT[2] + (HEAT_DARK[2] - HEAT_LIGHT[2]) * c),
-    ];
-};
 
 export function exportUsageReportPDF(d: UsageReportExport) {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -62,31 +52,24 @@ export function exportUsageReportPDF(d: UsageReportExport) {
         doc.text(`${s.title} — Last ${d.days} Days`, M, y + 4);
         y += 12;
 
-        const rowMax = s.rows.map(r => Math.max(1, ...r.dayOrders.map(v => v ?? 0)));
         autoTable(doc, {
             startY: y,
             head: [["Item", ...dowHead, "Total", "Avg/d"]],
             body: s.rows.map(r => [r.label, ...r.dayCells, r.total, r.avg]),
             margin: { left: M, right: M },
-            styles: { font: "helvetica", fontSize: 7, cellPadding: 2.5, lineColor: [255, 255, 255], lineWidth: 0.5, valign: "middle" },
-            headStyles: { fillColor: NAVY, textColor: 255, fontSize: 7, halign: "center", valign: "middle" },
+            styles: { font: "helvetica", fontStyle: "bold", fontSize: 8, cellPadding: 3, textColor: INK, lineColor: [203, 213, 225], lineWidth: 0.4, valign: "middle" },
+            headStyles: { fillColor: [241, 245, 249], textColor: NAVY, fontStyle: "bold", fontSize: 7.5, halign: "center", valign: "middle", lineColor: [203, 213, 225], lineWidth: 0.4 },
             columnStyles: {
-                0: { halign: "left", cellWidth: 110, fontStyle: "bold", fontSize: 8 },
-                [TOTAL]: { halign: "center", fontStyle: "bold", fillColor: [248, 250, 252] },
-                [AVG]: { halign: "center", textColor: [71, 85, 105] },
+                0: { halign: "left", cellWidth: 110, fontSize: 9 },
+                [TOTAL]: { halign: "center", fillColor: [248, 250, 252] },
+                [AVG]: { halign: "center" },
             },
             didParseCell: (data) => {
                 const ci = data.column.index;
                 if (data.section === "body" && ci >= DAY0 && ci < DAY0 + 7) {
                     data.cell.styles.halign = "center";
                     const v = s.rows[data.row.index]?.dayOrders[ci - DAY0] ?? 0;
-                    if (v > 0) {
-                        const t = v / rowMax[data.row.index];
-                        data.cell.styles.fillColor = heat(t);
-                        data.cell.styles.textColor = t > 0.55 ? [255, 255, 255] : [69, 10, 10];
-                    } else {
-                        data.cell.styles.textColor = MUTED;
-                    }
+                    if (v <= 0) data.cell.styles.textColor = MUTED;
                 }
             },
         });
@@ -103,9 +86,9 @@ export function exportUsageReportPDF(d: UsageReportExport) {
             head: [["Flavour", ...dowHead, "Total"]],
             body: d.iceCream.map(r => [r.flavor, ...r.cells, r.total]),
             margin: { left: M, right: M },
-            styles: { font: "helvetica", fontSize: 8, cellPadding: 3 },
-            headStyles: { fillColor: [157, 23, 77], textColor: 255, fontSize: 7.5, halign: "center" },
-            columnStyles: { 0: { halign: "left", cellWidth: 180, fontStyle: "bold" } },
+            styles: { font: "helvetica", fontStyle: "bold", fontSize: 8, cellPadding: 3, textColor: INK, lineColor: [203, 213, 225], lineWidth: 0.4 },
+            headStyles: { fillColor: [241, 245, 249], textColor: NAVY, fontStyle: "bold", fontSize: 7.5, halign: "center" },
+            columnStyles: { 0: { halign: "left", cellWidth: 180 } },
             didParseCell: (data) => { if (data.column.index >= 1) data.cell.styles.halign = data.column.index === 8 ? "right" : "center"; },
         });
     }

@@ -27,6 +27,7 @@ export interface UsageReportExport {
     dowCounts: number[];
     sections: UsageExportSection[];
     iceCream: UsageFlavorRow[];
+    fileLabel?: string;   // e.g. "main-protein" — used in the filename
 }
 
 const heat = (t: number): [number, number, number] => {
@@ -109,5 +110,6 @@ export function exportUsageReportPDF(d: UsageReportExport) {
         });
     }
 
-    doc.save(`usage-report-${d.days}d-${new Date().toISOString().slice(0, 10)}.pdf`);
+    const slug = (d.fileLabel ?? "report").replace(/\s+/g, "-").toLowerCase();
+    doc.save(`usage-${slug}-${d.days}d-${new Date().toISOString().slice(0, 10)}.pdf`);
 }

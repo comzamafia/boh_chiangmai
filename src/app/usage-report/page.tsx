@@ -106,15 +106,15 @@ export default function UsageReportPage() {
                 };
             }),
         });
+        // Export ONLY the station (tab) currently in view — one report per PDF
+        const tabLabel = TABS.find(t => t.key === tab)?.label ?? "Usage";
         const payload: UsageReportExport = {
             days: data.days, dowCounts: data.dowCounts,
-            sections: [
-                sectionFor("Main Protein", data.protein),
-                sectionFor("Main Curry", data.curry),
-                sectionFor("Main Desserts", data.dessert),
-                sectionFor("Beverages", data.beverage),
-            ],
-            iceCream: data.iceCream.map(f => ({ flavor: f.flavor, cells: f.byDow.map(q => q ? String(q) : ""), total: String(f.total) })),
+            sections: [sectionFor(tabLabel, data[tab])],
+            iceCream: tab === "dessert"
+                ? data.iceCream.map(f => ({ flavor: f.flavor, cells: f.byDow.map(q => q ? String(q) : ""), total: String(f.total) }))
+                : [],
+            fileLabel: tabLabel,
         };
         exportUsageReportPDF(payload);
     }

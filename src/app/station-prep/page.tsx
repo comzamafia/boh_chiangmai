@@ -226,14 +226,27 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded, can
 
     const captureRef = useRef<HTMLDivElement>(null);
     async function exportJpg() {
-        if (!captureRef.current) return;
+        const node = captureRef.current;
+        if (!node) return;
         const { toJpeg } = await import("html-to-image");
         const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
-        const dataUrl = await toJpeg(captureRef.current, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true });
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `station-prep-${report.station.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.jpg`;
-        a.click();
+        const scrollers = Array.from(node.querySelectorAll<HTMLElement>(".overflow-x-auto"));
+        const prevOv = scrollers.map(el => el.style.overflow);
+        const prevW = node.style.width;
+        scrollers.forEach(el => { el.style.overflow = "visible"; });
+        node.style.width = "max-content";
+        await new Promise(requestAnimationFrame);
+        try {
+            const dataUrl = await toJpeg(node, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true,
+                width: node.scrollWidth, height: node.scrollHeight });
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `station-prep-${report.station.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.jpg`;
+            a.click();
+        } finally {
+            scrollers.forEach((el, i) => { el.style.overflow = prevOv[i]; });
+            node.style.width = prevW;
+        }
     }
 
     return (

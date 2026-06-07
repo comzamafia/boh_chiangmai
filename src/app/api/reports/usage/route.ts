@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const empty = { days, dowCounts, protein: [], curry: [], dessert: [], beverage: [], iceCream: [] };
     if (uploadIds.length === 0) return NextResponse.json(empty);
 
-    const [items, rules, standards, chains] = await Promise.all([
+    const [items, rules, standards, chains, ingredients] = await Promise.all([
         db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
         db.pmixItemRule.findMany({ where: { isActive: true }, orderBy: [{ priority: "desc" }, { pattern: "asc" }] }),
         db.portionStandard.findMany({
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
             include: { ingredient: { select: { id: true, name: true } } },
         }),
         db.reportUnitChain.findMany(),
+        db.ingredient.findMany({ select: { id: true, name: true } }),
     ]);
 
     // Resolve a label → { ingredientId, portionSize, portionUnit } via portion std (itemName or ingredient name)
@@ -66,6 +67,9 @@ export async function GET(req: NextRequest) {
         if (ik && !stdByIng.has(ik)) stdByIng.set(ik, v);
     }
     const lookupStd = (label: string) => { const k = label.toLowerCase().trim(); return stdByName.get(k) ?? stdByIng.get(k); };
+    // Ingredient-name → id (lets a chain attach even with no Portion Standard)
+    const ingByName = new Map<string, string>();
+    for (const ig of ingredients) ingByName.set(ig.name.toLowerCase().trim(), ig.id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chainByIng = new Map<string, any>();
     for (const c of chains) chainByIng.set(c.ingredientId, { base: c.base, relations: c.relations });
@@ -125,12 +129,13 @@ export async function GET(req: NextRequest) {
 
     const build = (m: Map<string, number[]>) => [...m.entries()].map(([label, byDow]) => {
         const std = lookupStd(label);
+        const ingredientId = std?.ingredientId ?? ingByName.get(label.toLowerCase().trim()) ?? null;
         return {
             label, byDow, total: byDow.reduce((s, x) => s + x, 0),
-            ingredientId: std?.ingredientId ?? null,
+            ingredientId,
             portionSize:  std?.portionSize ?? null,
             portionUnit:  std?.portionUnit ?? null,
-            chain:        std?.ingredientId ? (chainByIng.get(std.ingredientId) ?? null) : null,
+            chain:        ingredientId ? (chainByIng.get(ingredientId) ?? null) : null,
         };
     }).sort((a, b) => b.total - a.total);
 

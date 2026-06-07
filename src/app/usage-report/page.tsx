@@ -93,14 +93,16 @@ export default function UsageReportPage() {
             rows: items.map(item => {
                 const conv = converterFor(item);
                 const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
+                const multiLine = (orders: number) => conv.units
+                    .map(u => { const v = conv.convert(orders, u); return v == null ? null : `${fmtChainQty(v)} ${u}`; })
+                    .filter(Boolean).join("\n");
                 const totalU = conv.convert(item.total, unit) ?? 0;
-                const allUnits = conv.units.map(u => { const v = conv.convert(item.total, u); return v == null ? null : `${fmtChainQty(v)} ${u}`; }).filter(Boolean).join(" · ");
                 return {
-                    label: item.label, unit,
-                    dayNums: item.byDow.map(q => q > 0 ? conv.convert(q, unit) : null),
-                    total: totalU,
-                    avg: totalU / totalDays,
-                    allUnits,
+                    label: item.label,
+                    dayCells: item.byDow.map(q => q > 0 ? multiLine(q) : ""),
+                    dayOrders: item.byDow.map(q => q > 0 ? q : null),
+                    total: multiLine(item.total),
+                    avg: `${fmtChainQty(totalU / totalDays)} ${unit}`,
                 };
             }),
         });
@@ -119,14 +121,28 @@ export default function UsageReportPage() {
 
     const captureRef = useRef<HTMLDivElement>(null);
     async function exportJpg() {
-        if (!captureRef.current) return;
+        const node = captureRef.current;
+        if (!node) return;
         const { toJpeg } = await import("html-to-image");
         const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
-        const url = await toJpeg(captureRef.current, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true });
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `usage-${tab}-${days}d-${new Date().toISOString().slice(0, 10)}.jpg`;
-        a.click();
+        // Expand horizontal-scroll wrappers so the full (off-screen) table is captured
+        const scrollers = Array.from(node.querySelectorAll<HTMLElement>(".overflow-x-auto"));
+        const prevOv = scrollers.map(el => el.style.overflow);
+        const prevW = node.style.width;
+        scrollers.forEach(el => { el.style.overflow = "visible"; });
+        node.style.width = "max-content";
+        await new Promise(requestAnimationFrame);
+        try {
+            const url = await toJpeg(node, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true,
+                width: node.scrollWidth, height: node.scrollHeight });
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `usage-${tab}-${days}d-${new Date().toISOString().slice(0, 10)}.jpg`;
+            a.click();
+        } finally {
+            scrollers.forEach((el, i) => { el.style.overflow = prevOv[i]; });
+            node.style.width = prevW;
+        }
     }
 
     return (

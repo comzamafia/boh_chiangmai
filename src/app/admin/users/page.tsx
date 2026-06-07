@@ -66,6 +66,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "settings-pmix-rules": "Settings: PMIX Classification Rules",
     "reports": "Reports — View",
     "reports-download": "Reports — Download PDF",
+    "usage-report": "Usage Report (7-day, multi-unit)",
     "prep-list": "Prep List",
     "station-prep": "Station Prep Report",
     "stock-count": "Stock Count (by Storage Area)",

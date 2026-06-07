@@ -683,3 +683,17 @@ model StorageAreaCount {
   @@index([storageAreaId])
   @@map("storage_area_counts")
 }
+
+// ─── Usage Report — per-ingredient unit chain (flexible multi-level units) ───
+// relations = [{ from, qty, to }] meaning "1 <from> = <qty> <to>". The solver
+// reduces every unit to `base` so the report can show Order/oz/piece/box/case.
+model ReportUnitChain {
+  id           String   @id @default(cuid())
+  ingredientId String   @unique
+  base         String                 // smallest/base unit name
+  relations    Json                   // [{ from: string, qty: number, to: string }]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("report_unit_chains")
+}

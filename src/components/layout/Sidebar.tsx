@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
     Home, BarChart2, Utensils, ChefHat, ShoppingCart,
     Wrench, Users, Package, FileText,
-    PieChart, Calendar, ClipboardList, ClipboardCheck,
+    PieChart, Calendar, ClipboardList, ClipboardCheck, Gauge,
     Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell, Carrot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,7 @@ const navItems: NavItem[] = [
     { name: "PMIX Analytics", href: "/analysis/pmix",          icon: PieChart,  slug: "pmix-dashboard",   group: "insights" },
     { name: "PMIX Dashboard", href: "/analysis/pmix/dashboard", icon: BarChart2, slug: "pmix-dashboard",   group: "insights" },
     { name: "Reports",        href: "/reports",            icon: FileText,      slug: "reports",          group: "insights" },
+    { name: "Usage Report",   href: "/usage-report",       icon: Gauge,         slug: "usage-report",     group: "insights" },
     { name: "Users",          href: "/admin/users",        icon: ShieldCheck,   slug: "admin",                    group: "admin" },
     { name: "Audit Log",      href: "/admin/audit-log",    icon: ScrollText,    slug: "admin-audit",              group: "admin" },
     { name: "Notifications",  href: "/admin/notifications",icon: Bell,          slug: "admin-notifications",      group: "admin" },

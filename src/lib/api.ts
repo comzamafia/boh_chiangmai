@@ -550,6 +550,38 @@ export const prepStationsApi = {
             .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
 };
 
+// ─── Usage Report (7-day, multi-unit) ───────────────────────────────────────
+export interface UsageReportItem {
+    label:        string;
+    byDow:        number[];   // Mon..Sun orders
+    total:        number;
+    ingredientId: string | null;
+    portionSize:  number | null;
+    portionUnit:  string | null;
+    chain:        { base: string; relations: { from: string; qty: number; to: string }[] } | null;
+}
+export interface UsageReportFlavor { flavor: string; byDow: number[]; total: number }
+export interface UsageReportResult {
+    days: number;
+    dowCounts: number[];
+    protein:  UsageReportItem[];
+    curry:    UsageReportItem[];
+    dessert:  UsageReportItem[];
+    beverage: UsageReportItem[];
+    iceCream: UsageReportFlavor[];
+}
+export interface ReportUnitChainRow {
+    ingredientId: string;
+    base:         string;
+    relations:    { from: string; qty: number; to: string }[];
+}
+export const usageReportApi = {
+    get: (days = 7) => apiFetch<UsageReportResult>(`/reports/usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+    chains: () => apiFetch<ReportUnitChainRow[]>("/report-unit-chains", { cache: "no-store" }),
+    saveChain: (ingredientId: string, base: string, relations: { from: string; qty: number; to: string }[]) =>
+        apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ ingredientId, base, relations }) }),
+};
+
 // ─── Physical Stock Count (per storage area) ────────────────────────────────
 export const stockCountApi = {
     areaCounts: (areaId: string) =>

@@ -1,15 +1,23 @@
 /**
- * PDF export for the Usage Report. The page prepares display-ready rows
- * (already converted to each item's chosen unit) so conversion stays in one place.
+ * PDF export for the Usage Report — polished, heat-graded.
+ * The page passes numeric per-day values (in each item's chosen unit) so the
+ * PDF can format them and shade each cell by usage intensity (light → dark red).
  */
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TEAL: [number, number, number] = [13, 148, 136];
+const NAVY: [number, number, number] = [30, 41, 59];
 const MUTED: [number, number, number] = [148, 163, 184];
+const HEAT_LIGHT: [number, number, number] = [254, 226, 226]; // #fee2e2
+const HEAT_DARK:  [number, number, number] = [153, 27, 27];   // #991b1b
 
-export interface UsageExportRow { label: string; unit: string; cells: string[]; total: string; allUnits: string }
+export interface UsageExportRow {
+    label: string; unit: string;
+    dayNums: (number | null)[];   // per weekday, in the chosen unit (null = no sales)
+    total: number; avg: number;
+    allUnits: string;
+}
 export interface UsageExportSection { title: string; rows: UsageExportRow[] }
 export interface UsageFlavorRow { flavor: string; cells: string[]; total: string }
 export interface UsageReportExport {
@@ -19,59 +27,97 @@ export interface UsageReportExport {
     iceCream: UsageFlavorRow[];
 }
 
+const fmt = (n: number | null) => {
+    if (n == null) return "";
+    if (n === 0) return "0";
+    const a = Math.abs(n), dp = a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3;
+    return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: dp });
+};
+const heat = (t: number): [number, number, number] => {
+    const c = Math.max(0, Math.min(1, t));
+    return [
+        Math.round(HEAT_LIGHT[0] + (HEAT_DARK[0] - HEAT_LIGHT[0]) * c),
+        Math.round(HEAT_LIGHT[1] + (HEAT_DARK[1] - HEAT_LIGHT[1]) * c),
+        Math.round(HEAT_LIGHT[2] + (HEAT_DARK[2] - HEAT_LIGHT[2]) * c),
+    ];
+};
+
 export function exportUsageReportPDF(d: UsageReportExport) {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     const pageW = doc.internal.pageSize.width;
     const pageH = doc.internal.pageSize.height;
-    const M = 32;
+    const M = 28;
 
-    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...TEAL);
-    doc.text("Usage Report", M, 40);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...NAVY);
+    doc.text("Usage Report", M, 38);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(`Last ${d.days} days  ·  PMIX usage`, M, 55);
-    doc.text(`Generated: ${new Date().toLocaleString("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 55, { align: "right" });
+    doc.text(`Last ${d.days} days · from PMIX sales`, M, 52);
+    doc.text(`Generated: ${new Date().toLocaleString("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 52, { align: "right" });
 
     const dowHead = DOW.map((dd, i) => `${dd}\n×${d.dowCounts[i] ?? 0}`);
-    let y = 70;
-
-    const sectionBar = (label: string) => {
-        if (y > pageH - 80) { doc.addPage(); y = 50; }
-        doc.setFillColor(...TEAL);
-        doc.roundedRect(M, y, pageW - M * 2, 18, 3, 3, "F");
-        doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(255, 255, 255);
-        doc.text(label, M + 8, y + 12.5);
-        y += 24;
-    };
+    let y = 66;
+    const DAY0 = 2;                       // first weekday column index
+    const TOTAL = DAY0 + 7, AVG = TOTAL + 1, ALL = AVG + 1;
 
     for (const s of d.sections) {
         if (s.rows.length === 0) continue;
-        sectionBar(`${s.title}  (${s.rows.length})`);
-        const allCol = 2 + DOW.length + 1; // index of the "All units" column
+        if (y > pageH - 80) { doc.addPage(); y = 44; }
+        // section title
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY);
+        doc.text(`${s.title} — Last ${d.days} Days`, M, y + 4);
+        y += 12;
+
+        const rowMax = s.rows.map(r => Math.max(1, ...r.dayNums.map(v => v ?? 0)));
         autoTable(doc, {
             startY: y,
-            head: [["Item", "Unit", ...dowHead, "Total", "Total — all units"]],
-            body: s.rows.map(r => [r.label, r.unit, ...r.cells, r.total, r.allUnits]),
+            head: [["Item", "Unit", ...dowHead, "Total", "Avg/d", "Total — all units"]],
+            body: s.rows.map(r => [
+                r.label, r.unit, ...r.dayNums.map(v => fmt(v)), fmt(r.total), fmt(r.avg), r.allUnits,
+            ]),
             margin: { left: M, right: M },
-            styles: { font: "helvetica", fontSize: 8, cellPadding: 3 },
-            headStyles: { fillColor: [243, 244, 246], textColor: [55, 65, 81], fontSize: 7.5, halign: "right" },
-            columnStyles: { 0: { halign: "left", cellWidth: 130 }, 1: { halign: "left" }, [allCol]: { halign: "left", cellWidth: 150 } },
-            didParseCell: (data) => { if (data.column.index >= 2 && data.column.index < allCol) data.cell.styles.halign = "right"; },
+            styles: { font: "helvetica", fontSize: 8, cellPadding: 3, lineColor: [255, 255, 255], lineWidth: 0.5 },
+            headStyles: { fillColor: NAVY, textColor: 255, fontSize: 7.5, halign: "center", valign: "middle" },
+            columnStyles: {
+                0: { halign: "left", cellWidth: 120, fontStyle: "bold" },
+                1: { halign: "left", textColor: MUTED },
+                [TOTAL]: { halign: "right", fontStyle: "bold" },
+                [AVG]: { halign: "right", textColor: [71, 85, 105] },
+                [ALL]: { halign: "left", cellWidth: 150, fontSize: 7, textColor: [71, 85, 105] },
+            },
+            didParseCell: (data) => {
+                const ci = data.column.index;
+                if (data.section === "body" && ci >= DAY0 && ci < DAY0 + 7) {
+                    data.cell.styles.halign = "center";
+                    const v = s.rows[data.row.index]?.dayNums[ci - DAY0] ?? 0;
+                    if (v > 0) {
+                        const t = v / rowMax[data.row.index];
+                        data.cell.styles.fillColor = heat(t);
+                        data.cell.styles.textColor = t > 0.55 ? [255, 255, 255] : [69, 10, 10];
+                    } else {
+                        data.cell.styles.textColor = MUTED;
+                    }
+                } else if (data.section === "body" && (ci === TOTAL || ci === AVG)) {
+                    data.cell.styles.halign = "right";
+                }
+            },
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        y = (doc as any).lastAutoTable.finalY + 14;
+        y = (doc as any).lastAutoTable.finalY + 16;
     }
 
     if (d.iceCream.length > 0) {
-        sectionBar(`Ice Cream — by flavour (orders)  (${d.iceCream.length})`);
+        if (y > pageH - 80) { doc.addPage(); y = 44; }
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY);
+        doc.text("Ice Cream — by flavour (orders)", M, y + 4); y += 12;
         autoTable(doc, {
             startY: y,
             head: [["Flavour", ...dowHead, "Total"]],
             body: d.iceCream.map(r => [r.flavor, ...r.cells, r.total]),
             margin: { left: M, right: M },
             styles: { font: "helvetica", fontSize: 8, cellPadding: 3 },
-            headStyles: { fillColor: [253, 232, 243], textColor: [157, 23, 77], fontSize: 7.5, halign: "right" },
-            columnStyles: { 0: { halign: "left", cellWidth: 180 } },
-            didParseCell: (data) => { if (data.column.index >= 1) data.cell.styles.halign = "right"; },
+            headStyles: { fillColor: [157, 23, 77], textColor: 255, fontSize: 7.5, halign: "center" },
+            columnStyles: { 0: { halign: "left", cellWidth: 180, fontStyle: "bold" } },
+            didParseCell: (data) => { if (data.column.index >= 1) data.cell.styles.halign = data.column.index === 8 ? "right" : "center"; },
         });
     }
 

@@ -4,7 +4,7 @@
  * Dessert, Beverage), shown per weekday and convertible into any unit of the
  * ingredient's unit chain (Order / oz / piece / box / case…), like Stock Count.
  */
-import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,22 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown,
+    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown, Image as ImageIcon,
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
 import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
+
+// Heat colour (light → dark red) for a value's share of the row max
+function heatStyle(value: number, rowMax: number): React.CSSProperties {
+    if (value <= 0 || rowMax <= 0) return {};
+    const t = Math.min(1, value / rowMax);
+    const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+    const bg = `rgb(${lerp(254, 153)}, ${lerp(226, 27)}, ${lerp(226, 27)})`;
+    return { backgroundColor: bg, color: t > 0.55 ? "#fff" : "#450a0a" };
+}
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -78,17 +87,19 @@ export default function UsageReportPage() {
 
     function exportPDF() {
         if (!data) return;
+        const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
             rows: items.map(item => {
                 const conv = converterFor(item);
                 const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
-                const fmt = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "" : fmtChainQty(v); };
+                const totalU = conv.convert(item.total, unit) ?? 0;
                 const allUnits = conv.units.map(u => { const v = conv.convert(item.total, u); return v == null ? null : `${fmtChainQty(v)} ${u}`; }).filter(Boolean).join(" · ");
                 return {
                     label: item.label, unit,
-                    cells: item.byDow.map(q => q > 0 ? fmt(q) : ""),
-                    total: fmt(item.total),
+                    dayNums: item.byDow.map(q => q > 0 ? conv.convert(q, unit) : null),
+                    total: totalU,
+                    avg: totalU / totalDays,
                     allUnits,
                 };
             }),
@@ -104,6 +115,18 @@ export default function UsageReportPage() {
             iceCream: data.iceCream.map(f => ({ flavor: f.flavor, cells: f.byDow.map(q => q ? String(q) : ""), total: String(f.total) })),
         };
         exportUsageReportPDF(payload);
+    }
+
+    const captureRef = useRef<HTMLDivElement>(null);
+    async function exportJpg() {
+        if (!captureRef.current) return;
+        const { toJpeg } = await import("html-to-image");
+        const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+        const url = await toJpeg(captureRef.current, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true });
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `usage-${tab}-${days}d-${new Date().toISOString().slice(0, 10)}.jpg`;
+        a.click();
     }
 
     return (
@@ -122,6 +145,9 @@ export default function UsageReportPage() {
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
                         ))}
                     </div>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={!data}>
+                        <ImageIcon className="w-4 h-4" /> JPG
+                    </Button>
                     <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
@@ -149,7 +175,7 @@ export default function UsageReportPage() {
             ) : !data ? (
                 <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports first.</CardContent></Card>
             ) : (
-                <>
+                <div ref={captureRef} className="space-y-5 bg-background">
                     <UsageTable rows={rows} dowCounts={data.dowCounts} units={units} setUnits={setUnits}
                         canManage={canManage} onEditChain={setEditChain} />
                     {tab === "dessert" && data.iceCream.length > 0 && (
@@ -177,7 +203,7 @@ export default function UsageReportPage() {
                             </CardContent>
                         </Card>
                     )}
-                </>
+                </div>
             )}
 
             {editChain && (
@@ -217,6 +243,7 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                 const cell = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "—" : fmtChainQty(v); };
                                 const isOpen = expanded.has(item.label);
                                 const multi = conv.units.length > 1;
+                                const rowMax = Math.max(1, ...item.byDow);
                                 return (
                                     <Fragment key={item.label}>
                                         <tr className="border-t border-border/40 hover:bg-muted/20">
@@ -233,7 +260,11 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                                                     {conv.units.map(u => <option key={u} value={u}>{u}</option>)}
                                                 </select>
                                             </td>
-                                            {item.byDow.map((q, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{q > 0 ? cell(q) : <span className="text-muted-foreground/40">·</span>}</td>)}
+                                            {item.byDow.map((q, i) => (
+                                                <td key={i} className="py-1.5 px-2 text-center tabular-nums font-medium rounded-sm" style={q > 0 ? heatStyle(q, rowMax) : undefined}>
+                                                    {q > 0 ? cell(q) : <span className="text-muted-foreground/40">·</span>}
+                                                </td>
+                                            ))}
                                             <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{cell(item.total)}</td>
                                             <td className="py-1.5 text-right pr-1">
                                                 {canManage && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useAuth } from "@/components/auth-provider";
 import {
     Thermometer, Flame, Droplets, UtensilsCrossed, Soup, ChefHat, Coffee, Wine,
-    Loader2, Plus, Pencil, Carrot, Play, Search, AlertTriangle, ChevronDown, ListChecks, X, FileDown, FileSpreadsheet,
+    Loader2, Plus, Pencil, Carrot, Play, Search, AlertTriangle, ChevronDown, ListChecks, X, FileDown, FileSpreadsheet, Image as ImageIcon,
 } from "lucide-react";
 import {
     reportStationsApi, type ReportStation, type StationReport, type PmixMenuName,
@@ -224,6 +224,18 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded, can
         };
     }
 
+    const captureRef = useRef<HTMLDivElement>(null);
+    async function exportJpg() {
+        if (!captureRef.current) return;
+        const { toJpeg } = await import("html-to-image");
+        const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+        const dataUrl = await toJpeg(captureRef.current, { quality: 0.95, pixelRatio: 2, backgroundColor: bg, cacheBust: true });
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `station-prep-${report.station.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.jpg`;
+        a.click();
+    }
+
     return (
         <div className="space-y-3">
             {report.ingredients.length > 0 && (
@@ -231,11 +243,15 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded, can
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportStationPrepCSV(buildExport())}>
                         <FileSpreadsheet className="w-3.5 h-3.5" /> CSV
                     </Button>
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportJpg}>
+                        <ImageIcon className="w-3.5 h-3.5" /> JPG
+                    </Button>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportStationPrepPDF(buildExport())}>
                         <FileDown className="w-3.5 h-3.5" /> PDF
                     </Button>
                 </div>
             )}
+            <div ref={captureRef} className="space-y-3">
             {report.unlinkedMenus.length > 0 && (
                 <div className="flex items-start gap-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -324,6 +340,7 @@ function ReportTable({ report, view, units, setUnits, expanded, setExpanded, can
                     </p>
                 </CardContent>
             </Card>
+            </div>
         </div>
     );
 }

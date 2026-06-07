@@ -9,7 +9,7 @@ const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const TEAL: [number, number, number] = [13, 148, 136];
 const MUTED: [number, number, number] = [148, 163, 184];
 
-export interface UsageExportRow { label: string; unit: string; cells: string[]; total: string }
+export interface UsageExportRow { label: string; unit: string; cells: string[]; total: string; allUnits: string }
 export interface UsageExportSection { title: string; rows: UsageExportRow[] }
 export interface UsageFlavorRow { flavor: string; cells: string[]; total: string }
 export interface UsageReportExport {
@@ -46,15 +46,16 @@ export function exportUsageReportPDF(d: UsageReportExport) {
     for (const s of d.sections) {
         if (s.rows.length === 0) continue;
         sectionBar(`${s.title}  (${s.rows.length})`);
+        const allCol = 2 + DOW.length + 1; // index of the "All units" column
         autoTable(doc, {
             startY: y,
-            head: [["Item", "Unit", ...dowHead, "Total"]],
-            body: s.rows.map(r => [r.label, r.unit, ...r.cells, r.total]),
+            head: [["Item", "Unit", ...dowHead, "Total", "Total — all units"]],
+            body: s.rows.map(r => [r.label, r.unit, ...r.cells, r.total, r.allUnits]),
             margin: { left: M, right: M },
             styles: { font: "helvetica", fontSize: 8, cellPadding: 3 },
             headStyles: { fillColor: [243, 244, 246], textColor: [55, 65, 81], fontSize: 7.5, halign: "right" },
-            columnStyles: { 0: { halign: "left", cellWidth: 150 }, 1: { halign: "left" } },
-            didParseCell: (data) => { if (data.column.index >= 2) data.cell.styles.halign = "right"; },
+            columnStyles: { 0: { halign: "left", cellWidth: 130 }, 1: { halign: "left" }, [allCol]: { halign: "left", cellWidth: 150 } },
+            didParseCell: (data) => { if (data.column.index >= 2 && data.column.index < allCol) data.cell.styles.halign = "right"; },
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         y = (doc as any).lastAutoTable.finalY + 14;

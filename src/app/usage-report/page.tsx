@@ -84,10 +84,12 @@ export default function UsageReportPage() {
                 const conv = converterFor(item);
                 const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
                 const fmt = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "" : fmtChainQty(v); };
+                const allUnits = conv.units.map(u => { const v = conv.convert(item.total, u); return v == null ? null : `${fmtChainQty(v)} ${u}`; }).filter(Boolean).join(" · ");
                 return {
                     label: item.label, unit,
                     cells: item.byDow.map(q => q > 0 ? fmt(q) : ""),
                     total: fmt(item.total),
+                    allUnits,
                 };
             }),
         });

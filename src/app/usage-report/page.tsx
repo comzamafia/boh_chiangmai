@@ -12,12 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2,
+    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown,
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
+import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -75,6 +76,34 @@ export default function UsageReportPage() {
 
     const rows = data ? data[tab] : [];
 
+    function exportPDF() {
+        if (!data) return;
+        const sectionFor = (title: string, items: UsageReportItem[]) => ({
+            title,
+            rows: items.map(item => {
+                const conv = converterFor(item);
+                const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
+                const fmt = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "" : fmtChainQty(v); };
+                return {
+                    label: item.label, unit,
+                    cells: item.byDow.map(q => q > 0 ? fmt(q) : ""),
+                    total: fmt(item.total),
+                };
+            }),
+        });
+        const payload: UsageReportExport = {
+            days: data.days, dowCounts: data.dowCounts,
+            sections: [
+                sectionFor("Main Protein", data.protein),
+                sectionFor("Main Curry", data.curry),
+                sectionFor("Main Desserts", data.dessert),
+                sectionFor("Beverages", data.beverage),
+            ],
+            iceCream: data.iceCream.map(f => ({ flavor: f.flavor, cells: f.byDow.map(q => q ? String(q) : ""), total: String(f.total) })),
+        };
+        exportUsageReportPDF(payload);
+    }
+
     return (
         <div className="space-y-5 max-w-6xl mx-auto pb-12">
             <div className="flex flex-wrap justify-between items-start gap-3">
@@ -84,11 +113,16 @@ export default function UsageReportPage() {
                     </h2>
                     <p className="text-muted-foreground">Last {days}-day usage from PMIX — view any unit (orders, oz, pieces, boxes, cases).</p>
                 </div>
-                <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
-                    {[7, 14, 30].map(d => (
-                        <button key={d} onClick={() => setDays(d)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
-                    ))}
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
+                        {[7, 14, 30].map(d => (
+                            <button key={d} onClick={() => setDays(d)}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
+                        ))}
+                    </div>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data}>
+                        <FileDown className="w-4 h-4" /> PDF
+                    </Button>
                 </div>
             </div>
 

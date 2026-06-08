@@ -77,9 +77,9 @@ export default function ServerPerformancePage() {
         doc.text(`${from} → ${to}`, M, 53);
         autoTable(doc, {
             startY: 66,
-            head: [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Tip %", "Drink %", "Dessert/100", "Disc %"]],
+            head: [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Drink %", "Dessert/100", "Disc %"]],
             body: ranked.map((s, i) => [String(i + 1), s.name, s.score.toFixed(1), money(s.netSales), money(s.salesPerHour), String(s.guests),
-                money(s.avgPerGuest), `${s.tipPct}%`, `${s.drinkPct}%`, s.dessertPer100.toFixed(0), `${s.discountPct}%`]),
+                money(s.avgPerGuest), `${s.drinkPct}%`, s.dessertPer100.toFixed(0), `${s.discountPct}%`]),
             margin: { left: M, right: M },
             styles: { font: "helvetica", fontStyle: "bold", fontSize: 8, cellPadding: 3, textColor: [17, 24, 39] },
             headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7.5 },
@@ -138,8 +138,8 @@ export default function ServerPerformancePage() {
                     {/* KPI row */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <Kpi label="Team Net Sales" value={money0(data.team.netSales)} icon={DollarSign} sub={`${data.team.servers} servers`} />
-                        <Kpi label="Total Tips" value={money0(data.team.tips)} icon={DollarSign} tone="emerald" sub={`${data.team.avgTipPct}% avg`} />
-                        <Kpi label="Avg / Guest" value={money(data.team.avgPerGuest)} icon={Users} sub={`${data.team.guests.toLocaleString()} guests`} />
+                        <Kpi label="Total Guests" value={data.team.guests.toLocaleString()} icon={Users} sub={`${data.team.servers} servers`} />
+                        <Kpi label="Avg / Guest" value={money(data.team.avgPerGuest)} icon={Users} sub="check average" />
                         <Kpi label="Drink mix" value={`${data.team.avgDrinkPct}%`} icon={Wine} tone="violet" sub="beverage + liquor" />
                     </div>
 
@@ -147,7 +147,7 @@ export default function ServerPerformancePage() {
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm flex items-center gap-2"><Trophy className="w-4 h-4 text-amber-500" /> Performance Leaderboard</CardTitle>
-                            <p className="text-[10px] text-muted-foreground">Score = Sales/hr 30% · Avg/Guest 20% · Tip% 20% · Drink% 15% · Dessert attach 10% · Discount discipline 5% (normalised across servers)</p>
+                            <p className="text-[10px] text-muted-foreground">Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8% (normalised across servers)</p>
                         </CardHeader>
                         <CardContent className="px-2 sm:px-4">
                             <div className="overflow-x-auto">
@@ -160,7 +160,6 @@ export default function ServerPerformancePage() {
                                         <th className="text-right py-2 px-2">Sales/hr</th>
                                         <th className="text-right py-2 px-2">Guests</th>
                                         <th className="text-right py-2 px-2">Avg/Guest</th>
-                                        <th className="text-right py-2 px-2">Tip %</th>
                                         <th className="text-right py-2 px-2">Drink %</th>
                                         <th className="text-right py-2 px-2">Dessert/100</th>
                                         <th className="text-right py-2 px-2">Disc %</th>
@@ -175,7 +174,6 @@ export default function ServerPerformancePage() {
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{money(s.salesPerHour)}</td>
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{s.guests}</td>
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{money(s.avgPerGuest)}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{s.tipPct}%</td>
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{s.drinkPct}%</td>
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{s.dessertPer100.toFixed(0)}</td>
                                                 <td className="py-1.5 px-2 text-right tabular-nums">{s.discountPct}%</td>
@@ -195,8 +193,8 @@ export default function ServerPerformancePage() {
                         <ChartCard title="Avg per Guest (upsell)">
                             <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.avgPerGuest }))} color="#0ea5e9" fmt={money} />
                         </ChartCard>
-                        <ChartCard title="Tip % (service quality)">
-                            <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.tipPct }))} color="#10b981" fmt={v => `${v}%`} />
+                        <ChartCard title="Sales per hour (productivity)">
+                            <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.salesPerHour }))} color="#10b981" fmt={money} />
                         </ChartCard>
                         <ChartCard title="Category Mix (% of net sales)">
                             <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>

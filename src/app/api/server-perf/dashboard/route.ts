@@ -12,8 +12,8 @@ const db = prisma as any;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const STATIONS = new Set(["bar bar", "bar", "host", "host pos"]);
 
-// Score weights (sum = 1)
-const W = { salesPerHour: 0.30, avgPerGuest: 0.20, tipPct: 0.20, drinkPct: 0.15, dessertPer100: 0.10, discount: 0.05 };
+// Score weights (sum = 1) — tips intentionally excluded
+const W = { salesPerHour: 0.35, avgPerGuest: 0.25, drinkPct: 0.20, dessertPer100: 0.12, discount: 0.08 };
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     };
     const norm = (v: number, mn: number, mx: number) => mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50;
     const rg = {
-        salesPerHour: range("salesPerHour"), avgPerGuest: range("avgPerGuest"), tipPct: range("tipPct"),
+        salesPerHour: range("salesPerHour"), avgPerGuest: range("avgPerGuest"),
         drinkPct: range("drinkPct"), dessertPer100: range("dessertPer100"), discountPct: range("discountPct"),
     };
     const scored = base.map(s => {
@@ -96,7 +96,6 @@ export async function GET(req: NextRequest) {
         const score =
             W.salesPerHour  * norm(s.salesPerHour,  rg.salesPerHour.min,  rg.salesPerHour.max) +
             W.avgPerGuest   * norm(s.avgPerGuest,   rg.avgPerGuest.min,   rg.avgPerGuest.max) +
-            W.tipPct        * norm(s.tipPct,        rg.tipPct.min,        rg.tipPct.max) +
             W.drinkPct      * norm(s.drinkPct,      rg.drinkPct.min,      rg.drinkPct.max) +
             W.dessertPer100 * norm(s.dessertPer100, rg.dessertPer100.min, rg.dessertPer100.max) +
             W.discount      * (100 - norm(s.discountPct, rg.discountPct.min, rg.discountPct.max));

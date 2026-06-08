@@ -77,19 +77,30 @@ export default function ServerPerformancePage() {
         const INK: [number, number, number] = [17, 24, 39];
         const t = data.team;
 
+        const isUpsell = view === "upsell";
+        const subtitle = isUpsell ? "Beverage / Liquor / Dessert Upsell" : "Performance Score Leaderboard";
+
         // ── Header band ──
         doc.setFillColor(...NAVY); doc.rect(0, 0, pageW, 66, "F");
         doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(255, 255, 255);
-        doc.text("Server Performance Report", M, 32);
-        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(203, 213, 225);
-        doc.text(`${from}  to  ${to}`, M, 50);
+        doc.text("Server Performance Report", M, 30);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(148, 197, 253);
+        doc.text(subtitle.toUpperCase(), M, 45);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(203, 213, 225);
+        doc.text(`${from}  to  ${to}`, M, 58);
         doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(255, 255, 255);
         doc.text("Chiang Mai Mississauga", pageW - M, 30, { align: "right" });
         doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(203, 213, 225);
         doc.text(`Generated ${new Date().toLocaleString("en-CA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 48, { align: "right" });
 
-        // ── KPI stat boxes ──
-        const kpis: [string, string][] = [
+        // ── KPI stat boxes (per view) ──
+        const kpis: [string, string][] = isUpsell ? [
+            ["LIQUOR + BEV %", `${t.avgDrinkPct}%`],
+            ["LIQUOR %", `${t.liquorPct}%`],
+            ["BEVERAGE %", `${t.beveragePct}%`],
+            ["DESSERT %", `${t.dessertPct}%`],
+            ["TEAM NET SALES", money0(t.netSales)],
+        ] : [
             ["TEAM NET SALES", money0(t.netSales)],
             ["GUESTS SERVED", t.guests.toLocaleString()],
             ["AVG / GUEST", money(t.avgPerGuest)],
@@ -107,17 +118,27 @@ export default function ServerPerformancePage() {
             doc.text(value, x + 10, boxY + 37);
         });
 
-        // ── Section title ──
+        // ── Section title + table (per view) ──
         let top = boxY + boxH + 24;
         doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...NAVY);
-        doc.text("Performance Leaderboard", M, top);
+        doc.text(isUpsell ? "Beverage, Liquor & Dessert — ranked by Liquor + Beverage %" : "Performance Leaderboard", M, top);
         top += 8;
+
+        const upsellRanked = [...ranked].sort((a, b) => b.drinkPct - a.drinkPct);
+        const head = isUpsell
+            ? [["#", "Server", "Net Sales", "Liquor $", "Liquor %", "Bev $", "Bev %", "Liquor+Bev %", "Dessert $", "Dessert %"]]
+            : [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Drink %", "Dessert /100", "Disc %"]];
+        const body = isUpsell
+            ? upsellRanked.map((s, i) => [String(i + 1), s.name, money(s.netSales), money0(s.alcoholSales), `${s.alcoholPct}%`, money0(s.beverageSales), `${s.beveragePct}%`, `${s.drinkPct}%`, money0(s.dessertSales), `${s.dessertPct}%`])
+            : ranked.map((s, i) => [String(i + 1), s.name, s.score.toFixed(1), money(s.netSales), money(s.salesPerHour), String(s.guests), money(s.avgPerGuest), `${s.drinkPct}%`, s.dessertPer100.toFixed(0), `${s.discountPct}%`]);
+        const highlight: [number, number, number] = isUpsell ? [245, 243, 255] : [254, 249, 231];
+        const footer = isUpsell
+            ? "% = share of each server's net sales. Ranked by Liquor + Beverage %. Station logins excluded; tips not shown."
+            : "Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8% (normalised across servers). Station logins excluded; tips not shown.";
 
         autoTable(doc, {
             startY: top,
-            head: [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Drink %", "Dessert /100", "Disc %"]],
-            body: ranked.map((s, i) => [String(i + 1), s.name, s.score.toFixed(1), money(s.netSales), money(s.salesPerHour), String(s.guests),
-                money(s.avgPerGuest), `${s.drinkPct}%`, s.dessertPer100.toFixed(0), `${s.discountPct}%`]),
+            head, body,
             margin: { left: M, right: M, bottom: 40 },
             styles: { font: "helvetica", fontSize: 8.5, cellPadding: 5, textColor: INK, lineColor: [226, 232, 240], lineWidth: 0.5, valign: "middle" },
             headStyles: { fillColor: NAVY, textColor: 255, fontSize: 8, fontStyle: "bold", halign: "center", cellPadding: 5 },
@@ -125,20 +146,20 @@ export default function ServerPerformancePage() {
             columnStyles: {
                 0: { halign: "center", cellWidth: 26, fontStyle: "bold" },
                 1: { halign: "left", fontStyle: "bold", cellWidth: 120 },
-                2: { halign: "center", fontStyle: "bold", textColor: NAVY },
+                2: isUpsell ? { halign: "right" } : { halign: "center", fontStyle: "bold", textColor: NAVY },
                 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" },
-                6: { halign: "right" }, 7: { halign: "right" }, 8: { halign: "right" }, 9: { halign: "right" },
+                6: { halign: "right" }, 7: isUpsell ? { halign: "right", fontStyle: "bold", textColor: NAVY } : { halign: "right" }, 8: { halign: "right" }, 9: { halign: "right" },
             },
             didParseCell: (d) => {
-                if (d.section === "body" && d.row.index === 0) { d.cell.styles.fillColor = [254, 249, 231]; }   // top performer highlight
+                if (d.section === "body" && d.row.index === 0) { d.cell.styles.fillColor = highlight; }   // top performer highlight
             },
             didDrawPage: () => {
                 doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
-                doc.text("Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8% (normalised across servers). Station logins excluded; tips not shown.", M, pageH - 18);
+                doc.text(footer, M, pageH - 18);
                 doc.text(`Page ${doc.getNumberOfPages()}`, pageW - M, pageH - 18, { align: "right" });
             },
         });
-        doc.save(`server-performance-${from}_${to}.pdf`);
+        doc.save(`server-performance-${isUpsell ? "upsell" : "score"}-${from}_${to}.pdf`);
     }
 
     return (

@@ -249,6 +249,42 @@ function Upsell({ data }: { data: ServerPerfResult }) {
             <span className="tabular-nums font-bold w-10 text-right">{pct}%</span>
         </div>
     );
+
+    // Sortable + per-column numeric filters
+    const COLS: (LbCol & { align: "left" | "right" })[] = [
+        { key: "name",          label: "Server",         kind: "text", align: "left",  get: s => s.name,          render: s => <span className="font-semibold">{s.name}</span> },
+        { key: "netSales",      label: "Net Sales",      kind: "num",  align: "right", ph: "e.g. ≥1500", tip: "Net sales in $. Type a minimum (e.g. 1500) or a range (e.g. 1000-2000).", get: s => s.netSales,      render: s => money(s.netSales) },
+        { key: "alcoholSales",  label: "Liquor $",       kind: "num",  align: "right", ph: "e.g. ≥150",  tip: "Liquor sales in $. Type a minimum or a range (e.g. 100-300).", get: s => s.alcoholSales,  render: s => <span className="text-muted-foreground">{money0(s.alcoholSales)}</span> },
+        { key: "alcoholPct",    label: "Liquor %",       kind: "num",  align: "right", ph: "e.g. ≥12",   tip: "Liquor as % of net sales. Type a minimum (e.g. 12) or a range (e.g. 10-20).", get: s => s.alcoholPct,    render: s => `${s.alcoholPct}%` },
+        { key: "beverageSales", label: "Bev $",          kind: "num",  align: "right", ph: "e.g. ≥100",  tip: "Beverage sales in $. Type a minimum or a range.", get: s => s.beverageSales, render: s => <span className="text-muted-foreground">{money0(s.beverageSales)}</span> },
+        { key: "beveragePct",   label: "Bev %",          kind: "num",  align: "right", ph: "e.g. ≥8",    tip: "Beverage as % of net sales. Type a minimum (e.g. 8) or a range.", get: s => s.beveragePct,   render: s => `${s.beveragePct}%` },
+        { key: "drinkPct",      label: "Liquor + Bev %", kind: "num",  align: "left",  ph: "e.g. ≥20",   tip: "Liquor + beverage combined as % of net sales. Type a minimum (e.g. 20) or a range (e.g. 18-28).", get: s => s.drinkPct,      render: s => bar(s.drinkPct, "#8b5cf6") },
+        { key: "dessertSales",  label: "Dessert $",      kind: "num",  align: "right", ph: "e.g. ≥100",  tip: "Dessert sales in $. Type a minimum or a range.", get: s => s.dessertSales,  render: s => <span className="text-muted-foreground">{money0(s.dessertSales)}</span> },
+        { key: "dessertPct",    label: "Dessert %",      kind: "num",  align: "right", ph: "e.g. ≥8",    tip: "Dessert as % of net sales. Type a minimum (e.g. 8) or a range.", get: s => s.dessertPct,    render: s => <span className="font-semibold text-pink-600 dark:text-pink-400">{s.dessertPct}%</span> },
+    ];
+
+    return <UpsellTableWrap ranked={ranked} cols={COLS} data={data} />;
+}
+
+function UpsellTableWrap({ ranked, cols, data }: { ranked: ServerPerfRow[]; cols: (LbCol & { align: "left" | "right" })[]; data: ServerPerfResult }) {
+    const [sortKey, setSortKey] = useState("drinkPct");
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [filters, setFilters] = useState<Record<string, string>>({});
+    const toggleSort = (key: string) => { if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDir(key === "name" ? "asc" : "desc"); } };
+
+    const filtered = ranked.filter(s => cols.every(c => {
+        const f = filters[c.key]; if (!f) return true;
+        return c.kind === "text" ? true : numMatch(Number(c.get(s)), f);
+    }));
+    const col = cols.find(c => c.key === sortKey)!;
+    const tRows = [...filtered].sort((a, b) => {
+        const av = col.get(a), bv = col.get(b);
+        const cmp = col.kind === "text" ? String(av).localeCompare(String(bv)) : Number(av) - Number(bv);
+        return sortDir === "asc" ? cmp : -cmp;
+    });
+    const isDrinkSort = sortKey === "drinkPct" && sortDir === "desc";
+    const activeFilters = Object.values(filters).filter(Boolean).length;
+
     return (
         <div className="space-y-4">
             {/* Team summary */}
@@ -259,67 +295,74 @@ function Upsell({ data }: { data: ServerPerfResult }) {
                 <Kpi label="Dessert %" value={`${data.team.dessertPct}%`} icon={Award} tone="emerald" sub="of net sales" />
             </div>
 
-            {/* Excel-style ranked table */}
             <Card>
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2"><Wine className="w-4 h-4 text-violet-500" /> Beverage, Liquor &amp; Dessert — ranked by Liquor + Beverage %</CardTitle>
-                    <p className="text-[10px] text-muted-foreground">Higher drink &amp; dessert attach = stronger upselling. % is share of each server&apos;s net sales.</p>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <CardTitle className="text-sm flex items-center gap-2"><Wine className="w-4 h-4 text-violet-500" /> Beverage, Liquor &amp; Dessert <span className="text-[10px] font-normal text-muted-foreground">({tRows.length}/{ranked.length})</span></CardTitle>
+                        {activeFilters > 0 && <button onClick={() => setFilters({})} className="text-[11px] text-muted-foreground hover:text-foreground underline">Clear filters ({activeFilters})</button>}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">% is share of each server&apos;s net sales. Click a header to sort; type in a filter box (numbers accept &ldquo;≥n&rdquo; or a range &ldquo;a-b&rdquo;).</p>
                 </CardHeader>
                 <CardContent className="px-2 sm:px-4">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-xs" style={{ minWidth: 720 }}>
-                            <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                <th className="text-left py-2 pl-1 sticky left-0 bg-card">#</th>
-                                <th className="text-left py-2 px-2 sticky left-7 bg-card">Server</th>
-                                <th className="text-right py-2 px-2">Net Sales</th>
-                                <th className="text-right py-2 px-2">Liquor $</th>
-                                <th className="text-right py-2 px-2">Liquor %</th>
-                                <th className="text-right py-2 px-2">Bev $</th>
-                                <th className="text-right py-2 px-2">Bev %</th>
-                                <th className="text-left py-2 px-2 min-w-[120px]">Liquor + Bev %</th>
-                                <th className="text-right py-2 px-2">Dessert $</th>
-                                <th className="text-right py-2 px-2">Dessert %</th>
-                            </tr></thead>
+                        <table className="w-full text-xs" style={{ minWidth: 780 }}>
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                    <th className="text-left py-2 pl-1 w-7">#</th>
+                                    {cols.map(c => (
+                                        <th key={c.key} onClick={() => toggleSort(c.key)} className={`py-2 px-2 cursor-pointer select-none hover:text-foreground ${c.align === "left" ? "text-left" : "text-right"} ${c.key === "drinkPct" ? "min-w-[130px]" : ""}`}>
+                                            <span className="inline-flex items-center gap-0.5">{c.align === "right" && <SortCaret active={sortKey === c.key} dir={sortDir} />}{c.label}{c.align === "left" && <SortCaret active={sortKey === c.key} dir={sortDir} />}</span>
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr className="border-b border-border">
+                                    <th className="pl-1" />
+                                    {cols.map(c => (
+                                        <th key={c.key} className="px-1 pb-2">
+                                            {c.kind === "num" && <Input value={filters[c.key] ?? ""} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))} placeholder={c.ph} title={c.tip} className={`h-7 text-[11px] px-2 text-right tabular-nums rounded-md ${filters[c.key] ? "border-primary/60 bg-primary/5" : ""}`} />}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
                             <tbody className="divide-y divide-border/40">
-                                {ranked.map((s, i) => (
-                                    <tr key={s.name} className={`hover:bg-muted/20 ${i === 0 ? "bg-violet-50/50 dark:bg-violet-950/20" : ""}`}>
-                                        <td className="py-1.5 pl-1 sticky left-0 bg-card text-muted-foreground text-center">{i + 1}</td>
-                                        <td className="py-1.5 px-2 font-semibold sticky left-7 bg-card max-w-[130px] truncate">{s.name}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums">{money(s.netSales)}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.alcoholSales)}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums">{s.alcoholPct}%</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.beverageSales)}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums">{s.beveragePct}%</td>
-                                        <td className="py-1.5 px-2">{bar(s.drinkPct, "#8b5cf6")}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.dessertSales)}</td>
-                                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-pink-600 dark:text-pink-400">{s.dessertPct}%</td>
+                                {tRows.map((s, i) => (
+                                    <tr key={s.name} className={`hover:bg-muted/20 ${isDrinkSort && i === 0 ? "bg-violet-50/50 dark:bg-violet-950/20" : ""}`}>
+                                        <td className="py-1.5 pl-1 text-muted-foreground text-center">{i + 1}</td>
+                                        {cols.map(c => (
+                                            <td key={c.key} className={`py-1.5 px-2 tabular-nums ${c.align === "left" ? "text-left" : "text-right"} ${c.key === "name" ? "max-w-[130px] truncate" : ""}`}>{c.render(s)}</td>
+                                        ))}
                                     </tr>
                                 ))}
+                                {tRows.length === 0 && <tr><td colSpan={cols.length + 1} className="py-8 text-center text-muted-foreground italic">No servers match the filters</td></tr>}
                             </tbody>
                         </table>
                     </div>
                 </CardContent>
             </Card>
+            <UpsellCharts ranked={ranked} />
+        </div>
+    );
+}
 
-            {/* Charts: stacked L+B and dessert */}
-            <div className="grid gap-4 lg:grid-cols-2">
-                <ChartCard title="Liquor + Beverage % (stacked)">
-                    <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>
-                        <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Liquor: s.alcoholPct, Beverage: s.beveragePct }))} margin={{ left: 4, right: 48, top: 6, bottom: 6 }} barCategoryGap="22%">
-                            <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
-                            <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor", opacity: 0.65 }} tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} />
-                            <YAxis type="category" dataKey="name" width={118} tick={AXIS} tickLine={false} axisLine={false} interval={0} />
-                            <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} itemStyle={TIP_ITEM} labelStyle={TIP_ITEM} />
-                            <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600, paddingTop: 6 }} iconType="circle" />
-                            <Bar dataKey="Liquor" stackId="a" fill="#8b5cf6" barSize={22} radius={[6, 0, 0, 6]} isAnimationActive={false} />
-                            <Bar dataKey="Beverage" stackId="a" fill="#0ea5e9" barSize={22} radius={[0, 6, 6, 0]} isAnimationActive={false} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </ChartCard>
-                <ChartCard title="Dessert % (attach)">
-                    <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.dessertPct })).sort((a, b) => b.value - a.value)} color="#ec4899" fmt={v => `${v}%`} />
-                </ChartCard>
-            </div>
+function UpsellCharts({ ranked }: { ranked: ServerPerfRow[] }) {
+    return (
+        <div className="grid gap-4 lg:grid-cols-2">
+            <ChartCard title="Liquor + Beverage % (stacked)">
+                <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>
+                    <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Liquor: s.alcoholPct, Beverage: s.beveragePct }))} margin={{ left: 4, right: 48, top: 6, bottom: 6 }} barCategoryGap="22%">
+                        <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+                        <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor", opacity: 0.65 }} tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} />
+                        <YAxis type="category" dataKey="name" width={118} tick={AXIS} tickLine={false} axisLine={false} interval={0} />
+                        <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} itemStyle={TIP_ITEM} labelStyle={TIP_ITEM} />
+                        <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600, paddingTop: 6 }} iconType="circle" />
+                        <Bar dataKey="Liquor" stackId="a" fill="#8b5cf6" barSize={22} radius={[6, 0, 0, 6]} isAnimationActive={false} />
+                        <Bar dataKey="Beverage" stackId="a" fill="#0ea5e9" barSize={22} radius={[0, 6, 6, 0]} isAnimationActive={false} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="Dessert % (attach)">
+                <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.dessertPct })).sort((a, b) => b.value - a.value)} color="#ec4899" fmt={v => `${v}%`} />
+            </ChartCard>
         </div>
     );
 }

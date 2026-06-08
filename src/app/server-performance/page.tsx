@@ -12,7 +12,7 @@ import {
     Trophy, Upload, Loader2, ShieldX, DollarSign, Percent, Users, Wine, FileDown, Medal, Crown, Award,
 } from "lucide-react";
 import {
-    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend,
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList,
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -189,17 +189,18 @@ export default function ServerPerformancePage() {
                             <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.tipPct }))} color="#10b981" fmt={v => `${v}%`} />
                         </ChartCard>
                         <ChartCard title="Category Mix (% of net sales)">
-                            <ResponsiveContainer width="100%" height={Math.max(180, ranked.length * 26)}>
-                                <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Food: s.foodPct, Beverage: s.beveragePct, Liquor: s.alcoholPct, Dessert: s.dessertPct }))} stackOffset="expand">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis type="number" tickFormatter={v => `${Math.round(v * 100)}%`} tick={{ fontSize: 9 }} />
-                                    <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 9 }} />
-                                    <Tooltip formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
-                                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    <Bar dataKey="Food" stackId="a" fill="#f59e0b" />
-                                    <Bar dataKey="Beverage" stackId="a" fill="#0ea5e9" />
-                                    <Bar dataKey="Liquor" stackId="a" fill="#8b5cf6" />
-                                    <Bar dataKey="Dessert" stackId="a" fill="#ec4899" />
+                            <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>
+                                <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Food: s.foodPct, Beverage: s.beveragePct, Liquor: s.alcoholPct, Dessert: s.dessertPct }))} stackOffset="expand" margin={{ left: 4, right: 12, top: 6, bottom: 6 }} barCategoryGap="22%">
+                                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                                    <XAxis type="number" tickFormatter={v => `${Math.round(v * 100)}%`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                                    <YAxis type="category" dataKey="name" width={118} tick={AXIS} tickLine={false} axisLine={false} interval={0} />
+                                    <Tooltip cursor={{ fill: "hsl(var(--muted))", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} />
+                                    <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600, paddingTop: 6 }} iconType="circle" />
+                                    {([["Food", "#f59e0b"], ["Beverage", "#0ea5e9"], ["Liquor", "#8b5cf6"], ["Dessert", "#ec4899"]] as const).map(([k, c], idx, arr) => (
+                                        <Bar key={k} dataKey={k} stackId="a" fill={c} barSize={24} radius={idx === arr.length - 1 ? [0, 6, 6, 0] : idx === 0 ? [6, 0, 0, 6] : 0} isAnimationActive={false}>
+                                            <LabelList dataKey={k} position="center" formatter={(v) => { const n = Number(v ?? 0); return n >= 9 ? `${Math.round(n)}%` : ""; }} style={{ fontSize: 10.5, fontWeight: 700, fill: "#fff" }} />
+                                        </Bar>
+                                    ))}
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartCard>
@@ -232,16 +233,21 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
     );
 }
 
+const AXIS = { fontSize: 12, fontWeight: 600, fill: "hsl(var(--foreground))" } as const;
+const TOOLTIP = { borderRadius: 12, fontSize: 12, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--foreground))", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } as const;
+
 function SimpleBar({ data, color, fmt }: { data: { name: string; value: number }[]; color: string; fmt?: (v: number) => string }) {
+    const label = (v: number) => fmt ? fmt(v) : (Math.round(v * 10) / 10).toString();
     return (
-        <ResponsiveContainer width="100%" height={Math.max(180, data.length * 26)}>
-            <BarChart layout="vertical" data={data} margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => fmt ? fmt(v) : String(v)} />
-                <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 9 }} />
-                <Tooltip formatter={(v) => fmt ? fmt(Number(v ?? 0)) : String(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
-                <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+        <ResponsiveContainer width="100%" height={Math.max(200, data.length * 40)}>
+            <BarChart layout="vertical" data={data} margin={{ left: 4, right: 64, top: 6, bottom: 6 }} barCategoryGap="22%">
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                <XAxis type="number" hide />
+                <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} tick={AXIS} interval={0} />
+                <Tooltip cursor={{ fill: "hsl(var(--muted))", opacity: 0.35 }} formatter={(v) => [label(Number(v ?? 0)), ""]} contentStyle={TOOLTIP} />
+                <Bar dataKey="value" radius={[0, 7, 7, 0]} barSize={22} isAnimationActive={false}>
                     {data.map((_, i) => <Cell key={i} fill={i === 0 ? "#f59e0b" : color} />)}
+                    <LabelList dataKey="value" position="right" formatter={(v) => label(Number(v ?? 0))} style={{ fontSize: 12, fontWeight: 700, fill: "hsl(var(--foreground))" }} />
                 </Bar>
             </BarChart>
         </ResponsiveContainer>

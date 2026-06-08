@@ -178,7 +178,11 @@ function Overview({ data }: { data: LossDashboard }) {
         { name: "Net Complaints", value: data.kpis.netComplaintTotal },
         { name: "Discounts", value: data.kpis.discountTotal },
     ].filter(d => d.value > 0);
+    const fmtWhen = (s: string) => new Date(s).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const ok = <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓</span>;
+    const miss = <span className="text-amber-600 dark:text-amber-400">missing</span>;
     return (
+        <div className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-2">
             <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Loss Breakdown</CardTitle></CardHeader>
@@ -206,6 +210,23 @@ function Overview({ data }: { data: LossDashboard }) {
                     <QualityRow label="Orphaned Undos (no matching complaint)" n={data.orphanUndos.length} />
                 </CardContent>
             </Card>
+        </div>
+
+        {/* Data coverage — which dates have complaints / discounts uploaded */}
+        <Card>
+            <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> Data Coverage</CardTitle>
+                <p className="text-[10px] text-muted-foreground">Upload the missing file for any date to complete combined-loss figures. Re-uploading a date overwrites it.</p>
+            </CardHeader>
+            <CardContent className="px-2 sm:px-4">
+                <SimpleTable head={["Date", "Complaints", "Discounts", "Last uploaded"]} rows={data.coverage.map(c => [
+                    c.date,
+                    c.hasComplaints ? <span key="c">{ok} <span className="text-muted-foreground">{c.complaintCount}</span></span> : miss,
+                    c.hasDiscounts ? <span key="d">{ok} <span className="text-muted-foreground">{c.discountCount}</span></span> : miss,
+                    <span key="u" className="text-muted-foreground">{fmtWhen(c.uploadedAt)}</span>,
+                ])} />
+            </CardContent>
+        </Card>
         </div>
     );
 }

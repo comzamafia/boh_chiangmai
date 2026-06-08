@@ -21,9 +21,10 @@ export async function GET(req: NextRequest) {
     const from = new Date(fromStr + "T00:00:00.000Z"), to = new Date(toStr + "T23:59:59.999Z");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [complaints, discounts]: [any[], any[]] = await Promise.all([
+    const [complaints, discounts, uploads]: [any[], any[], any[]] = await Promise.all([
         db.lossComplaint.findMany({ where: { businessDate: { gte: from, lte: to } } }),
         db.lossDiscount.findMany({ where: { businessDate: { gte: from, lte: to } } }),
+        db.lossUpload.findMany({ where: { businessDate: { gte: from, lte: to } }, orderBy: { businessDate: "desc" } }),
     ]);
 
     const comp = complaints.filter(c => c.actionType === "Complaint");
@@ -180,6 +181,10 @@ export async function GET(req: NextRequest) {
         byReason, topItems, byStaff, byDevice, byZone, undoPairs, orphanUndos,
         discountByCategory, discountByName, staffAuth, hourly, highRisk, promotions: promoList,
         correlation, daily,
+        coverage: uploads.map(u => ({
+            date: day(new Date(u.businessDate)), hasComplaints: u.hasComplaints, hasDiscounts: u.hasDiscounts,
+            complaintCount: u.complaintCount, discountCount: u.discountCount, uploadedAt: u.uploadedAt,
+        })),
         periodAlignment: {
             complaintDays: compDates.size, discountDays: discDates.size,
             discMissingForComplaintDays, hasDiscountData: discounts.length > 0, hasComplaintData: comp.length > 0,

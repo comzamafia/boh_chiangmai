@@ -25,8 +25,12 @@ export async function GET(req: NextRequest) {
     const from = new Date(fromStr + "T00:00:00.000Z"), to = new Date(toStr + "T23:59:59.999Z");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows: any[] = await db.serverSalesRow.findMany({ where: { businessDate: { gte: from, lte: to } } });
+    const [rows, uploads]: [any[], any[]] = await Promise.all([
+        db.serverSalesRow.findMany({ where: { businessDate: { gte: from, lte: to } } }),
+        db.serverSalesUpload.findMany({ where: { businessDate: { gte: from, lte: to } }, orderBy: { businessDate: "desc" } }),
+    ]);
     const num = (x: unknown) => Number(x);
+    const day = (d: Date) => d.toISOString().slice(0, 10);
 
     type Agg = {
         name: string; isStation: boolean; shifts: number; hours: number;
@@ -116,5 +120,6 @@ export async function GET(req: NextRequest) {
         dessertPct: pctOf(sumOf("dessertSales")),
     };
 
-    return NextResponse.json({ range: { from: fromStr, to: toStr }, servers: scored, team, weights: W });
+    const coverage = uploads.map(u => ({ date: day(new Date(u.businessDate)), serverCount: u.serverCount, uploadedAt: u.uploadedAt }));
+    return NextResponse.json({ range: { from: fromStr, to: toStr }, servers: scored, team, weights: W, coverage });
 }

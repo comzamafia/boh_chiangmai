@@ -221,6 +221,34 @@ export default function ServerPerformancePage() {
                     {servers.some(s => s.isStation) && (
                         <p className="text-[10px] text-muted-foreground">Note: station logins ({servers.filter(s => s.isStation).map(s => s.name).join(", ")}) are excluded from ranking.</p>
                     )}
+
+                    {/* Data coverage */}
+                    {data.coverage.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm flex items-center gap-2"><Trophy className="w-4 h-4 text-blue-500" /> Data Coverage</CardTitle>
+                                <p className="text-[10px] text-muted-foreground">Uploaded server-sales days in this range. Re-uploading a date overwrites it.</p>
+                            </CardHeader>
+                            <CardContent className="px-2 sm:px-4">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs" style={{ minWidth: 360 }}>
+                                        <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                            <th className="text-left py-2 pl-2">Date</th><th className="text-right py-2 px-2">Servers</th><th className="text-right py-2 pr-2">Last uploaded</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-border/40">
+                                            {data.coverage.map(c => (
+                                                <tr key={c.date} className="hover:bg-muted/20">
+                                                    <td className="py-1.5 pl-2 font-medium">{c.date}</td>
+                                                    <td className="py-1.5 px-2 text-right tabular-nums">{c.serverCount}</td>
+                                                    <td className="py-1.5 pr-2 text-right text-muted-foreground">{new Date(c.uploadedAt).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
                 </>
             )}
         </div>

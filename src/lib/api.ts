@@ -575,6 +575,7 @@ export interface LossDashboard {
     correlation: { orderId: string; date: string; table: string; zone: string; reasons: string; complaintAmount: number; discountTypes: string; discountAmount: number; sameStaff: boolean }[];
     daily: { date: string; netComplaint: number; discountTotal: number; combined: number; complaintCount: number; discountCount: number; highRisk: number; topReason: string; topStaff: string }[];
     periodAlignment: { complaintDays: number; discountDays: number; discMissingForComplaintDays: string[]; hasDiscountData: boolean; hasComplaintData: boolean };
+    coverage: { date: string; hasComplaints: boolean; hasDiscounts: boolean; complaintCount: number; discountCount: number; uploadedAt: string }[];
 }
 export interface LossReasonRule { keyword: string; category: string }
 export const lossApi = {
@@ -606,6 +607,7 @@ export interface ServerPerfResult {
     servers: ServerPerfRow[];
     team: { servers: number; netSales: number; tips: number; guests: number; avgPerGuest: number; avgTipPct: number; avgDrinkPct: number; liquorPct: number; beveragePct: number; dessertPct: number };
     weights: Record<string, number>;
+    coverage: { date: string; serverCount: number; uploadedAt: string }[];
 }
 export const serverPerfApi = {
     upload: (filename: string, content: string) =>

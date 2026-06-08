@@ -590,6 +590,31 @@ export const lossApi = {
         apiFetch<{ ok: boolean; sentTo: number }>("/loss/email-report", { method: "POST", body: JSON.stringify({ from, to }) }),
 };
 
+// ─── Server Performance (Admin) ─────────────────────────────────────────────
+export interface ServerPerfRow {
+    name: string; isStation: boolean; shifts: number; hours: number;
+    netSales: number; grossSales: number; discount: number; discountPct: number;
+    tips: number; tipPct: number; guests: number; orders: number;
+    salesPerHour: number; avgPerGuest: number; avgPerOrder: number;
+    foodSales: number; beverageSales: number; alcoholSales: number; dessertSales: number;
+    foodCount: number; beverageCount: number; alcoholCount: number; dessertCount: number;
+    drinkSales: number; foodPct: number; beveragePct: number; alcoholPct: number; dessertPct: number; drinkPct: number;
+    dessertPer100: number; liquorPerGuest: number; score: number;
+}
+export interface ServerPerfResult {
+    range: { from: string; to: string };
+    servers: ServerPerfRow[];
+    team: { servers: number; netSales: number; tips: number; guests: number; avgPerGuest: number; avgTipPct: number; avgDrinkPct: number };
+    weights: Record<string, number>;
+}
+export const serverPerfApi = {
+    upload: (filename: string, content: string) =>
+        apiFetch<{ ok: boolean; date: string; imported: number; servers: number }>(
+            "/server-perf/upload", { method: "POST", body: JSON.stringify({ filename, content }) }),
+    dashboard: (from: string, to: string) =>
+        apiFetch<ServerPerfResult>(`/server-perf/dashboard?from=${from}&to=${to}&_t=${Date.now()}`, { cache: "no-store" }),
+};
+
 // ─── Usage Report (7-day, multi-unit) ───────────────────────────────────────
 export interface UsageReportItem {
     label:        string;

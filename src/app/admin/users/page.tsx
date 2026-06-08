@@ -71,6 +71,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "station-prep": "Station Prep Report",
     "stock-count": "Stock Count (by Storage Area)",
     "loss-management": "Loss Management (Admin)",
+    "server-performance": "Server Performance (Admin)",
 };
 
 interface UserRow {

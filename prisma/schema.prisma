@@ -758,3 +758,43 @@ model LossReasonMap {
   createdAt DateTime @default(now())
   @@map("loss_reason_map")
 }
+
+// ─── Server Performance (Admin-only) ─────────────────────────────────────────
+model ServerSalesUpload {
+  id           String   @id @default(cuid())
+  businessDate DateTime @unique
+  serverCount  Int      @default(0)
+  uploadedAt   DateTime @default(now())
+  @@map("server_sales_uploads")
+}
+
+model ServerSalesRow {
+  id            String    @id @default(cuid())
+  businessDate  DateTime
+  staffName     String
+  shiftStart    DateTime?
+  shiftEnd      DateTime?
+  shiftHours    Float     @default(0)
+  grossSales    Decimal   @db.Decimal(10, 2) @default(0)
+  discount      Decimal   @db.Decimal(10, 2) @default(0)
+  netSales      Decimal   @db.Decimal(10, 2) @default(0)
+  chargeTips    Decimal   @db.Decimal(10, 2) @default(0)
+  gratuity      Decimal   @db.Decimal(10, 2) @default(0)
+  serviceFees   Decimal   @db.Decimal(10, 2) @default(0)
+  avgPerGuest   Decimal   @db.Decimal(10, 2) @default(0)
+  avgPerOrder   Decimal   @db.Decimal(10, 2) @default(0)
+  guests        Int       @default(0)
+  orders        Int       @default(0)
+  foodSales     Decimal   @db.Decimal(10, 2) @default(0)
+  foodCount     Int       @default(0)
+  beverageSales Decimal   @db.Decimal(10, 2) @default(0)
+  beverageCount Int       @default(0)
+  alcoholSales  Decimal   @db.Decimal(10, 2) @default(0)
+  alcoholCount  Int       @default(0)
+  dessertSales  Decimal   @db.Decimal(10, 2) @default(0)
+  dessertCount  Int       @default(0)
+  otherSales    Decimal   @db.Decimal(10, 2) @default(0)
+  createdAt     DateTime  @default(now())
+  @@index([businessDate])
+  @@map("server_sales_rows")
+}

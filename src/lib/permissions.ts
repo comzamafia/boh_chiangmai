@@ -40,6 +40,7 @@ export const ALL_SLUGS = [
     "station-prep",
     "stock-count",
     "loss-management",
+    "server-performance",
 ] as const;
 
 export type NavSlug = (typeof ALL_SLUGS)[number];
@@ -113,6 +114,7 @@ export const SLUG_TO_PATH: Record<NavSlug, string> = {
     "station-prep": "/station-prep",
     "stock-count": "/stock-count",
     "loss-management": "/loss-management",
+    "server-performance": "/server-performance",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

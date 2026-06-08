@@ -147,7 +147,7 @@ export default function LossManagementPage() {
                         ))}
                     </div>
 
-                    {tab === "overview"    && <Overview data={data} />}
+                    {tab === "overview"    && <Overview data={data} onChanged={load} />}
                     {tab === "complaints"  && <Complaints data={data} />}
                     {tab === "discounts"   && <Discounts data={data} />}
                     {tab === "correlation" && <Correlation data={data} />}
@@ -172,7 +172,8 @@ function Kpi({ label, value, sub, icon: Icon, tone }: { label: string; value: st
 }
 
 const PIE = ["#f43f5e", "#6366f1"];
-function Overview({ data }: { data: LossDashboard }) {
+function Overview({ data, onChanged }: { data: LossDashboard; onChanged: () => void }) {
+    const [mgrOpen, setMgrOpen] = useState(false);
     const pieData = [
         { name: "Net Complaints", value: data.kpis.netComplaintTotal },
         { name: "Discounts", value: data.kpis.discountTotal },
@@ -201,7 +202,15 @@ function Overview({ data }: { data: LossDashboard }) {
                 <CardContent className="space-y-2 text-sm">
                     <QualityRow label="Generic item entries (e.g. “food”)" n={data.kpis.genericCount} />
                     <QualityRow label="Unassigned-user entries (e.g. “Host”)" n={data.kpis.unassignedCount} />
-                    <QualityRow label="Uncategorised reasons" n={data.kpis.uncategorizedCount} />
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Uncategorised reasons</span>
+                        <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={data.kpis.uncategorizedCount > 0 ? "text-amber-700 border-amber-300 dark:text-amber-400" : "text-emerald-700 border-emerald-300 dark:text-emerald-400"}>{data.kpis.uncategorizedCount}</Badge>
+                            <Button variant="outline" size="sm" className="h-6 px-2 text-[11px] gap-1" onClick={() => setMgrOpen(true)}>
+                                <Settings2 className="w-3 h-3" /> Manage
+                            </Button>
+                        </div>
+                    </div>
                     <QualityRow label="Bulk discounts (>10 items, same time)" n={data.kpis.bulkCount} />
                     <QualityRow label="Orphaned Undos (no matching complaint)" n={data.orphanUndos.length} />
                 </CardContent>
@@ -209,6 +218,8 @@ function Overview({ data }: { data: LossDashboard }) {
         </div>
 
         <CoverageCalendar coverage={data.coverage} range={data.range} />
+
+        {mgrOpen && <UncategorizedManager onClose={() => setMgrOpen(false)} onApplied={onChanged} />}
         </div>
     );
 }
@@ -490,6 +501,92 @@ function ReasonMapDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
                     <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
                         <Button size="sm" onClick={save} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save &amp; re-classify</Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Triage uncategorised raw reasons → assign categories (batch) ──────────────
+function UncategorizedManager({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
+    const [list, setList] = useState<{ reasonRaw: string; count: number; net: number }[]>([]);
+    const [cats, setCats] = useState<string[]>([]);
+    const [rules, setRules] = useState<LossReasonRule[]>([]);
+    const [assign, setAssign] = useState<Record<string, { category: string; keyword: string }>>({});
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState<string | null>(null);
+
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [u, rm] = await Promise.all([lossApi.uncategorized(), lossApi.reasonMap()]);
+            setList(u); setRules(rm);
+            setCats([...new Set(rm.map(r => r.category))].sort());
+            setAssign({});
+        } finally { setLoading(false); }
+    }, []);
+    useEffect(() => { reload(); }, [reload]);
+
+    const setRow = (raw: string, patch: Partial<{ category: string; keyword: string }>) =>
+        setAssign(a => ({ ...a, [raw]: { category: a[raw]?.category ?? "", keyword: a[raw]?.keyword ?? raw.toLowerCase(), ...patch } }));
+
+    const queued = Object.entries(assign).filter(([, v]) => v.category.trim());
+
+    async function apply() {
+        if (queued.length === 0) return;
+        setSaving(true); setMsg(null);
+        try {
+            const newRules: LossReasonRule[] = queued.map(([raw, v]) => ({ keyword: (v.keyword || raw).trim().toLowerCase(), category: v.category.trim() }));
+            await lossApi.saveReasonMap([...newRules, ...rules]);   // new rules first → match before falling through
+            setMsg(`Assigned ${queued.length} reason(s) and re-classified complaints.`);
+            onApplied();
+            await reload();
+        } finally { setSaving(false); }
+    }
+
+    return (
+        <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-2xl max-h-[88dvh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500" /> Uncategorised reasons</DialogTitle>
+                    <DialogDescription>Pick a category for each raw reason text. Keyword is a case-insensitive substring — shorten it to match similar future entries. Apply re-classifies all complaints at once.</DialogDescription>
+                </DialogHeader>
+
+                {loading ? <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                : list.length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">🎉 No uncategorised reasons — everything is mapped.</div>
+                : (
+                    <div className="flex-1 overflow-y-auto -mx-1 px-1">
+                        <datalist id="loss-cat-options">{cats.map(c => <option key={c} value={c} />)}</datalist>
+                        <div className="space-y-2">
+                            {list.map(r => {
+                                const row = assign[r.reasonRaw];
+                                const done = row?.category.trim();
+                                return (
+                                    <div key={r.reasonRaw} className={`rounded-lg border p-2.5 ${done ? "border-emerald-400/50 bg-emerald-500/5" : "border-border"}`}>
+                                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                                            <span className="text-sm font-medium break-words">&ldquo;{r.reasonRaw}&rdquo;</span>
+                                            <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{r.count}× · {money(r.net)}</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-1.5">
+                                            <Input list="loss-cat-options" placeholder="Category (pick or type)…" className="h-8 flex-1"
+                                                value={row?.category ?? ""} onChange={e => setRow(r.reasonRaw, { category: e.target.value })} />
+                                            <Input placeholder="match keyword" className="h-8 sm:w-44"
+                                                value={row?.keyword ?? r.reasonRaw.toLowerCase()} onChange={e => setRow(r.reasonRaw, { keyword: e.target.value })} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                <DialogFooter className="flex-row justify-between gap-2">
+                    {msg ? <span className="text-xs text-emerald-600 self-center">{msg}</span> : <span className="text-xs text-muted-foreground self-center">{queued.length} queued</span>}
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Close</Button>
+                        <Button size="sm" onClick={apply} disabled={saving || queued.length === 0}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Apply {queued.length || ""}</Button>
                     </div>
                 </DialogFooter>
             </DialogContent>

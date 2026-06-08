@@ -585,6 +585,7 @@ export const lossApi = {
     dashboard: (from: string, to: string) =>
         apiFetch<LossDashboard>(`/loss/dashboard?from=${from}&to=${to}&_t=${Date.now()}`, { cache: "no-store" }),
     reasonMap: () => apiFetch<LossReasonRule[]>("/loss/reason-map", { cache: "no-store" }),
+    uncategorized: () => apiFetch<{ reasonRaw: string; count: number; net: number }[]>("/loss/uncategorized", { cache: "no-store" }),
     saveReasonMap: (rows: LossReasonRule[]) =>
         apiFetch<{ ok: boolean; rules: number; reclassified: number }>("/loss/reason-map", { method: "PUT", body: JSON.stringify({ rows }) }),
     emailReport: (from: string, to: string) =>

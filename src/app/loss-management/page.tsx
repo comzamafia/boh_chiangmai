@@ -9,12 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
     ShieldAlert, Upload, Loader2, AlertTriangle, TrendingDown, Percent, ShieldX, Flag,
-    Undo2, Tag, FileDown, Mail, Settings2, Plus, Trash2, GitCompareArrows, CalendarDays,
+    Undo2, Tag, FileDown, Mail, Settings2, Plus, Trash2, GitCompareArrows, CalendarDays, ChevronDown,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -178,9 +177,6 @@ function Overview({ data }: { data: LossDashboard }) {
         { name: "Net Complaints", value: data.kpis.netComplaintTotal },
         { name: "Discounts", value: data.kpis.discountTotal },
     ].filter(d => d.value > 0);
-    const fmtWhen = (s: string) => new Date(s).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    const ok = <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓</span>;
-    const miss = <span className="text-amber-600 dark:text-amber-400">missing</span>;
     return (
         <div className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-2">
@@ -212,22 +208,71 @@ function Overview({ data }: { data: LossDashboard }) {
             </Card>
         </div>
 
-        {/* Data coverage — which dates have complaints / discounts uploaded */}
+        <CoverageCalendar coverage={data.coverage} range={data.range} />
+        </div>
+    );
+}
+
+// ── Compact, collapsible coverage calendar (green = complete, amber = missing a file) ──
+function CoverageCalendar({ coverage, range }: { coverage: LossDashboard["coverage"]; range: { from: string; to: string } }) {
+    const [open, setOpen] = useState(false);
+    const byDate = new Map(coverage.map(c => [c.date, c]));
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const months: { y: number; m: number }[] = [];
+    const start = new Date(range.from + "T00:00:00Z"), end = new Date(range.to + "T00:00:00Z");
+    let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    while (cur <= end && months.length < 24) { months.push({ y: cur.getUTCFullYear(), m: cur.getUTCMonth() }); cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1)); }
+    const DOWS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    return (
         <Card>
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> Data Coverage</CardTitle>
-                <p className="text-[10px] text-muted-foreground">Upload the missing file for any date to complete combined-loss figures. Re-uploading a date overwrites it.</p>
-            </CardHeader>
-            <CardContent className="px-2 sm:px-4">
-                <SimpleTable head={["Date", "Complaints", "Discounts", "Last uploaded"]} rows={data.coverage.map(c => [
-                    c.date,
-                    c.hasComplaints ? <span key="c">{ok} <span className="text-muted-foreground">{c.complaintCount}</span></span> : miss,
-                    c.hasDiscounts ? <span key="d">{ok} <span className="text-muted-foreground">{c.discountCount}</span></span> : miss,
-                    <span key="u" className="text-muted-foreground">{fmtWhen(c.uploadedAt)}</span>,
-                ])} />
+            <CardContent className="p-3">
+                <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2 text-xs text-muted-foreground hover:text-foreground">
+                    <span className="flex items-center gap-1.5 font-medium"><CalendarDays className="w-3.5 h-3.5" /> Data coverage</span>
+                    <span className="flex items-center gap-3 text-[10px]">
+                        <span className="hidden sm:flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> complete</span>
+                        <span className="hidden sm:flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> missing file</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+                    </span>
+                </button>
+                {open && (
+                    <div className="mt-3 flex flex-wrap gap-x-8 gap-y-4">
+                        {months.map(({ y, m }) => {
+                            const offset = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7;
+                            const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+                            return (
+                                <div key={`${y}-${m}`}>
+                                    <p className="text-[11px] font-semibold mb-1.5">{MONTH[m]} {y}</p>
+                                    <div className="grid grid-cols-7 gap-0.5">
+                                        {DOWS.map(d => <div key={d} className="w-7 text-center text-[9px] text-muted-foreground/60">{d}</div>)}
+                                        {Array.from({ length: offset }).map((_, i) => <div key={`b${i}`} className="w-7 h-7" />)}
+                                        {Array.from({ length: days }).map((_, i) => {
+                                            const d = i + 1;
+                                            const cov = byDate.get(`${y}-${pad(m + 1)}-${pad(d)}`);
+                                            const complete = cov?.hasComplaints && cov?.hasDiscounts;
+                                            const partial = cov && !complete;
+                                            const missing = cov ? [!cov.hasComplaints && "Complaints", !cov.hasDiscounts && "Discounts"].filter(Boolean).join(" + ") : "";
+                                            const tip = complete ? "Complete — complaints + discounts" : partial ? `Missing: ${missing}` : "No data";
+                                            return (
+                                                <div key={d} title={tip}
+                                                    className={`w-7 h-7 rounded-md flex flex-col items-center justify-center text-[10px] tabular-nums border
+                                                        ${complete ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                                          : partial ? "bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                                                          : "border-transparent text-muted-foreground/40"}`}>
+                                                    {d}
+                                                    {cov && <span className={`w-1.5 h-1.5 rounded-full ${complete ? "bg-emerald-500" : "bg-amber-500"}`} />}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </CardContent>
         </Card>
-        </div>
     );
 }
 function QualityRow({ label, n }: { label: string; n: number }) {

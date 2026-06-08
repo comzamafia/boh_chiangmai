@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Trophy, Upload, Loader2, ShieldX, DollarSign, Percent, Users, Wine, FileDown, Medal, Crown, Award,
+    Trophy, Upload, Loader2, ShieldX, DollarSign, Users, Wine, FileDown, Medal, Crown, Award, CalendarDays, ChevronDown,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList,
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { serverPerfApi, type ServerPerfResult, type ServerPerfRow } from "@/lib/api";
+import { serverPerfApi, type ServerPerfResult } from "@/lib/api";
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -222,33 +222,7 @@ export default function ServerPerformancePage() {
                         <p className="text-[10px] text-muted-foreground">Note: station logins ({servers.filter(s => s.isStation).map(s => s.name).join(", ")}) are excluded from ranking.</p>
                     )}
 
-                    {/* Data coverage */}
-                    {data.coverage.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm flex items-center gap-2"><Trophy className="w-4 h-4 text-blue-500" /> Data Coverage</CardTitle>
-                                <p className="text-[10px] text-muted-foreground">Uploaded server-sales days in this range. Re-uploading a date overwrites it.</p>
-                            </CardHeader>
-                            <CardContent className="px-2 sm:px-4">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs" style={{ minWidth: 360 }}>
-                                        <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                            <th className="text-left py-2 pl-2">Date</th><th className="text-right py-2 px-2">Servers</th><th className="text-right py-2 pr-2">Last uploaded</th>
-                                        </tr></thead>
-                                        <tbody className="divide-y divide-border/40">
-                                            {data.coverage.map(c => (
-                                                <tr key={c.date} className="hover:bg-muted/20">
-                                                    <td className="py-1.5 pl-2 font-medium">{c.date}</td>
-                                                    <td className="py-1.5 px-2 text-right tabular-nums">{c.serverCount}</td>
-                                                    <td className="py-1.5 pr-2 text-right text-muted-foreground">{new Date(c.uploadedAt).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                    <SpCoverage coverage={data.coverage} range={data.range} />
                 </>
             )}
         </div>
@@ -348,6 +322,62 @@ function Kpi({ label, value, sub, icon: Icon, tone }: { label: string; value: st
             <p className={`text-xl font-bold mt-1 ${c}`}>{value}</p>
             {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
         </div>
+    );
+}
+
+// Compact, collapsible coverage calendar — green = day has server-sales uploaded
+function SpCoverage({ coverage, range }: { coverage: ServerPerfResult["coverage"]; range: { from: string; to: string } }) {
+    const [open, setOpen] = useState(false);
+    if (coverage.length === 0) return null;
+    const byDate = new Map(coverage.map(c => [c.date, c]));
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const months: { y: number; m: number }[] = [];
+    const start = new Date(range.from + "T00:00:00Z"), end = new Date(range.to + "T00:00:00Z");
+    let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    while (cur <= end && months.length < 24) { months.push({ y: cur.getUTCFullYear(), m: cur.getUTCMonth() }); cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1)); }
+    const DOWS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return (
+        <Card>
+            <CardContent className="p-3">
+                <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2 text-xs text-muted-foreground hover:text-foreground">
+                    <span className="flex items-center gap-1.5 font-medium"><CalendarDays className="w-3.5 h-3.5" /> Data coverage</span>
+                    <span className="flex items-center gap-3 text-[10px]">
+                        <span className="hidden sm:flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> uploaded</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+                    </span>
+                </button>
+                {open && (
+                    <div className="mt-3 flex flex-wrap gap-x-8 gap-y-4">
+                        {months.map(({ y, m }) => {
+                            const offset = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7;
+                            const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+                            return (
+                                <div key={`${y}-${m}`}>
+                                    <p className="text-[11px] font-semibold mb-1.5">{MONTH[m]} {y}</p>
+                                    <div className="grid grid-cols-7 gap-0.5">
+                                        {DOWS.map(d => <div key={d} className="w-7 text-center text-[9px] text-muted-foreground/60">{d}</div>)}
+                                        {Array.from({ length: offset }).map((_, i) => <div key={`b${i}`} className="w-7 h-7" />)}
+                                        {Array.from({ length: days }).map((_, i) => {
+                                            const d = i + 1;
+                                            const cov = byDate.get(`${y}-${pad(m + 1)}-${pad(d)}`);
+                                            return (
+                                                <div key={d} title={cov ? `${cov.serverCount} servers uploaded` : "No data"}
+                                                    className={`w-7 h-7 rounded-md flex flex-col items-center justify-center text-[10px] tabular-nums border
+                                                        ${cov ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" : "border-transparent text-muted-foreground/40"}`}>
+                                                    {d}
+                                                    {cov && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
     );
 }
 

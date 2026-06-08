@@ -550,6 +550,38 @@ export const prepStationsApi = {
             .then(async r => ({ status: r.status, ...(await r.json().catch(() => ({}))) } as { status: number; taskCount?: number; message?: string; error?: string })),
 };
 
+// ─── Loss Management (Admin) ────────────────────────────────────────────────
+export interface LossDashboard {
+    range: { from: string; to: string };
+    kpis: {
+        grossComplaintTotal: number; netComplaintTotal: number; undoTotal: number;
+        complaintCount: number; undoCount: number; discountTotal: number;
+        combinedNetLoss: number; highRiskCount: number; dataQualityIssues: number;
+        genericCount: number; unassignedCount: number; uncategorizedCount: number; bulkCount: number;
+    };
+    byReason:  { category: string; count: number; net: number }[];
+    topItems:  { item: string; count: number; net: number; isGeneric: boolean }[];
+    byStaff:   { user: string; count: number; gross: number; net: number; undoCount: number; unassigned: boolean }[];
+    byDevice:  { device: string; count: number; net: number }[];
+    byZone:    { zone: string; count: number; net: number }[];
+    undoPairs: { orderId: string; item: string; complaint: number; undo: number; net: number; reconciled: boolean; loop: boolean }[];
+    orphanUndos: { orderId: string; item: string; complaint: number; undo: number; net: number; reconciled: boolean; loop: boolean }[];
+    discountByCategory: { category: string; count: number; amount: number }[];
+    discountByName: { name: string; category: string; count: number; amount: number }[];
+    staffAuth: { authorizedBy: string; count: number; amount: number; types: string; riskCount: number; anon: boolean; mgr100: number }[];
+    hourly: number[];
+    highRisk: { time: string | null; displayId: string; name: string; amount: number; authorizedBy: string; reason: string }[];
+    promotions: { name: string; count: number; amount: number }[];
+    periodAlignment: { complaintDays: number; discountDays: number; discMissingForComplaintDays: string[]; hasDiscountData: boolean; hasComplaintData: boolean };
+}
+export const lossApi = {
+    upload: (filename: string, content: string) =>
+        apiFetch<{ ok: boolean; type: string; date: string; imported: number; errors: string[] }>(
+            "/loss/upload", { method: "POST", body: JSON.stringify({ filename, content }) }),
+    dashboard: (from: string, to: string) =>
+        apiFetch<LossDashboard>(`/loss/dashboard?from=${from}&to=${to}&_t=${Date.now()}`, { cache: "no-store" }),
+};
+
 // ─── Usage Report (7-day, multi-unit) ───────────────────────────────────────
 export interface UsageReportItem {
     label:        string;

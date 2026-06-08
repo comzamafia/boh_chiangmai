@@ -697,3 +697,55 @@ model ReportUnitChain {
 
   @@map("report_unit_chains")
 }
+
+// ─── Loss Management (Admin-only) ────────────────────────────────────────────
+model LossUpload {
+  id            String   @id @default(cuid())
+  businessDate  DateTime @unique
+  complaintCount Int     @default(0)
+  discountCount  Int     @default(0)
+  hasComplaints Boolean  @default(false)
+  hasDiscounts  Boolean  @default(false)
+  uploadedAt    DateTime @default(now())
+  @@map("loss_uploads")
+}
+
+model LossComplaint {
+  id               String   @id @default(cuid())
+  businessDate     DateTime
+  tableNumber      String
+  zone             String                       // Bar | Lounge | Reserved | Main | VIP
+  orderId          String
+  userName         String
+  isUnassignedUser Boolean  @default(false)
+  actionType       String                       // "Complaint" | "Undo"
+  grossAmount      Decimal  @db.Decimal(10, 2)
+  netAmount        Decimal  @db.Decimal(10, 2)  // after Undo reconciliation
+  isUndoReconciled Boolean  @default(false)
+  itemDetail       String
+  isGenericItem    Boolean  @default(false)
+  reasonRaw        String
+  reasonCategory   String
+  device           String
+  createdAt        DateTime @default(now())
+  @@index([businessDate])
+  @@map("loss_complaints")
+}
+
+model LossDiscount {
+  id               String   @id @default(cuid())
+  businessDate     DateTime
+  createTime       DateTime?
+  displayId        String
+  discountName     String
+  discountCategory String                       // "Order" | "Item" | "Promotion"
+  discountAmount   Decimal  @db.Decimal(10, 2)  // positive
+  itemCount        Int      @default(1)
+  authorizedBy     String
+  isAnonymousAuth  Boolean  @default(false)
+  riskLevel        String                       // "LOW" | "MEDIUM" | "HIGH"
+  isBulkDiscount   Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  @@index([businessDate])
+  @@map("loss_discounts")
+}

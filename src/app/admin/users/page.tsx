@@ -70,6 +70,7 @@ const SLUG_LABELS: Record<NavSlug, string> = {
     "prep-list": "Prep List",
     "station-prep": "Station Prep Report",
     "stock-count": "Stock Count (by Storage Area)",
+    "loss-management": "Loss Management (Admin)",
 };
 
 interface UserRow {

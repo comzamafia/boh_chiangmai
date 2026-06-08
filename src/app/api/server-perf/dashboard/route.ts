@@ -10,7 +10,8 @@ import { getSession } from "@/lib/auth";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 const r2 = (n: number) => Math.round(n * 100) / 100;
-const STATIONS = new Set(["bar bar", "bar", "host", "host pos"]);
+// "Bar Bar" is treated as a real server; only Host logins stay excluded from ranking.
+const STATIONS = new Set(["host", "host pos"]);
 
 // Score weights (sum = 1) — tips intentionally excluded
 const W = { salesPerHour: 0.35, avgPerGuest: 0.25, drinkPct: 0.20, dessertPer100: 0.12, discount: 0.08 };

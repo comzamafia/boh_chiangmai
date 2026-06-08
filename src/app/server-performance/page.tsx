@@ -70,20 +70,73 @@ export default function ServerPerformancePage() {
     function exportPdf() {
         if (!data) return;
         const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-        const M = 28;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(30, 41, 59);
-        doc.text("Server Performance Leaderboard", M, 38);
-        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(120, 130, 145);
-        doc.text(`${from} → ${to}`, M, 53);
+        const pageW = doc.internal.pageSize.width, pageH = doc.internal.pageSize.height;
+        const M = 32;
+        const NAVY: [number, number, number] = [30, 41, 59];
+        const MUTED: [number, number, number] = [120, 130, 145];
+        const INK: [number, number, number] = [17, 24, 39];
+        const t = data.team;
+
+        // ── Header band ──
+        doc.setFillColor(...NAVY); doc.rect(0, 0, pageW, 66, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(255, 255, 255);
+        doc.text("Server Performance Report", M, 32);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(203, 213, 225);
+        doc.text(`${from}  to  ${to}`, M, 50);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(255, 255, 255);
+        doc.text("Chiang Mai Mississauga", pageW - M, 30, { align: "right" });
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(203, 213, 225);
+        doc.text(`Generated ${new Date().toLocaleString("en-CA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 48, { align: "right" });
+
+        // ── KPI stat boxes ──
+        const kpis: [string, string][] = [
+            ["TEAM NET SALES", money0(t.netSales)],
+            ["GUESTS SERVED", t.guests.toLocaleString()],
+            ["AVG / GUEST", money(t.avgPerGuest)],
+            ["DRINK MIX", `${t.avgDrinkPct}%`],
+            ["SERVERS RANKED", String(t.servers)],
+        ];
+        const gap = 12, boxW = (pageW - M * 2 - gap * (kpis.length - 1)) / kpis.length, boxY = 84, boxH = 48;
+        kpis.forEach(([label, value], i) => {
+            const x = M + i * (boxW + gap);
+            doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.5);
+            doc.roundedRect(x, boxY, boxW, boxH, 5, 5, "FD");
+            doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
+            doc.text(label, x + 10, boxY + 16);
+            doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...INK);
+            doc.text(value, x + 10, boxY + 37);
+        });
+
+        // ── Section title ──
+        let top = boxY + boxH + 24;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...NAVY);
+        doc.text("Performance Leaderboard", M, top);
+        top += 8;
+
         autoTable(doc, {
-            startY: 66,
-            head: [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Drink %", "Dessert/100", "Disc %"]],
+            startY: top,
+            head: [["#", "Server", "Score", "Net Sales", "Sales/hr", "Guests", "Avg/Guest", "Drink %", "Dessert /100", "Disc %"]],
             body: ranked.map((s, i) => [String(i + 1), s.name, s.score.toFixed(1), money(s.netSales), money(s.salesPerHour), String(s.guests),
                 money(s.avgPerGuest), `${s.drinkPct}%`, s.dessertPer100.toFixed(0), `${s.discountPct}%`]),
-            margin: { left: M, right: M },
-            styles: { font: "helvetica", fontStyle: "bold", fontSize: 8, cellPadding: 3, textColor: [17, 24, 39] },
-            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7.5 },
-            columnStyles: { 0: { halign: "center", cellWidth: 24 }, 3: { halign: "right" }, 4: { halign: "right" }, 6: { halign: "right" } },
+            margin: { left: M, right: M, bottom: 40 },
+            styles: { font: "helvetica", fontSize: 8.5, cellPadding: 5, textColor: INK, lineColor: [226, 232, 240], lineWidth: 0.5, valign: "middle" },
+            headStyles: { fillColor: NAVY, textColor: 255, fontSize: 8, fontStyle: "bold", halign: "center", cellPadding: 5 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: {
+                0: { halign: "center", cellWidth: 26, fontStyle: "bold" },
+                1: { halign: "left", fontStyle: "bold", cellWidth: 120 },
+                2: { halign: "center", fontStyle: "bold", textColor: NAVY },
+                3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" },
+                6: { halign: "right" }, 7: { halign: "right" }, 8: { halign: "right" }, 9: { halign: "right" },
+            },
+            didParseCell: (d) => {
+                if (d.section === "body" && d.row.index === 0) { d.cell.styles.fillColor = [254, 249, 231]; }   // top performer highlight
+            },
+            didDrawPage: () => {
+                doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
+                doc.text("Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8% (normalised across servers). Station logins excluded; tips not shown.", M, pageH - 18);
+                doc.text(`Page ${doc.getNumberOfPages()}`, pageW - M, pageH - 18, { align: "right" });
+            },
         });
         doc.save(`server-performance-${from}_${to}.pdf`);
     }
@@ -272,17 +325,17 @@ function Upsell({ data }: { data: ServerPerfResult }) {
 }
 
 // ── Sortable + per-column-filterable leaderboard ────────────────────────────
-type LbCol = { key: string; label: string; kind: "text" | "num"; get: (s: ServerPerfRow) => string | number; render: (s: ServerPerfRow) => React.ReactNode };
+type LbCol = { key: string; label: string; kind: "text" | "num"; ph?: string; tip?: string; get: (s: ServerPerfRow) => string | number; render: (s: ServerPerfRow) => React.ReactNode };
 const LB_COLS: LbCol[] = [
     { key: "name",          label: "Server",      kind: "text", get: s => s.name,          render: s => <span className="font-semibold">{s.name}</span> },
-    { key: "score",         label: "Score",       kind: "num",  get: s => s.score,         render: s => <span className="font-bold text-primary tabular-nums">{s.score.toFixed(1)}</span> },
-    { key: "netSales",      label: "Net Sales",   kind: "num",  get: s => s.netSales,      render: s => money(s.netSales) },
-    { key: "salesPerHour",  label: "Sales/hr",    kind: "num",  get: s => s.salesPerHour,  render: s => money(s.salesPerHour) },
-    { key: "guests",        label: "Guests",      kind: "num",  get: s => s.guests,        render: s => s.guests },
-    { key: "avgPerGuest",   label: "Avg/Guest",   kind: "num",  get: s => s.avgPerGuest,   render: s => money(s.avgPerGuest) },
-    { key: "drinkPct",      label: "Drink %",     kind: "num",  get: s => s.drinkPct,      render: s => `${s.drinkPct}%` },
-    { key: "dessertPer100", label: "Dessert/100", kind: "num",  get: s => s.dessertPer100, render: s => s.dessertPer100.toFixed(0) },
-    { key: "discountPct",   label: "Disc %",      kind: "num",  get: s => s.discountPct,   render: s => `${s.discountPct}%` },
+    { key: "score",         label: "Score",       kind: "num", ph: "e.g. ≥70",    tip: "Composite score 0–100. Type a minimum (e.g. 70) or a range (e.g. 60-80).", get: s => s.score,         render: s => <span className="font-bold text-primary tabular-nums">{s.score.toFixed(1)}</span> },
+    { key: "netSales",      label: "Net Sales",   kind: "num", ph: "e.g. ≥1500",  tip: "Net sales in $. Type a minimum (e.g. 1500) or a range (e.g. 1000-2000).", get: s => s.netSales,      render: s => money(s.netSales) },
+    { key: "salesPerHour",  label: "Sales/hr",    kind: "num", ph: "e.g. ≥250",   tip: "Sales per hour in $. Type a minimum (e.g. 250) or a range (e.g. 200-350).", get: s => s.salesPerHour,  render: s => money(s.salesPerHour) },
+    { key: "guests",        label: "Guests",      kind: "num", ph: "e.g. ≥40",    tip: "Guests served. Type a minimum (e.g. 40) or a range (e.g. 30-60).", get: s => s.guests,        render: s => s.guests },
+    { key: "avgPerGuest",   label: "Avg/Guest",   kind: "num", ph: "e.g. ≥40",    tip: "Average check per guest in $. Type a minimum (e.g. 40) or a range (e.g. 38-45).", get: s => s.avgPerGuest,   render: s => money(s.avgPerGuest) },
+    { key: "drinkPct",      label: "Drink %",     kind: "num", ph: "e.g. ≥20",    tip: "Beverage + liquor as % of net sales. Type a minimum (e.g. 20) or a range (e.g. 15-25).", get: s => s.drinkPct,      render: s => `${s.drinkPct}%` },
+    { key: "dessertPer100", label: "Dessert/100", kind: "num", ph: "e.g. ≥30",    tip: "Desserts sold per 100 guests. Type a minimum (e.g. 30) or a range (e.g. 20-50).", get: s => s.dessertPer100, render: s => s.dessertPer100.toFixed(0) },
+    { key: "discountPct",   label: "Disc %",      kind: "num", ph: "e.g. 0-2",    tip: "Discount given as % of gross sales (lower is better). Type a max via a range (e.g. 0-2).", get: s => s.discountPct,   render: s => `${s.discountPct}%` },
 ];
 
 function numMatch(value: number, expr: string): boolean {
@@ -347,10 +400,11 @@ function Leaderboard({ rows }: { rows: ServerPerfRow[] }) {
                             <tr className="border-b border-border">
                                 <th className="pl-1" />
                                 {LB_COLS.map(c => (
-                                    <th key={c.key} className="px-1 pb-1.5">
+                                    <th key={c.key} className="px-1 pb-2">
                                         {c.kind === "num" && (
                                             <Input value={filters[c.key] ?? ""} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))}
-                                                placeholder="≥ / a-b" className="h-6 text-[11px] px-1.5 text-right" />
+                                                placeholder={c.ph} title={c.tip}
+                                                className={`h-7 text-[11px] px-2 text-right tabular-nums rounded-md ${filters[c.key] ? "border-primary/60 bg-primary/5" : ""}`} />
                                         )}
                                     </th>
                                 ))}

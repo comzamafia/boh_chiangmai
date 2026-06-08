@@ -296,7 +296,7 @@ export default function SuppliersPage() {
                             {/* Delivery days */}
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold">Delivery days</Label>
-                                <div className="grid grid-cols-7 gap-1.5">
+                                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
                                     {WEEKDAY_OPTIONS.map(d => {
                                         const active = (form.deliveryDays ?? []).includes(d.value);
                                         return (

@@ -141,10 +141,10 @@ export default function LossManagementPage() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
                         {([["overview", "Overview"], ["complaints", "Complaints"], ["discounts", "Discounts"], ["correlation", "Correlation"], ["daily", "Daily Report"]] as [Tab, string][]).map(([k, l]) => (
                             <button key={k} onClick={() => setTab(k)}
-                                className={`px-3.5 py-2 rounded-xl text-sm font-medium border ${tab === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                                className={`px-3.5 py-2 rounded-xl text-sm font-medium border whitespace-nowrap shrink-0 ${tab === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>{l}</button>
                         ))}
                     </div>
 

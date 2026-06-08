@@ -604,7 +604,7 @@ export interface ServerPerfRow {
 export interface ServerPerfResult {
     range: { from: string; to: string };
     servers: ServerPerfRow[];
-    team: { servers: number; netSales: number; tips: number; guests: number; avgPerGuest: number; avgTipPct: number; avgDrinkPct: number };
+    team: { servers: number; netSales: number; tips: number; guests: number; avgPerGuest: number; avgTipPct: number; avgDrinkPct: number; liquorPct: number; beveragePct: number; dessertPct: number };
     weights: Record<string, number>;
 }
 export const serverPerfApi = {

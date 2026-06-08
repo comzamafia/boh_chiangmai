@@ -102,12 +102,18 @@ export async function GET(req: NextRequest) {
     // ── Team totals / averages ──
     const t = ranked;
     const sum = (k: keyof typeof t[number]) => r2(t.reduce((s, x) => s + Number(x[k]), 0));
+    const totNet = sum("netSales");
+    const sumOf = (k: keyof typeof t[number]) => t.reduce((s, x) => s + Number(x[k]), 0);
+    const pctOf = (v: number) => totNet > 0 ? r2((v / totNet) * 100) : 0;
     const team = {
         servers: t.length,
-        netSales: sum("netSales"), tips: sum("tips"), guests: t.reduce((s, x) => s + x.guests, 0),
-        avgPerGuest: t.reduce((s, x) => s + x.guests, 0) > 0 ? r2(sum("netSales") / t.reduce((s, x) => s + x.guests, 0)) : 0,
-        avgTipPct: sum("netSales") > 0 ? r2((sum("tips") / sum("netSales")) * 100) : 0,
-        avgDrinkPct: sum("netSales") > 0 ? r2(((t.reduce((s, x) => s + x.drinkSales, 0)) / sum("netSales")) * 100) : 0,
+        netSales: totNet, tips: sum("tips"), guests: t.reduce((s, x) => s + x.guests, 0),
+        avgPerGuest: t.reduce((s, x) => s + x.guests, 0) > 0 ? r2(totNet / t.reduce((s, x) => s + x.guests, 0)) : 0,
+        avgTipPct: totNet > 0 ? r2((sum("tips") / totNet) * 100) : 0,
+        avgDrinkPct: pctOf(sumOf("drinkSales")),
+        liquorPct: pctOf(sumOf("alcoholSales")),
+        beveragePct: pctOf(sumOf("beverageSales")),
+        dessertPct: pctOf(sumOf("dessertSales")),
     };
 
     return NextResponse.json({ range: { from: fromStr, to: toStr }, servers: scored, team, weights: W });

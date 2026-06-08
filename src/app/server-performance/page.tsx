@@ -33,6 +33,7 @@ export default function ServerPerformancePage() {
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [msg, setMsg]   = useState<string | null>(null);
+    const [view, setView] = useState<"score" | "upsell">("score");
 
     const load = useCallback(async () => {
         if (!isAdmin) { setLoading(false); return; }
@@ -125,6 +126,15 @@ export default function ServerPerformancePage() {
                 </CardContent></Card>
             ) : (
                 <>
+                    {/* View toggle */}
+                    <div className="flex gap-1.5">
+                        {([["score", "Performance Score"], ["upsell", "Upsell % (Bev / Liquor / Dessert)"]] as [typeof view, string][]).map(([k, l]) => (
+                            <button key={k} onClick={() => setView(k)}
+                                className={`px-3.5 py-2 rounded-xl text-sm font-medium border whitespace-nowrap ${view === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                        ))}
+                    </div>
+
+                    {view === "upsell" ? <Upsell data={data} /> : <>
                     {/* KPI row */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <Kpi label="Team Net Sales" value={money0(data.team.netSales)} icon={DollarSign} sub={`${data.team.servers} servers`} />
@@ -206,11 +216,98 @@ export default function ServerPerformancePage() {
                         </ChartCard>
                     </div>
 
+                    </>}
+
                     {servers.some(s => s.isStation) && (
                         <p className="text-[10px] text-muted-foreground">Note: station logins ({servers.filter(s => s.isStation).map(s => s.name).join(", ")}) are excluded from ranking.</p>
                     )}
                 </>
             )}
+        </div>
+    );
+}
+
+// ── Upsell view (Beverage / Liquor / Dessert %), ranked by Liquor + Beverage % ──
+function Upsell({ data }: { data: ServerPerfResult }) {
+    const ranked = [...data.servers].filter(s => !s.isStation && s.netSales > 0).sort((a, b) => b.drinkPct - a.drinkPct);
+    const maxLB = Math.max(1, ...ranked.map(s => s.drinkPct));
+    const bar = (pct: number, color: string) => (
+        <div className="flex items-center gap-1.5">
+            <div className="flex-1 h-2 rounded-full bg-muted/60 overflow-hidden min-w-[40px]"><div className="h-full rounded-full" style={{ width: `${Math.min(100, (pct / maxLB) * 100)}%`, background: color }} /></div>
+            <span className="tabular-nums font-bold w-10 text-right">{pct}%</span>
+        </div>
+    );
+    return (
+        <div className="space-y-4">
+            {/* Team summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Kpi label="Liquor + Beverage %" value={`${data.team.avgDrinkPct}%`} icon={Wine} tone="violet" sub="team average" />
+                <Kpi label="Liquor %" value={`${data.team.liquorPct}%`} icon={Wine} sub={money0(data.team.netSales * data.team.liquorPct / 100)} />
+                <Kpi label="Beverage %" value={`${data.team.beveragePct}%`} icon={Wine} sub="of net sales" />
+                <Kpi label="Dessert %" value={`${data.team.dessertPct}%`} icon={Award} tone="emerald" sub="of net sales" />
+            </div>
+
+            {/* Excel-style ranked table */}
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2"><Wine className="w-4 h-4 text-violet-500" /> Beverage, Liquor &amp; Dessert — ranked by Liquor + Beverage %</CardTitle>
+                    <p className="text-[10px] text-muted-foreground">Higher drink &amp; dessert attach = stronger upselling. % is share of each server&apos;s net sales.</p>
+                </CardHeader>
+                <CardContent className="px-2 sm:px-4">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs" style={{ minWidth: 720 }}>
+                            <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                <th className="text-left py-2 pl-1 sticky left-0 bg-card">#</th>
+                                <th className="text-left py-2 px-2 sticky left-7 bg-card">Server</th>
+                                <th className="text-right py-2 px-2">Net Sales</th>
+                                <th className="text-right py-2 px-2">Liquor $</th>
+                                <th className="text-right py-2 px-2">Liquor %</th>
+                                <th className="text-right py-2 px-2">Bev $</th>
+                                <th className="text-right py-2 px-2">Bev %</th>
+                                <th className="text-left py-2 px-2 min-w-[120px]">Liquor + Bev %</th>
+                                <th className="text-right py-2 px-2">Dessert $</th>
+                                <th className="text-right py-2 px-2">Dessert %</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-border/40">
+                                {ranked.map((s, i) => (
+                                    <tr key={s.name} className={`hover:bg-muted/20 ${i === 0 ? "bg-violet-50/50 dark:bg-violet-950/20" : ""}`}>
+                                        <td className="py-1.5 pl-1 sticky left-0 bg-card text-muted-foreground text-center">{i + 1}</td>
+                                        <td className="py-1.5 px-2 font-semibold sticky left-7 bg-card max-w-[130px] truncate">{s.name}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums">{money(s.netSales)}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.alcoholSales)}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums">{s.alcoholPct}%</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.beverageSales)}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums">{s.beveragePct}%</td>
+                                        <td className="py-1.5 px-2">{bar(s.drinkPct, "#8b5cf6")}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{money0(s.dessertSales)}</td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-pink-600 dark:text-pink-400">{s.dessertPct}%</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Charts: stacked L+B and dessert */}
+            <div className="grid gap-4 lg:grid-cols-2">
+                <ChartCard title="Liquor + Beverage % (stacked)">
+                    <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>
+                        <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Liquor: s.alcoholPct, Beverage: s.beveragePct }))} margin={{ left: 4, right: 48, top: 6, bottom: 6 }} barCategoryGap="22%">
+                            <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+                            <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor", opacity: 0.65 }} tickFormatter={v => `${v}%`} tickLine={false} axisLine={false} />
+                            <YAxis type="category" dataKey="name" width={118} tick={AXIS} tickLine={false} axisLine={false} interval={0} />
+                            <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} itemStyle={TIP_ITEM} labelStyle={TIP_ITEM} />
+                            <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600, paddingTop: 6 }} iconType="circle" />
+                            <Bar dataKey="Liquor" stackId="a" fill="#8b5cf6" barSize={22} radius={[6, 0, 0, 6]} isAnimationActive={false} />
+                            <Bar dataKey="Beverage" stackId="a" fill="#0ea5e9" barSize={22} radius={[0, 6, 6, 0]} isAnimationActive={false} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </ChartCard>
+                <ChartCard title="Dessert % (attach)">
+                    <SimpleBar data={ranked.map(s => ({ name: s.name, value: s.dessertPct })).sort((a, b) => b.value - a.value)} color="#ec4899" fmt={v => `${v}%`} />
+                </ChartCard>
+            </div>
         </div>
     );
 }

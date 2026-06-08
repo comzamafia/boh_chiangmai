@@ -749,3 +749,12 @@ model LossDiscount {
   @@index([businessDate])
   @@map("loss_discounts")
 }
+
+model LossReasonMap {
+  id        String   @id @default(cuid())
+  keyword   String                       // lowercased substring to match in raw reason
+  category  String                       // normalised category
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  @@map("loss_reason_map")
+}

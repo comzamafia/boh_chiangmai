@@ -572,14 +572,22 @@ export interface LossDashboard {
     hourly: number[];
     highRisk: { time: string | null; displayId: string; name: string; amount: number; authorizedBy: string; reason: string }[];
     promotions: { name: string; count: number; amount: number }[];
+    correlation: { orderId: string; date: string; table: string; zone: string; reasons: string; complaintAmount: number; discountTypes: string; discountAmount: number; sameStaff: boolean }[];
+    daily: { date: string; netComplaint: number; discountTotal: number; combined: number; complaintCount: number; discountCount: number; highRisk: number; topReason: string; topStaff: string }[];
     periodAlignment: { complaintDays: number; discountDays: number; discMissingForComplaintDays: string[]; hasDiscountData: boolean; hasComplaintData: boolean };
 }
+export interface LossReasonRule { keyword: string; category: string }
 export const lossApi = {
     upload: (filename: string, content: string) =>
         apiFetch<{ ok: boolean; type: string; date: string; imported: number; errors: string[] }>(
             "/loss/upload", { method: "POST", body: JSON.stringify({ filename, content }) }),
     dashboard: (from: string, to: string) =>
         apiFetch<LossDashboard>(`/loss/dashboard?from=${from}&to=${to}&_t=${Date.now()}`, { cache: "no-store" }),
+    reasonMap: () => apiFetch<LossReasonRule[]>("/loss/reason-map", { cache: "no-store" }),
+    saveReasonMap: (rows: LossReasonRule[]) =>
+        apiFetch<{ ok: boolean; rules: number; reclassified: number }>("/loss/reason-map", { method: "PUT", body: JSON.stringify({ rows }) }),
+    emailReport: (from: string, to: string) =>
+        apiFetch<{ ok: boolean; sentTo: number }>("/loss/email-report", { method: "POST", body: JSON.stringify({ from, to }) }),
 };
 
 // ─── Usage Report (7-day, multi-unit) ───────────────────────────────────────

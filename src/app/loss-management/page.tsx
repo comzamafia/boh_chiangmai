@@ -9,21 +9,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
     ShieldAlert, Upload, Loader2, AlertTriangle, TrendingDown, Percent, ShieldX, Flag,
-    Undo2, Tag,
+    Undo2, Tag, FileDown, Mail, Settings2, Plus, Trash2, GitCompareArrows, CalendarDays,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
     PieChart, Pie, Legend,
 } from "recharts";
-import { lossApi, type LossDashboard } from "@/lib/api";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { lossApi, type LossDashboard, type LossReasonRule } from "@/lib/api";
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const today = () => new Date().toISOString().slice(0, 10);
-type Tab = "overview" | "complaints" | "discounts";
+type Tab = "overview" | "complaints" | "discounts" | "correlation" | "daily";
 
 export default function LossManagementPage() {
     const { user } = useAuth();
@@ -36,6 +40,7 @@ export default function LossManagementPage() {
     const [tab, setTab]   = useState<Tab>("overview");
     const [uploading, setUploading] = useState(false);
     const [msg, setMsg]   = useState<string | null>(null);
+    const [reasonOpen, setReasonOpen] = useState(false);
 
     const load = useCallback(async () => {
         if (!isAdmin) { setLoading(false); return; }
@@ -92,6 +97,9 @@ export default function LossManagementPage() {
                     </Button>
                     <input id="loss-file" type="file" accept=".csv" multiple className="hidden"
                         onChange={e => { handleFiles(e.target.files); e.target.value = ""; }} />
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setReasonOpen(true)} title="Edit reason categories">
+                        <Settings2 className="w-4 h-4" /> Reasons
+                    </Button>
                 </div>
             </div>
             <div className="flex gap-1.5 flex-wrap">
@@ -134,17 +142,21 @@ export default function LossManagementPage() {
 
                     {/* Tabs */}
                     <div className="flex gap-1.5">
-                        {([["overview", "Overview"], ["complaints", "Complaints"], ["discounts", "Discounts"]] as [Tab, string][]).map(([k, l]) => (
+                        {([["overview", "Overview"], ["complaints", "Complaints"], ["discounts", "Discounts"], ["correlation", "Correlation"], ["daily", "Daily Report"]] as [Tab, string][]).map(([k, l]) => (
                             <button key={k} onClick={() => setTab(k)}
                                 className={`px-3.5 py-2 rounded-xl text-sm font-medium border ${tab === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>{l}</button>
                         ))}
                     </div>
 
-                    {tab === "overview"   && <Overview data={data} />}
-                    {tab === "complaints" && <Complaints data={data} />}
-                    {tab === "discounts"  && <Discounts data={data} />}
+                    {tab === "overview"    && <Overview data={data} />}
+                    {tab === "complaints"  && <Complaints data={data} />}
+                    {tab === "discounts"   && <Discounts data={data} />}
+                    {tab === "correlation" && <Correlation data={data} />}
+                    {tab === "daily"       && <Daily data={data} from={from} to={to} />}
                 </>
             )}
+
+            {reasonOpen && <ReasonMapDialog onClose={() => setReasonOpen(false)} onSaved={() => { setReasonOpen(false); load(); }} />}
         </div>
     );
 }
@@ -293,5 +305,128 @@ function Discounts({ data }: { data: LossDashboard }) {
                         r.displayId, r.name, money(r.amount), r.authorizedBy, <span key="r" className="text-rose-600">{r.reason}</span>])} />
                 </CardContent></Card>
         </div>
+    );
+}
+
+// View 4 — Correlation
+function Correlation({ data }: { data: LossDashboard }) {
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2"><GitCompareArrows className="w-4 h-4 text-indigo-500" /> Complaint ↔ Discount Overlap ({data.correlation.length})</CardTitle>
+                <p className="text-[10px] text-muted-foreground">Orders that had both a complaint and a discount the same night — a discount may be compensation for the complaint. ⚠️ = same staff on both.</p>
+            </CardHeader>
+            <CardContent className="px-2 sm:px-4">
+                <SimpleTable head={["Date", "Table", "Order", "Reason", "Complaint $", "Discount", "Discount $", "Same staff"]}
+                    rows={data.correlation.map(r => [r.date, `${r.table} (${r.zone})`, r.orderId, r.reasons, money(r.complaintAmount), r.discountTypes, money(r.discountAmount),
+                        r.sameStaff ? <span key="s" className="text-amber-600">⚠️ yes</span> : "no"])} />
+            </CardContent>
+        </Card>
+    );
+}
+
+// View 5 — Daily Report (+ PDF / Email)
+function Daily({ data, from, to }: { data: LossDashboard; from: string; to: string }) {
+    const [emailing, setEmailing] = useState(false);
+    const [emailMsg, setEmailMsg] = useState<string | null>(null);
+
+    function exportPdf() {
+        const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        const M = 32;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(30, 41, 59);
+        doc.text("Loss Management — Daily Report", M, 40);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(120, 130, 145);
+        doc.text(`${from} → ${to}   ·   Combined net loss ${money(data.kpis.combinedNetLoss)}`, M, 56);
+        autoTable(doc, {
+            startY: 70,
+            head: [["Date", "Net Complaints", "Discounts", "Combined", "Complaints", "Discount lines", "High-risk", "Top reason", "Top staff"]],
+            body: data.daily.map(d => [d.date, money(d.netComplaint), money(d.discountTotal), money(d.combined), String(d.complaintCount), String(d.discountCount), String(d.highRisk), d.topReason, d.topStaff]),
+            margin: { left: M, right: M },
+            styles: { font: "helvetica", fontStyle: "bold", fontSize: 8, cellPadding: 3, textColor: [17, 24, 39] },
+            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7.5 },
+            columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } },
+        });
+        doc.save(`loss-daily-${from}_${to}.pdf`);
+    }
+    async function emailReport() {
+        setEmailing(true); setEmailMsg(null);
+        try { const r = await lossApi.emailReport(from, to); setEmailMsg(`Emailed to ${r.sentTo} admin(s).`); }
+        catch (e) { setEmailMsg(e instanceof Error ? e.message : "Email failed"); }
+        finally { setEmailing(false); }
+    }
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <CardTitle className="text-sm flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> Daily Report</CardTitle>
+                    <div className="flex items-center gap-2">
+                        {emailMsg && <span className="text-[11px] text-emerald-600">{emailMsg}</span>}
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={emailReport} disabled={emailing}>
+                            {emailing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />} Email admins
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportPdf}><FileDown className="w-3.5 h-3.5" /> PDF</Button>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="px-2 sm:px-4">
+                <SimpleTable head={["Date", "Net Compl.", "Discounts", "Combined", "Compl.", "Disc.", "High-risk", "Top reason", "Top staff"]}
+                    rows={data.daily.map(d => [d.date, money(d.netComplaint), money(d.discountTotal), money(d.combined), d.complaintCount, d.discountCount, d.highRisk, d.topReason, d.topStaff])} />
+            </CardContent>
+        </Card>
+    );
+}
+
+// Editable reason map
+function ReasonMapDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const [rows, setRows] = useState<LossReasonRule[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState<string | null>(null);
+
+    useEffect(() => { lossApi.reasonMap().then(setRows).catch(() => setRows([])).finally(() => setLoading(false)); }, []);
+
+    async function save() {
+        setSaving(true);
+        try {
+            const clean = rows.filter(r => r.keyword.trim() && r.category.trim());
+            const r = await lossApi.saveReasonMap(clean);
+            setMsg(`Saved ${r.rules} rules · re-classified ${r.reclassified} complaints`);
+            setTimeout(onSaved, 700);
+        } finally { setSaving(false); }
+    }
+
+    return (
+        <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-lg max-h-[88dvh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-primary" /> Reason Categories</DialogTitle>
+                    <DialogDescription>Map raw reason text (keyword, case-insensitive) → category. Saving re-classifies all existing complaints.</DialogDescription>
+                </DialogHeader>
+                {loading ? <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div> : (
+                    <div className="flex-1 overflow-y-auto space-y-1.5 py-1">
+                        {rows.map((r, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                                <Input value={r.keyword} placeholder="keyword (e.g. run out)" className="h-8 flex-1"
+                                    onChange={e => setRows(a => a.map((x, j) => j === i ? { ...x, keyword: e.target.value } : x))} />
+                                <span className="text-muted-foreground text-xs">→</span>
+                                <Input value={r.category} placeholder="Out of Stock" className="h-8 flex-1"
+                                    onChange={e => setRows(a => a.map((x, j) => j === i ? { ...x, category: e.target.value } : x))} />
+                                <button onClick={() => setRows(a => a.filter((_, j) => j !== i))} className="text-muted-foreground/50 hover:text-destructive shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                        ))}
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setRows(a => [...a, { keyword: "", category: "" }])}>
+                            <Plus className="w-3.5 h-3.5" /> Add rule
+                        </Button>
+                    </div>
+                )}
+                <DialogFooter className="flex-row justify-between gap-2">
+                    {msg ? <span className="text-xs text-emerald-600 self-center">{msg}</span> : <span />}
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+                        <Button size="sm" onClick={save} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save &amp; re-classify</Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

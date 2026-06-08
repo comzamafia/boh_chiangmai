@@ -124,6 +124,46 @@ export async function GET(req: NextRequest) {
 
     const bulkCount = discounts.filter(d => d.isBulkDiscount).length;
 
+    // ── View 4: Complaint ↔ Discount correlation (same order, same night) ──
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const discByOrder = new Map<string, any[]>();
+    for (const d of discounts) (discByOrder.get(d.displayId) ?? discByOrder.set(d.displayId, []).get(d.displayId)!).push(d);
+    const corr = new Map<string, {
+        orderId: string; date: string; table: string; zone: string;
+        reasons: Set<string>; complaintNet: number; users: Set<string>;
+        discountTypes: Set<string>; discountAmt: number; auths: Set<string>;
+    }>();
+    for (const c of comp) {
+        const ds = discByOrder.get(c.orderId);
+        if (!ds) continue;
+        const a = corr.get(c.orderId) ?? {
+            orderId: c.orderId, date: day(new Date(c.businessDate)), table: c.tableNumber, zone: c.zone,
+            reasons: new Set<string>(), complaintNet: 0, users: new Set<string>(),
+            discountTypes: new Set<string>(), discountAmt: 0, auths: new Set<string>(),
+        };
+        a.reasons.add(c.reasonCategory); a.complaintNet += num(c.netAmount); a.users.add(c.userName);
+        if (!corr.has(c.orderId)) { for (const d of ds) { a.discountTypes.add(d.discountName); a.discountAmt += num(d.discountAmount); a.auths.add(d.authorizedBy); } }
+        corr.set(c.orderId, a);
+    }
+    const correlation = [...corr.values()].map(a => ({
+        orderId: a.orderId, date: a.date, table: a.table, zone: a.zone,
+        reasons: [...a.reasons].join(", "), complaintAmount: r2(a.complaintNet),
+        discountTypes: [...a.discountTypes].join(", "), discountAmount: r2(a.discountAmt),
+        sameStaff: [...a.users].some(u => a.auths.has(u)),
+    })).sort((x, y) => (y.complaintAmount + y.discountAmount) - (x.complaintAmount + x.discountAmount));
+
+    // ── View 5: per-day summary ──
+    const dayMap = new Map<string, { net: number; disc: number; cCount: number; dCount: number; risk: number; reasons: Map<string, number>; staff: Map<string, number> }>();
+    const dget = (k: string) => dayMap.get(k) ?? dayMap.set(k, { net: 0, disc: 0, cCount: 0, dCount: 0, risk: 0, reasons: new Map(), staff: new Map() }).get(k)!;
+    for (const c of comp) { const a = dget(day(new Date(c.businessDate))); a.net += num(c.netAmount); a.cCount++; a.reasons.set(c.reasonCategory, (a.reasons.get(c.reasonCategory) ?? 0) + num(c.netAmount)); a.staff.set(c.userName, (a.staff.get(c.userName) ?? 0) + num(c.netAmount)); }
+    for (const d of discounts) { const a = dget(day(new Date(d.businessDate))); a.disc += num(d.discountAmount); a.dCount++; if (d.riskLevel === "HIGH") a.risk++; }
+    const top = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+    const daily = [...dayMap.entries()].map(([date, a]) => ({
+        date, netComplaint: r2(a.net), discountTotal: r2(a.disc), combined: r2(a.net + a.disc),
+        complaintCount: a.cCount, discountCount: a.dCount, highRisk: a.risk,
+        topReason: top(a.reasons), topStaff: top(a.staff),
+    })).sort((x, y) => y.date.localeCompare(x.date));
+
     // ── period alignment ──
     const compDates = new Set(comp.map(c => day(new Date(c.businessDate))));
     const discDates = new Set(discounts.map(d => day(new Date(d.businessDate))));
@@ -139,6 +179,7 @@ export async function GET(req: NextRequest) {
         },
         byReason, topItems, byStaff, byDevice, byZone, undoPairs, orphanUndos,
         discountByCategory, discountByName, staffAuth, hourly, highRisk, promotions: promoList,
+        correlation, daily,
         periodAlignment: {
             complaintDays: compDates.size, discountDays: discDates.size,
             discMissingForComplaintDays, hasDiscountData: discounts.length > 0, hasComplaintData: comp.length > 0,

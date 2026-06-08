@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { detectFileType, parseLossManagement, parseDiscounts } from "@/lib/loss-parser";
+import { detectFileType, parseLossManagement, parseDiscounts, normalizeWithMap } from "@/lib/loss-parser";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
     if (type === "loss") {
         const { rows, errors, date } = parseLossManagement(content);
         if (!date) return NextResponse.json({ error: "No valid complaint rows found." }, { status: 400 });
+        // Apply the admin-editable reason map (override the code defaults) if any exist
+        const reasonMap = await db.lossReasonMap.findMany({ orderBy: { sortOrder: "asc" } });
+        if (reasonMap.length > 0) for (const r of rows) r.reasonCategory = normalizeWithMap(r.reasonRaw, reasonMap);
         const dates = [...new Set(rows.map(r => r.businessDate))];
         for (const d of dates) {
             await db.lossComplaint.deleteMany({ where: { businessDate: asDate(d) } });

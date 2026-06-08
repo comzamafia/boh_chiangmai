@@ -48,6 +48,19 @@ function normalizeReason(raw: string): string {
     for (const m of REASON_MAP) if (m.match.some(k => r.includes(k))) return m.category;
     return "Uncategorized";
 }
+
+/** Normalise using a custom keyword→category list (DB-editable), falling back to defaults. */
+export function normalizeWithMap(raw: string, map: { keyword: string; category: string }[]): string {
+    const r = raw.toLowerCase().trim();
+    if (!r) return "Unspecified";
+    for (const m of map) { const k = m.keyword.toLowerCase().trim(); if (k && r.includes(k)) return m.category; }
+    return normalizeReason(raw);
+}
+
+/** Default map flattened to keyword rows (used to seed the editable table). */
+export function defaultReasonRows(): { keyword: string; category: string }[] {
+    return REASON_MAP.flatMap(m => m.match.map(keyword => ({ keyword, category: m.category })));
+}
 function zoneOf(table: string): string {
     const t = table.trim().toUpperCase();
     if (t === "104") return "VIP";

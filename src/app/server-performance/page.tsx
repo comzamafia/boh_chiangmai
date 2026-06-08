@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { serverPerfApi, type ServerPerfResult } from "@/lib/api";
+import { serverPerfApi, type ServerPerfResult, type ServerPerfRow } from "@/lib/api";
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -88,8 +88,6 @@ export default function ServerPerformancePage() {
         doc.save(`server-performance-${from}_${to}.pdf`);
     }
 
-    const medal = (i: number) => i === 0 ? <Crown className="w-4 h-4 text-amber-500" /> : i === 1 ? <Medal className="w-4 h-4 text-slate-400" /> : i === 2 ? <Award className="w-4 h-4 text-amber-700" /> : <span className="text-muted-foreground text-xs w-4 inline-block text-center">{i + 1}</span>;
-
     return (
         <div className="space-y-5 max-w-6xl mx-auto pb-12">
             {/* Header */}
@@ -143,47 +141,8 @@ export default function ServerPerformancePage() {
                         <Kpi label="Drink mix" value={`${data.team.avgDrinkPct}%`} icon={Wine} tone="violet" sub="beverage + liquor" />
                     </div>
 
-                    {/* Leaderboard */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm flex items-center gap-2"><Trophy className="w-4 h-4 text-amber-500" /> Performance Leaderboard</CardTitle>
-                            <p className="text-[10px] text-muted-foreground">Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8% (normalised across servers)</p>
-                        </CardHeader>
-                        <CardContent className="px-2 sm:px-4">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-xs" style={{ minWidth: 760 }}>
-                                    <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                        <th className="text-left py-2 pl-1 sticky left-0 bg-card">#</th>
-                                        <th className="text-left py-2 px-2 sticky left-8 bg-card">Server</th>
-                                        <th className="text-right py-2 px-2">Score</th>
-                                        <th className="text-right py-2 px-2">Net Sales</th>
-                                        <th className="text-right py-2 px-2">Sales/hr</th>
-                                        <th className="text-right py-2 px-2">Guests</th>
-                                        <th className="text-right py-2 px-2">Avg/Guest</th>
-                                        <th className="text-right py-2 px-2">Drink %</th>
-                                        <th className="text-right py-2 px-2">Dessert/100</th>
-                                        <th className="text-right py-2 px-2">Disc %</th>
-                                    </tr></thead>
-                                    <tbody className="divide-y divide-border/40">
-                                        {ranked.map((s, i) => (
-                                            <tr key={s.name} className={`hover:bg-muted/20 ${i === 0 ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
-                                                <td className="py-1.5 pl-1 sticky left-0 bg-card">{medal(i)}</td>
-                                                <td className="py-1.5 px-2 font-semibold sticky left-8 bg-card max-w-[140px] truncate">{s.name}</td>
-                                                <td className="py-1.5 px-2 text-right"><span className="font-bold text-primary tabular-nums">{s.score.toFixed(1)}</span></td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{money(s.netSales)}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{money(s.salesPerHour)}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{s.guests}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{money(s.avgPerGuest)}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{s.drinkPct}%</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{s.dessertPer100.toFixed(0)}</td>
-                                                <td className="py-1.5 px-2 text-right tabular-nums">{s.discountPct}%</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    {/* Leaderboard (sortable + per-column filters) */}
+                    <Leaderboard rows={ranked} />
 
                     {/* Charts */}
                     <div className="grid gap-4 lg:grid-cols-2">
@@ -310,6 +269,112 @@ function Upsell({ data }: { data: ServerPerfResult }) {
             </div>
         </div>
     );
+}
+
+// ── Sortable + per-column-filterable leaderboard ────────────────────────────
+type LbCol = { key: string; label: string; kind: "text" | "num"; get: (s: ServerPerfRow) => string | number; render: (s: ServerPerfRow) => React.ReactNode };
+const LB_COLS: LbCol[] = [
+    { key: "name",          label: "Server",      kind: "text", get: s => s.name,          render: s => <span className="font-semibold">{s.name}</span> },
+    { key: "score",         label: "Score",       kind: "num",  get: s => s.score,         render: s => <span className="font-bold text-primary tabular-nums">{s.score.toFixed(1)}</span> },
+    { key: "netSales",      label: "Net Sales",   kind: "num",  get: s => s.netSales,      render: s => money(s.netSales) },
+    { key: "salesPerHour",  label: "Sales/hr",    kind: "num",  get: s => s.salesPerHour,  render: s => money(s.salesPerHour) },
+    { key: "guests",        label: "Guests",      kind: "num",  get: s => s.guests,        render: s => s.guests },
+    { key: "avgPerGuest",   label: "Avg/Guest",   kind: "num",  get: s => s.avgPerGuest,   render: s => money(s.avgPerGuest) },
+    { key: "drinkPct",      label: "Drink %",     kind: "num",  get: s => s.drinkPct,      render: s => `${s.drinkPct}%` },
+    { key: "dessertPer100", label: "Dessert/100", kind: "num",  get: s => s.dessertPer100, render: s => s.dessertPer100.toFixed(0) },
+    { key: "discountPct",   label: "Disc %",      kind: "num",  get: s => s.discountPct,   render: s => `${s.discountPct}%` },
+];
+
+function numMatch(value: number, expr: string): boolean {
+    const e = expr.trim();
+    if (!e) return true;
+    const m = e.match(/^(-?\d*\.?\d*)\s*-\s*(-?\d*\.?\d*)$/);
+    if (m && (m[1] !== "" || m[2] !== "")) {
+        const lo = m[1] === "" ? -Infinity : parseFloat(m[1]);
+        const hi = m[2] === "" ? Infinity : parseFloat(m[2]);
+        return value >= lo && value <= hi;
+    }
+    const n = parseFloat(e);
+    return isNaN(n) ? true : value >= n;
+}
+
+function Leaderboard({ rows }: { rows: ServerPerfRow[] }) {
+    const [sortKey, setSortKey] = useState("score");
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [filters, setFilters] = useState<Record<string, string>>({});
+
+    const toggleSort = (key: string) => {
+        if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+        else { setSortKey(key); setSortDir(key === "name" ? "asc" : "desc"); }
+    };
+
+    const filtered = rows.filter(s => LB_COLS.every(c => {
+        const f = filters[c.key]; if (!f) return true;
+        return c.kind === "text" ? String(c.get(s)).toLowerCase().includes(f.toLowerCase()) : numMatch(Number(c.get(s)), f);
+    }));
+    const col = LB_COLS.find(c => c.key === sortKey)!;
+    const sorted = [...filtered].sort((a, b) => {
+        const av = col.get(a), bv = col.get(b);
+        const cmp = col.kind === "text" ? String(av).localeCompare(String(bv)) : Number(av) - Number(bv);
+        return sortDir === "asc" ? cmp : -cmp;
+    });
+    const isScoreSort = sortKey === "score" && sortDir === "desc";
+    const activeFilters = Object.values(filters).filter(Boolean).length;
+    const medal = (i: number) => i === 0 ? <Crown className="w-4 h-4 text-amber-500" /> : i === 1 ? <Medal className="w-4 h-4 text-slate-400" /> : <Award className="w-4 h-4 text-amber-700" />;
+
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <CardTitle className="text-sm flex items-center gap-2"><Trophy className="w-4 h-4 text-amber-500" /> Performance Leaderboard <span className="text-[10px] font-normal text-muted-foreground">({sorted.length}/{rows.length})</span></CardTitle>
+                    {activeFilters > 0 && <button onClick={() => setFilters({})} className="text-[11px] text-muted-foreground hover:text-foreground underline">Clear filters ({activeFilters})</button>}
+                </div>
+                <p className="text-[10px] text-muted-foreground">Score = Sales/hr 35% · Avg/Guest 25% · Drink% 20% · Dessert attach 12% · Discount discipline 8%. Click a header to sort; type in a filter box (numbers accept “≥n” or a range “a-b”).</p>
+            </CardHeader>
+            <CardContent className="px-2 sm:px-4">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs" style={{ minWidth: 820 }}>
+                        <thead>
+                            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                <th className="text-left py-2 pl-1 w-8">#</th>
+                                {LB_COLS.map(c => (
+                                    <th key={c.key} onClick={() => toggleSort(c.key)}
+                                        className={`py-2 px-2 cursor-pointer select-none hover:text-foreground ${c.kind === "text" ? "text-left" : "text-right"}`}>
+                                        <span className="inline-flex items-center gap-0.5">{c.kind === "num" && <SortCaret active={sortKey === c.key} dir={sortDir} />}{c.label}{c.kind === "text" && <SortCaret active={sortKey === c.key} dir={sortDir} />}</span>
+                                    </th>
+                                ))}
+                            </tr>
+                            <tr className="border-b border-border">
+                                <th className="pl-1" />
+                                {LB_COLS.map(c => (
+                                    <th key={c.key} className="px-1 pb-1.5">
+                                        <Input value={filters[c.key] ?? ""} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))}
+                                            placeholder={c.kind === "text" ? "search…" : "≥ / a-b"}
+                                            className={`h-6 text-[11px] px-1.5 ${c.kind === "text" ? "" : "text-right"}`} />
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                            {sorted.map((s, i) => (
+                                <tr key={s.name} className={`hover:bg-muted/20 ${isScoreSort && i === 0 ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                                    <td className="py-1.5 pl-1">{isScoreSort && i < 3 ? medal(i) : <span className="text-muted-foreground text-xs">{i + 1}</span>}</td>
+                                    {LB_COLS.map(c => (
+                                        <td key={c.key} className={`py-1.5 px-2 tabular-nums ${c.kind === "text" ? "text-left max-w-[150px] truncate" : "text-right"}`}>{c.render(s)}</td>
+                                    ))}
+                                </tr>
+                            ))}
+                            {sorted.length === 0 && <tr><td colSpan={LB_COLS.length + 1} className="py-8 text-center text-muted-foreground italic">No servers match the filters</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SortCaret({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
+    return <ChevronDown className={`w-3 h-3 transition-transform ${active ? "text-foreground" : "text-muted-foreground/30"} ${active && dir === "asc" ? "rotate-180" : ""}`} />;
 }
 
 function Kpi({ label, value, sub, icon: Icon, tone }: { label: string; value: string; sub?: string; icon: React.ElementType; tone?: "emerald" | "violet" }) {

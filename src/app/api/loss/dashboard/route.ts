@@ -165,6 +165,15 @@ export async function GET(req: NextRequest) {
         topReason: top(a.reasons), topStaff: top(a.staff),
     })).sort((x, y) => y.date.localeCompare(x.date));
 
+    // ── Void log (every Complaint + Undo event with its reason) ──
+    const voids = [...complaints]
+        .sort((a, b) => new Date(b.businessDate).getTime() - new Date(a.businessDate).getTime() || num(b.grossAmount) - num(a.grossAmount))
+        .map(c => ({
+            date: day(new Date(c.businessDate)), table: c.tableNumber, zone: c.zone, orderId: c.orderId,
+            item: c.itemDetail, action: c.actionType, gross: r2(num(c.grossAmount)), net: r2(num(c.netAmount)),
+            reason: c.reasonRaw, reasonCategory: c.reasonCategory, staff: c.userName, device: c.device, reconciled: c.isUndoReconciled,
+        }));
+
     // ── period alignment ──
     const compDates = new Set(comp.map(c => day(new Date(c.businessDate))));
     const discDates = new Set(discounts.map(d => day(new Date(d.businessDate))));
@@ -180,7 +189,7 @@ export async function GET(req: NextRequest) {
         },
         byReason, topItems, byStaff, byDevice, byZone, undoPairs, orphanUndos,
         discountByCategory, discountByName, staffAuth, hourly, highRisk, promotions: promoList,
-        correlation, daily,
+        correlation, daily, voids,
         coverage: uploads.map(u => ({
             date: day(new Date(u.businessDate)), hasComplaints: u.hasComplaints, hasDiscounts: u.hasDiscounts,
             complaintCount: u.complaintCount, discountCount: u.discountCount, uploadedAt: u.uploadedAt,

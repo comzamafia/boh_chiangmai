@@ -572,6 +572,7 @@ export interface LossDashboard {
     hourly: number[];
     highRisk: { time: string | null; displayId: string; name: string; amount: number; authorizedBy: string; reason: string }[];
     promotions: { name: string; count: number; amount: number }[];
+    voids: { date: string; table: string; zone: string; orderId: string; item: string; action: string; gross: number; net: number; reason: string; reasonCategory: string; staff: string; device: string; reconciled: boolean }[];
     correlation: { orderId: string; date: string; table: string; zone: string; reasons: string; complaintAmount: number; discountTypes: string; discountAmount: number; sameStaff: boolean }[];
     daily: { date: string; netComplaint: number; discountTotal: number; combined: number; complaintCount: number; discountCount: number; highRisk: number; topReason: string; topStaff: string }[];
     periodAlignment: { complaintDays: number; discountDays: number; discMissingForComplaintDays: string[]; hasDiscountData: boolean; hasComplaintData: boolean };

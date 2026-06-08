@@ -26,7 +26,7 @@ import { lossApi, type LossDashboard, type LossReasonRule } from "@/lib/api";
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const today = () => new Date().toISOString().slice(0, 10);
-type Tab = "overview" | "complaints" | "discounts" | "correlation" | "daily";
+type Tab = "overview" | "voids" | "complaints" | "discounts" | "correlation" | "daily";
 
 export default function LossManagementPage() {
     const { user } = useAuth();
@@ -141,13 +141,14 @@ export default function LossManagementPage() {
 
                     {/* Tabs */}
                     <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-                        {([["overview", "Overview"], ["complaints", "Complaints"], ["discounts", "Discounts"], ["correlation", "Correlation"], ["daily", "Daily Report"]] as [Tab, string][]).map(([k, l]) => (
+                        {([["overview", "Overview"], ["voids", "Voids"], ["complaints", "Complaints"], ["discounts", "Discounts"], ["correlation", "Correlation"], ["daily", "Daily Report"]] as [Tab, string][]).map(([k, l]) => (
                             <button key={k} onClick={() => setTab(k)}
                                 className={`px-3.5 py-2 rounded-xl text-sm font-medium border whitespace-nowrap shrink-0 ${tab === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"}`}>{l}</button>
                         ))}
                     </div>
 
                     {tab === "overview"    && <Overview data={data} onChanged={load} />}
+                    {tab === "voids"       && <Voids data={data} />}
                     {tab === "complaints"  && <Complaints data={data} />}
                     {tab === "discounts"   && <Discounts data={data} />}
                     {tab === "correlation" && <Correlation data={data} />}
@@ -307,6 +308,93 @@ function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
                     {rows.length === 0 && <tr><td colSpan={head.length} className="py-8 text-center text-muted-foreground italic">No data</td></tr>}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+// ── Voids view — every Complaint + Undo with its reason ──────────────────────
+function Voids({ data }: { data: LossDashboard }) {
+    const [q, setQ] = useState("");
+    const [actionFilter, setActionFilter] = useState<"all" | "Complaint" | "Undo">("all");
+    const k = data.kpis;
+    const maxReason = Math.max(1, ...data.byReason.map(r => r.net));
+
+    const rows = data.voids.filter(v =>
+        (actionFilter === "all" || v.action === actionFilter) &&
+        (!q || `${v.item} ${v.reason} ${v.staff} ${v.orderId} ${v.table}`.toLowerCase().includes(q.toLowerCase()))
+    );
+
+    return (
+        <div className="space-y-4">
+            {/* KPI strip */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Kpi label="Void events" value={String(k.complaintCount + k.undoCount)} icon={Undo2} sub={`${k.complaintCount} complaints · ${k.undoCount} undo`} />
+                <Kpi label="Gross void $" value={money(k.grossComplaintTotal)} icon={TrendingDown} tone="rose" />
+                <Kpi label="Reversed (Undo) $" value={money(k.undoTotal)} icon={Undo2} sub="returned via undo" />
+                <Kpi label="Net void $" value={money(k.netComplaintTotal)} icon={TrendingDown} tone="rose" sub="after reconciliation" />
+            </div>
+
+            {/* Reasons — prominent */}
+            <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Flag className="w-4 h-4 text-rose-500" /> Void Reasons</CardTitle></CardHeader>
+                <CardContent className="px-2 sm:px-4 space-y-1.5">
+                    {data.byReason.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">No voids in range</p> : data.byReason.map(r => (
+                        <div key={r.category} className="flex items-center gap-2 text-xs">
+                            <span className="w-40 shrink-0 truncate font-medium">{r.category}</span>
+                            <div className="flex-1 h-3 rounded-full bg-muted/50 overflow-hidden min-w-[40px]">
+                                <div className="h-full rounded-full bg-rose-500/70" style={{ width: `${Math.max(3, (r.net / maxReason) * 100)}%` }} />
+                            </div>
+                            <span className="w-10 text-right text-muted-foreground tabular-nums">{r.count}×</span>
+                            <span className="w-16 text-right font-semibold tabular-nums">{money(r.net)}</span>
+                        </div>
+                    ))}
+                </CardContent>
+            </Card>
+
+            {/* Void log */}
+            <Card>
+                <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <CardTitle className="text-sm">Void Log ({rows.length})</CardTitle>
+                        <div className="flex items-center gap-2">
+                            <div className="flex rounded-lg border border-border overflow-hidden text-[11px]">
+                                {(["all", "Complaint", "Undo"] as const).map(a => (
+                                    <button key={a} onClick={() => setActionFilter(a)} className={`px-2 py-1 ${actionFilter === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{a === "all" ? "All" : a}</button>
+                                ))}
+                            </div>
+                            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search item / reason / staff…" className="h-8 w-44 text-xs" />
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="px-2 sm:px-4">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs" style={{ minWidth: 760 }}>
+                            <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                <th className="text-left py-2 pl-2">Date</th><th className="text-left py-2 px-2">Table</th><th className="text-left py-2 px-2">Order</th>
+                                <th className="text-left py-2 px-2">Item</th><th className="text-center py-2 px-2">Action</th><th className="text-right py-2 px-2">Amount</th>
+                                <th className="text-left py-2 px-2">Reason</th><th className="text-left py-2 px-2">Staff</th>
+                            </tr></thead>
+                            <tbody className="divide-y divide-border/40">
+                                {rows.map((v, i) => (
+                                    <tr key={i} className="hover:bg-muted/20">
+                                        <td className="py-1.5 pl-2 whitespace-nowrap text-muted-foreground">{v.date}</td>
+                                        <td className="py-1.5 px-2 whitespace-nowrap">{v.table} <span className="text-muted-foreground/60 text-[10px]">{v.zone}</span></td>
+                                        <td className="py-1.5 px-2 tabular-nums text-muted-foreground">{v.orderId}</td>
+                                        <td className="py-1.5 px-2 max-w-[200px] truncate" title={v.item}>{v.item}</td>
+                                        <td className="py-1.5 px-2 text-center">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${v.action === "Undo" ? "bg-slate-500/15 text-slate-600 dark:text-slate-300" : "bg-rose-500/15 text-rose-600 dark:text-rose-400"}`}>{v.action}</span>
+                                        </td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{money(v.gross)}</td>
+                                        <td className="py-1.5 px-2 max-w-[160px] truncate" title={v.reason}>{v.reason || <span className="text-muted-foreground/40">—</span>} {v.reasonCategory === "Uncategorized" && v.reason && <span title="Uncategorised">⚠️</span>}</td>
+                                        <td className="py-1.5 px-2 whitespace-nowrap">{v.staff}</td>
+                                    </tr>
+                                ))}
+                                {rows.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground italic">No matching voids</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }

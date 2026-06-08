@@ -316,11 +316,14 @@ function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
 function Voids({ data }: { data: LossDashboard }) {
     const [q, setQ] = useState("");
     const [actionFilter, setActionFilter] = useState<"all" | "Complaint" | "Undo">("all");
+    const [staff, setStaff] = useState("all");
     const k = data.kpis;
     const maxReason = Math.max(1, ...data.byReason.map(r => r.net));
+    const staffOptions = [...new Set(data.voids.map(v => v.staff).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
     const rows = data.voids.filter(v =>
         (actionFilter === "all" || v.action === actionFilter) &&
+        (staff === "all" || v.staff === staff) &&
         (!q || `${v.item} ${v.reason} ${v.staff} ${v.orderId} ${v.table}`.toLowerCase().includes(q.toLowerCase()))
     );
 
@@ -362,7 +365,12 @@ function Voids({ data }: { data: LossDashboard }) {
                                     <button key={a} onClick={() => setActionFilter(a)} className={`px-2 py-1 ${actionFilter === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{a === "all" ? "All" : a}</button>
                                 ))}
                             </div>
-                            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search item / reason / staff…" className="h-8 w-44 text-xs" />
+                            <select value={staff} onChange={e => setStaff(e.target.value)} title="Filter by staff member"
+                                className={`h-8 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 ${staff !== "all" ? "border-primary/60" : "border-border"}`}>
+                                <option value="all">All staff</option>
+                                {staffOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search item / reason…" className="h-8 w-40 text-xs" />
                         </div>
                     </div>
                 </CardHeader>

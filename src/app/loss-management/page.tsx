@@ -281,7 +281,7 @@ function Discounts({ data }: { data: LossDashboard }) {
                 <CardContent>
                     <ResponsiveContainer width="100%" height={180}>
                         <BarChart data={hourly}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
                             <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} width={45} />
                             <Tooltip formatter={(v) => money(Number(v ?? 0))} labelFormatter={h => `${h}:00`} contentStyle={{ borderRadius: 12, fontSize: 12 }} />

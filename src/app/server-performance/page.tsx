@@ -191,10 +191,10 @@ export default function ServerPerformancePage() {
                         <ChartCard title="Category Mix (% of net sales)">
                             <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 40)}>
                                 <BarChart layout="vertical" data={ranked.map(s => ({ name: s.name, Food: s.foodPct, Beverage: s.beveragePct, Liquor: s.alcoholPct, Dessert: s.dessertPct }))} stackOffset="expand" margin={{ left: 4, right: 12, top: 6, bottom: 6 }} barCategoryGap="22%">
-                                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                                    <XAxis type="number" tickFormatter={v => `${Math.round(v * 100)}%`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+                                    <XAxis type="number" tickFormatter={v => `${Math.round(v * 100)}%`} tick={{ fontSize: 11, fill: "currentColor", opacity: 0.65 }} tickLine={false} axisLine={false} />
                                     <YAxis type="category" dataKey="name" width={118} tick={AXIS} tickLine={false} axisLine={false} interval={0} />
-                                    <Tooltip cursor={{ fill: "hsl(var(--muted))", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} />
+                                    <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.35 }} formatter={(v) => `${Number(v ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP} itemStyle={TIP_ITEM} labelStyle={TIP_ITEM} />
                                     <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600, paddingTop: 6 }} iconType="circle" />
                                     {([["Food", "#f59e0b"], ["Beverage", "#0ea5e9"], ["Liquor", "#8b5cf6"], ["Dessert", "#ec4899"]] as const).map(([k, c], idx, arr) => (
                                         <Bar key={k} dataKey={k} stackId="a" fill={c} barSize={24} radius={idx === arr.length - 1 ? [0, 6, 6, 0] : idx === 0 ? [6, 0, 0, 6] : 0} isAnimationActive={false}>
@@ -233,21 +233,24 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
     );
 }
 
-const AXIS = { fontSize: 12, fontWeight: 600, fill: "hsl(var(--foreground))" } as const;
-const TOOLTIP = { borderRadius: 12, fontSize: 12, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--foreground))", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } as const;
+// `currentColor` resolves to the inherited text color (foreground) and adapts to
+// dark/light — CSS variables do NOT work inside SVG presentation attributes.
+const AXIS = { fontSize: 12, fontWeight: 600, fill: "currentColor" } as const;
+const TOOLTIP = { borderRadius: 12, fontSize: 12, border: "1px solid var(--border)", background: "var(--popover)", color: "var(--popover-foreground)", boxShadow: "0 4px 16px rgba(0,0,0,0.18)" } as const;
+const TIP_ITEM = { color: "var(--popover-foreground)" } as const;
 
 function SimpleBar({ data, color, fmt }: { data: { name: string; value: number }[]; color: string; fmt?: (v: number) => string }) {
     const label = (v: number) => fmt ? fmt(v) : (Math.round(v * 10) / 10).toString();
     return (
         <ResponsiveContainer width="100%" height={Math.max(200, data.length * 40)}>
             <BarChart layout="vertical" data={data} margin={{ left: 4, right: 64, top: 6, bottom: 6 }} barCategoryGap="22%">
-                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" width={118} tickLine={false} axisLine={false} tick={AXIS} interval={0} />
-                <Tooltip cursor={{ fill: "hsl(var(--muted))", opacity: 0.35 }} formatter={(v) => [label(Number(v ?? 0)), ""]} contentStyle={TOOLTIP} />
+                <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.35 }} formatter={(v) => [label(Number(v ?? 0)), ""]} contentStyle={TOOLTIP} itemStyle={TIP_ITEM} labelStyle={TIP_ITEM} />
                 <Bar dataKey="value" radius={[0, 7, 7, 0]} barSize={22} isAnimationActive={false}>
                     {data.map((_, i) => <Cell key={i} fill={i === 0 ? "#f59e0b" : color} />)}
-                    <LabelList dataKey="value" position="right" formatter={(v) => label(Number(v ?? 0))} style={{ fontSize: 12, fontWeight: 700, fill: "hsl(var(--foreground))" }} />
+                    <LabelList dataKey="value" position="right" formatter={(v) => label(Number(v ?? 0))} style={{ fontSize: 12, fontWeight: 700, fill: "currentColor" }} />
                 </Bar>
             </BarChart>
         </ResponsiveContainer>

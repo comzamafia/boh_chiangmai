@@ -348,9 +348,10 @@ function Leaderboard({ rows }: { rows: ServerPerfRow[] }) {
                                 <th className="pl-1" />
                                 {LB_COLS.map(c => (
                                     <th key={c.key} className="px-1 pb-1.5">
-                                        <Input value={filters[c.key] ?? ""} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))}
-                                            placeholder={c.kind === "text" ? "search…" : "≥ / a-b"}
-                                            className={`h-6 text-[11px] px-1.5 ${c.kind === "text" ? "" : "text-right"}`} />
+                                        {c.kind === "num" && (
+                                            <Input value={filters[c.key] ?? ""} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))}
+                                                placeholder="≥ / a-b" className="h-6 text-[11px] px-1.5 text-right" />
+                                        )}
                                     </th>
                                 ))}
                             </tr>

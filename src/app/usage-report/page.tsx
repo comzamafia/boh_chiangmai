@@ -4,7 +4,7 @@
  * Dessert, Beverage), shown per weekday and convertible into any unit of the
  * ingredient's unit chain (Order / oz / piece / box / case…), like Stock Count.
  */
-import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +63,6 @@ export default function UsageReportPage() {
     const [data, setData]       = useState<UsageReportResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [tab, setTab]         = useState<Tab>("protein");
-    const [units, setUnits]     = useState<Record<string, string>>({});   // label → display unit
     const [editChain, setEditChain] = useState<UsageReportItem | null>(null);
 
     const load = useCallback(async () => {
@@ -83,17 +82,15 @@ export default function UsageReportPage() {
             title,
             rows: items.map(item => {
                 const conv = converterFor(item);
-                const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
                 const multiLine = (orders: number) => conv.units
                     .map(u => { const v = conv.convert(orders, u); return v == null ? null : `${fmtChainQty(v)} ${u}`; })
                     .filter(Boolean).join("\n");
-                const totalU = conv.convert(item.total, unit) ?? 0;
                 return {
                     label: item.label,
                     dayCells: item.byDow.map(q => q > 0 ? multiLine(q) : ""),
                     dayOrders: item.byDow.map(q => q > 0 ? q : null),
                     total: multiLine(item.total),
-                    avg: `${fmtChainQty(totalU / totalDays)} ${unit}`,
+                    avg: multiLine(item.total / totalDays),
                 };
             }),
         });
@@ -183,7 +180,7 @@ export default function UsageReportPage() {
                 <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports first.</CardContent></Card>
             ) : (
                 <div ref={captureRef} className="space-y-5 bg-background">
-                    <UsageTable rows={rows} dowCounts={data.dowCounts} units={units} setUnits={setUnits}
+                    <UsageTable rows={rows} dowCounts={data.dowCounts}
                         canManage={canManage} onEditChain={setEditChain} />
                     {tab === "dessert" && data.iceCream.length > 0 && (
                         <Card>
@@ -220,25 +217,37 @@ export default function UsageReportPage() {
     );
 }
 
-// ─── Usage table (per-item unit selector) ───────────────────────────────────
-function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }: {
+// ─── Usage table (all units stacked per cell, like the PDF) ─────────────────
+function MultiCell({ lines, muted }: { lines: { u: string; v: number }[]; muted?: boolean }) {
+    if (lines.length === 0) return <span className="text-muted-foreground/40 font-normal">·</span>;
+    return (
+        <div className="space-y-0.5">
+            {lines.map(l => (
+                <div key={l.u} className="whitespace-nowrap leading-tight">
+                    <span className={`tabular-nums font-bold ${muted ? "text-muted-foreground" : "text-foreground"}`}>{fmtChainQty(l.v)}</span>
+                    <span className="text-muted-foreground text-[10px] ml-1">{l.u}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
     rows: UsageReportItem[]; dowCounts: number[];
-    units: Record<string, string>; setUnits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
     canManage: boolean; onEditChain: (i: UsageReportItem) => void;
 }) {
-    const [expanded, setExpanded] = useState<Set<string>>(new Set());
-    const toggle = (label: string) => setExpanded(s => { const n = new Set(s); if (n.has(label)) n.delete(label); else n.add(label); return n; });
+    const totalDays = Math.max(1, dowCounts.reduce((s, x) => s + x, 0));
     if (rows.length === 0) return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No usage in this window.</CardContent></Card>;
     return (
         <Card>
             <CardContent className="px-2 sm:px-4 py-3">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-xs" style={{ minWidth: 560 }}>
+                    <table className="w-full text-xs" style={{ minWidth: 720 }}>
                         <thead>
                             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
                                 <th className="text-left py-2 pl-1 sticky left-0 bg-card">Item</th>
-                                <th className="text-left py-2 px-1">Unit</th>
                                 {DOW.map((d, i) => <th key={d} className="text-right py-2 px-2">{d}<span className="block text-[8px] opacity-60">×{dowCounts[i] || 0}</span></th>)}
+                                <th className="text-right py-2 px-2">Avg/d</th>
                                 <th className="text-right py-2 px-2">Total</th>
                                 <th className="w-8" />
                             </tr>
@@ -246,68 +255,38 @@ function UsageTable({ rows, dowCounts, units, setUnits, canManage, onEditChain }
                         <tbody>
                             {rows.map(item => {
                                 const conv = converterFor(item);
-                                const unit = conv.units.includes(units[item.label]) ? units[item.label] : conv.units[0];
-                                const cell = (orders: number) => { const v = conv.convert(orders, unit); return v == null ? "—" : fmtChainQty(v); };
-                                const isOpen = expanded.has(item.label);
-                                const multi = conv.units.length > 1;
+                                const linesOf = (orders: number) => conv.units
+                                    .map(u => { const v = conv.convert(orders, u); return v == null ? null : { u, v }; })
+                                    .filter((x): x is { u: string; v: number } => x != null);
                                 return (
-                                    <Fragment key={item.label}>
-                                        <tr className="border-t border-border/40 hover:bg-muted/20">
-                                            <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[160px]">
-                                                <button onClick={() => multi && toggle(item.label)} className={`flex items-center gap-1 text-left ${multi ? "hover:text-primary" : ""}`}>
-                                                    {multi && <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />}
-                                                    <span className="truncate">{item.label}</span>
-                                                    {!item.ingredientId && <Link2 className="inline w-3 h-3 ml-0.5 text-amber-500 shrink-0" />}
+                                    <tr key={item.label} className="border-t border-border/40 hover:bg-muted/20 align-top">
+                                        <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[160px]">
+                                            <div className="flex items-start gap-1">
+                                                <span className="truncate">{item.label}</span>
+                                                {!item.ingredientId && <Link2 className="inline w-3 h-3 mt-0.5 text-amber-500 shrink-0" />}
+                                            </div>
+                                        </td>
+                                        {item.byDow.map((q, i) => (
+                                            <td key={i} className="py-1.5 px-2 text-right">{q > 0 ? <MultiCell lines={linesOf(q)} /> : <span className="text-muted-foreground/40">·</span>}</td>
+                                        ))}
+                                        <td className="py-1.5 px-2 text-right bg-muted/20"><MultiCell lines={linesOf(item.total / totalDays)} muted /></td>
+                                        <td className="py-1.5 px-2 text-right"><MultiCell lines={linesOf(item.total)} /></td>
+                                        <td className="py-1.5 text-right pr-1">
+                                            {canManage && (
+                                                <button onClick={() => onEditChain(item)} title={item.ingredientId ? "Configure units" : "Link a portion standard first"}
+                                                    className="text-muted-foreground hover:text-primary disabled:opacity-30" disabled={!item.ingredientId}>
+                                                    <Settings2 className="w-3.5 h-3.5" />
                                                 </button>
-                                            </td>
-                                            <td className="py-1.5 px-1">
-                                                <select value={unit} onChange={e => setUnits(u => ({ ...u, [item.label]: e.target.value }))}
-                                                    className="h-7 rounded-md border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40">
-                                                    {conv.units.map(u => <option key={u} value={u}>{u}</option>)}
-                                                </select>
-                                            </td>
-                                            {item.byDow.map((q, i) => (
-                                                <td key={i} className="py-1.5 px-2 text-center tabular-nums font-bold text-foreground">
-                                                    {q > 0 ? cell(q) : <span className="text-muted-foreground/40 font-normal">·</span>}
-                                                </td>
-                                            ))}
-                                            <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{cell(item.total)}</td>
-                                            <td className="py-1.5 text-right pr-1">
-                                                {canManage && (
-                                                    <button onClick={() => onEditChain(item)} title={item.ingredientId ? "Configure units" : "Link a portion standard first"}
-                                                        className="text-muted-foreground hover:text-primary disabled:opacity-30" disabled={!item.ingredientId}>
-                                                        <Settings2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                        {isOpen && multi && (
-                                            <tr className="bg-muted/10">
-                                                <td colSpan={DOW.length + 4} className="px-3 py-2">
-                                                    <div className="flex flex-wrap gap-1.5 items-center">
-                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Total in every unit:</span>
-                                                        {conv.units.map(u => {
-                                                            const v = conv.convert(item.total, u);
-                                                            if (v == null) return null;
-                                                            return (
-                                                                <span key={u} className="inline-flex items-baseline gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
-                                                                    <span className="font-semibold tabular-nums">{fmtChainQty(v)}</span>
-                                                                    <span className="text-muted-foreground">{u}</span>
-                                                                </span>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </Fragment>
+                                            )}
+                                        </td>
+                                    </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-2">
-                    Pick a unit per item. <Link2 className="inline w-3 h-3 text-amber-500" /> = no Portion Standard linked yet (only Order count available).
+                    Every configured unit is shown stacked per cell (Avg/d = average per day). <Link2 className="inline w-3 h-3 text-amber-500" /> = no Portion Standard linked yet (only Order count available).
                     Configure multi-level units (1 Case = 4 Box…) with the <Settings2 className="inline w-3 h-3" /> button.
                 </p>
             </CardContent>

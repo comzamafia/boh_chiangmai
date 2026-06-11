@@ -7,8 +7,10 @@ const SECRET = new TextEncoder().encode(
     process.env.JWT_SECRET ?? "padthai-chaiyo-boh-secret-key-change-in-production"
 );
 
-// Routes that are always public (no auth required)
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+// Routes that are always public (no session required).
+// `/api/public/*` is API-key authenticated by its own route handler, so it
+// must bypass the session redirect (external systems have no auth cookie).
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/public"];
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;

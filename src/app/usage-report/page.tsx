@@ -1,8 +1,8 @@
 "use client";
 /**
- * /usage-report — Last-N-day PMIX usage in four reports (Protein, Curry,
- * Dessert, Beverage), shown per weekday and convertible into any unit of the
- * ingredient's unit chain (Order / oz / piece / box / case…), like Stock Count.
+ * /usage-report — Last-N-day PMIX usage in five reports (Protein, Curry,
+ * Appetizers, Desserts, Beverage), shown per weekday and convertible into any
+ * unit of the ingredient's unit chain (Order / oz / piece / box / case…), like Stock Count.
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

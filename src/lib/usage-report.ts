@@ -22,6 +22,7 @@ export interface UsageReportItem {
 export interface UsageReportData {
     days: number; dowCounts: number[];
     protein: UsageReportItem[]; curry: UsageReportItem[]; dessert: UsageReportItem[]; beverage: UsageReportItem[];
+    appetizer: UsageReportItem[];
     iceCream: { flavor: string; byDow: number[]; total: number }[];
 }
 
@@ -43,7 +44,7 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
         if (!seenDates.has(key)) { seenDates.add(key); dowCounts[dow(d)] += 1; }
     }
     const uploadIds = uploads.map((u: { id: string }) => u.id);
-    if (uploadIds.length === 0) return { days, dowCounts, protein: [], curry: [], dessert: [], beverage: [], iceCream: [] };
+    if (uploadIds.length === 0) return { days, dowCounts, protein: [], curry: [], dessert: [], beverage: [], appetizer: [], iceCream: [] };
 
     const [items, rules, standards, chains, ingredients] = await Promise.all([
         db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
@@ -77,7 +78,7 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
     const add = (m: Map<string, number[]>, label: string, d: number, qty: number) => {
         const a = m.get(label) ?? zero7(); a[d] += qty; m.set(label, a);
     };
-    const protein = mk(), curry = mk(), dessert = mk(), beverage = mk(), iceCream = mk();
+    const protein = mk(), curry = mk(), dessert = mk(), beverage = mk(), appetizer = mk(), iceCream = mk();
     const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
 
     for (const it of items) {
@@ -89,6 +90,9 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
         const mods = it.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
         if (bevSet.has(category.toLowerCase())) { if (qty > 0) add(beverage, category, d, qty); continue; }
+
+        // Appetizers / starters (by POS category) — aggregate per dish
+        if (/appet|starter/i.test(category)) { if (qty > 0) add(appetizer, dishName, d, qty); continue; }
 
         const cg = matchCurryGroup(dishName);
         if (cg && qty > 0) add(curry, cg, d, qty);
@@ -138,6 +142,7 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
     return {
         days, dowCounts,
         protein: build(protein), curry: build(curry), dessert: build(dessert), beverage: build(beverage),
+        appetizer: build(appetizer),
         iceCream: buildFlavor(iceCream),
     };
 }

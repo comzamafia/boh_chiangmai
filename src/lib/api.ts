@@ -637,6 +637,7 @@ export interface UsageReportResult {
     curry:    UsageReportItem[];
     dessert:  UsageReportItem[];
     beverage: UsageReportItem[];
+    appetizer: UsageReportItem[];
     iceCream: UsageReportFlavor[];
 }
 export interface ReportUnitChainRow {

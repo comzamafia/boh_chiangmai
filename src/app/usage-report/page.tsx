@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown, Image as ImageIcon,
+    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown, Image as ImageIcon, Salad,
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
@@ -22,12 +22,13 @@ import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-type Tab = "protein" | "curry" | "dessert" | "beverage";
+type Tab = "protein" | "curry" | "dessert" | "beverage" | "appetizer";
 const TABS: { key: Tab; label: string; icon: React.ElementType; color: string }[] = [
-    { key: "protein",  label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
-    { key: "curry",    label: "Main Curry",    icon: Soup,     color: "text-amber-600" },
-    { key: "dessert",  label: "Main Desserts", icon: IceCream, color: "text-pink-600" },
-    { key: "beverage", label: "Beverages",     icon: Wine,     color: "text-purple-600" },
+    { key: "protein",   label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
+    { key: "curry",     label: "Main Curry",    icon: Soup,     color: "text-amber-600" },
+    { key: "appetizer", label: "Appetizers",    icon: Salad,    color: "text-green-600" },
+    { key: "dessert",   label: "Main Desserts", icon: IceCream, color: "text-pink-600" },
+    { key: "beverage",  label: "Beverages",     icon: Wine,     color: "text-purple-600" },
 ];
 
 // orders → chosen unit, using the item's chain (+ portion std as a bridge)

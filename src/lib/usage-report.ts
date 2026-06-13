@@ -1,6 +1,6 @@
 /**
  * Shared Usage Report aggregation — last-N-day PMIX usage split into
- * Main Protein / Curry / Desserts (+ ice-cream flavours) / Beverages, per
+ * Main Protein / Curry / Appetizers / Desserts (+ ice-cream flavours) / Beverages, per
  * weekday (Mon..Sun), with each item resolved to an ingredient + unit chain.
  * Used by the in-app route (session auth) and the public API (API key).
  */

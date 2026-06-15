@@ -622,6 +622,7 @@ export const serverPerfApi = {
 // ─── Usage Report (7-day, multi-unit) ───────────────────────────────────────
 export interface UsageReportItem {
     label:        string;
+    reportKey:    string;     // per-row chain key "<category>::<label>"
     byDow:        number[];   // Mon..Sun orders
     total:        number;
     ingredientId: string | null;
@@ -641,15 +642,15 @@ export interface UsageReportResult {
     iceCream: UsageReportFlavor[];
 }
 export interface ReportUnitChainRow {
-    ingredientId: string;
+    reportKey:    string;
     base:         string;
     relations:    { from: string; qty: number; to: string }[];
 }
 export const usageReportApi = {
     get: (days = 7) => apiFetch<UsageReportResult>(`/reports/usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
     chains: () => apiFetch<ReportUnitChainRow[]>("/report-unit-chains", { cache: "no-store" }),
-    saveChain: (ingredientId: string, base: string, relations: { from: string; qty: number; to: string }[]) =>
-        apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ ingredientId, base, relations }) }),
+    saveChain: (reportKey: string, base: string, relations: { from: string; qty: number; to: string }[]) =>
+        apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ reportKey, base, relations }) }),
 };
 
 // ─── Physical Stock Count (per storage area) ────────────────────────────────

@@ -274,8 +274,8 @@ function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
                                         <td className="py-1.5 px-2 text-right"><MultiCell lines={linesOf(item.total)} /></td>
                                         <td className="py-1.5 text-right pr-1">
                                             {canManage && (
-                                                <button onClick={() => onEditChain(item)} title={item.ingredientId ? "Configure units" : "Link a portion standard first"}
-                                                    className="text-muted-foreground hover:text-primary disabled:opacity-30" disabled={!item.ingredientId}>
+                                                <button onClick={() => onEditChain(item)} title="Configure units for this item"
+                                                    className="text-muted-foreground hover:text-primary">
                                                     <Settings2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
@@ -312,12 +312,12 @@ function ChainEditor({ item, onClose, onSaved }: { item: UsageReportItem; onClos
     }, [base, rels]);
 
     async function save() {
-        if (!item.ingredientId) return;
+        if (!item.reportKey) return;
         setSaving(true);
         try {
             const relations = rels.map(r => ({ from: r.from.trim(), qty: Number(r.qty), to: r.to.trim() }))
                 .filter(r => r.from && r.to && Number.isFinite(r.qty) && r.qty > 0);
-            await usageReportApi.saveChain(item.ingredientId, base.trim(), relations);
+            await usageReportApi.saveChain(item.reportKey, base.trim(), relations);
             onSaved();
         } finally { setSaving(false); }
     }
@@ -362,7 +362,7 @@ function ChainEditor({ item, onClose, onSaved }: { item: UsageReportItem; onClos
                 </div>
                 <DialogFooter>
                     <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
-                    <Button size="sm" onClick={save} disabled={saving || !item.ingredientId}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save</Button>
+                    <Button size="sm" onClick={save} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

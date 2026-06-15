@@ -15,7 +15,7 @@ const dow = (d: Date) => (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
 const zero7 = () => [0, 0, 0, 0, 0, 0, 0];
 
 export interface UsageReportItem {
-    label: string; byDow: number[]; total: number;
+    label: string; reportKey: string; byDow: number[]; total: number;
     ingredientId: string | null; portionSize: number | null; portionUnit: string | null;
     chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
@@ -69,9 +69,11 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
     const lookupStd = (label: string) => { const k = label.toLowerCase().trim(); return stdByName.get(k) ?? stdByIng.get(k); };
     const ingByName = new Map<string, string>();
     for (const ig of ingredients) ingByName.set(ig.name.toLowerCase().trim(), ig.id);
+    // Unit chains are now keyed per report item ("<category>::<label>"), so each
+    // row (e.g. Panang Curry vs Chicken) has its own independent chain.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chainByIng = new Map<string, any>();
-    for (const c of chains) chainByIng.set(c.ingredientId, { base: c.base, relations: c.relations });
+    const chainByKey = new Map<string, any>();
+    for (const c of chains) if (c.reportKey) chainByKey.set(c.reportKey, { base: c.base, relations: c.relations });
 
     const ruleRows = rules as RuleRow[];
     const mk = () => new Map<string, number[]>();
@@ -123,15 +125,16 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
         }
     }
 
-    const build = (m: Map<string, number[]>): UsageReportItem[] => [...m.entries()].map(([label, byDow]) => {
+    const build = (m: Map<string, number[]>, category: string): UsageReportItem[] => [...m.entries()].map(([label, byDow]) => {
         const std = lookupStd(label);
         const ingredientId = std?.ingredientId ?? ingByName.get(label.toLowerCase().trim()) ?? null;
+        const reportKey = `${category}::${label}`;
         return {
-            label, byDow, total: byDow.reduce((s, x) => s + x, 0),
+            label, reportKey, byDow, total: byDow.reduce((s, x) => s + x, 0),
             ingredientId,
             portionSize: std?.portionSize ?? null,
             portionUnit: std?.portionUnit ?? null,
-            chain: ingredientId ? (chainByIng.get(ingredientId) ?? null) : null,
+            chain: chainByKey.get(reportKey) ?? null,
         };
     }).sort((a, b) => b.total - a.total);
 
@@ -141,8 +144,8 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
 
     return {
         days, dowCounts,
-        protein: build(protein), curry: build(curry), dessert: build(dessert), beverage: build(beverage),
-        appetizer: build(appetizer),
+        protein: build(protein, "protein"), curry: build(curry, "curry"), dessert: build(dessert, "dessert"), beverage: build(beverage, "beverage"),
+        appetizer: build(appetizer, "appetizer"),
         iceCream: buildFlavor(iceCream),
     };
 }

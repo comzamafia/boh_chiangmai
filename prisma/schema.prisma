@@ -689,9 +689,10 @@ model StorageAreaCount {
 // reduces every unit to `base` so the report can show Order/oz/piece/box/case.
 model ReportUnitChain {
   id           String   @id @default(cuid())
-  ingredientId String   @unique
-  base         String                 // smallest/base unit name
-  relations    Json                   // [{ from: string, qty: number, to: string }]
+  reportKey    String?  @unique          // per report item: "<category>::<label>" (independent per row)
+  ingredientId String?                   // resolved ingredient (informational only; no longer the key)
+  base         String                    // smallest/base unit name
+  relations    Json                      // [{ from: string, qty: number, to: string }]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

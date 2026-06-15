@@ -1,5 +1,5 @@
 {
-  "buildCommand": "prisma generate && (prisma migrate deploy || (sleep 10 && prisma migrate deploy) || (sleep 20 && prisma migrate deploy) || echo 'migrate deploy could not acquire advisory lock (P1002) - continuing build; schema already up to date') && next build",
+  "buildCommand": "prisma generate && (prisma migrate deploy || (sleep 10 && prisma migrate deploy) || (sleep 20 && prisma migrate deploy)) && next build",
   "installCommand": "npm install",
   "framework": "nextjs",
   "crons": [

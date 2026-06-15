@@ -10,7 +10,7 @@ const SECRET = new TextEncoder().encode(
 // Routes that are always public (no session required).
 // `/api/public/*` is API-key authenticated by its own route handler, so it
 // must bypass the session redirect (external systems have no auth cookie).
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/public"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/public", "/api/bootstrap-admin"];
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;

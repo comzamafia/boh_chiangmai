@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { sendEmail } from "@/lib/notifications/email";
+import { STORE_NAME } from "@/lib/branding";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
         </table>
         <h3 style="color:#1e293b;font-size:14px">Top reasons</h3>
         <table style="border-collapse:collapse;width:100%">${rows || '<tr><td style="padding:4px 8px;color:#94a3b8">No complaints</td></tr>'}</table>
-        <p style="color:#94a3b8;font-size:12px;margin-top:16px">Generated from Loss Management · Chiang Mai Mississauga</p>
+        <p style="color:#94a3b8;font-size:12px;margin-top:16px">Generated from Loss Management · ${STORE_NAME}</p>
       </div>`;
     const text = `Loss Management ${from} → ${to}\nCombined Net Loss: ${money(combined)}\nNet Complaints: ${money(netComplaint)}\nDiscounts: ${money(discountTotal)}\nHigh-risk flags: ${highRisk}\nTop reasons: ${topReasons.map(([r, v]) => `${r} ${money(r2(v))}`).join(", ")}`;
 

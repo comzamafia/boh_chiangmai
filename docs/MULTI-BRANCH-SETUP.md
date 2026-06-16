@@ -37,6 +37,8 @@ Data is fully isolated (separate DB). One `git push` rebuilds every branch from 
 | `USAGE_REPORT_API_KEY` | **UNIQUE** | random key for that branch's public API |
 | `CRON_SECRET` | **UNIQUE** | random key protecting cron routes |
 | `BLOB_READ_WRITE_TOKEN` | UNIQUE (auto) | provisioned by Vercel Blob per project |
+| `NEXT_PUBLIC_STORE_NAME` | **UNIQUE** | full branch name, e.g. `Chiang Mai York Mills` (PDF headers/footers) |
+| `NEXT_PUBLIC_STORE_SHORT` | **UNIQUE** | short location label, e.g. `York Mills` (PMIX dashboard header) |
 | `RESEND_API_KEY` | shared OK | same Resend key for all branches |
 | `EMAIL_FROM` | shared OK | e.g. `BOH Alerts <alerts@yourdomain.com>` |
 | `EMAIL_REPLY_TO` | shared OK | optional |

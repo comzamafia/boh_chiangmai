@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import { pmixApi, type PmixDashboardResult, type PmixUpload } from "@/lib/api";
 import { exportPmixDashboardToPDF } from "@/lib/pmix-dashboard-pdf";
+import { STORE_SHORT } from "@/lib/branding";
 
-const LOCATION_LABEL = "Mississauga";
+const LOCATION_LABEL = STORE_SHORT;
 type Mode = "single" | "range";
 
 // ─── KPI card colour tokens ──────────────────────────────────────────────────

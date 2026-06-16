@@ -17,6 +17,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { serverPerfApi, type ServerPerfResult, type ServerPerfRow } from "@/lib/api";
+import { STORE_NAME } from "@/lib/branding";
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -89,7 +90,7 @@ export default function ServerPerformancePage() {
         doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(203, 213, 225);
         doc.text(`${from}  to  ${to}`, M, 58);
         doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(255, 255, 255);
-        doc.text("Chiang Mai Mississauga", pageW - M, 30, { align: "right" });
+        doc.text(STORE_NAME, pageW - M, 30, { align: "right" });
         doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(203, 213, 225);
         doc.text(`Generated ${new Date().toLocaleString("en-CA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 48, { align: "right" });
 

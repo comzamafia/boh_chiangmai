@@ -24,7 +24,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, Pencil, Trash2, Tag, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Tag, RefreshCw, Sparkles, Zap, Download, Upload } from "lucide-react";
 
 interface ItemRule {
     id:        string;
@@ -78,6 +78,8 @@ export default function PmixRulesPage() {
     const [catFilter, setCatFilter] = useState("all");
     const [testInput, setTestInput] = useState("");
     const [testResult, setTestResult] = useState<{ label: string; category: string; pattern: string } | null | "no-match">(null);
+    const [importing, setImporting] = useState(false);
+    const [importMsg, setImportMsg] = useState<string | null>(null);
 
     // Uncategorized items (need a rule) — surfaced for one-click "Quick add"
     const [uncat, setUncat] = useState<UncatItem[]>([]);
@@ -196,6 +198,48 @@ export default function PmixRulesPage() {
 
     const filtered = catFilter === "all" ? rules : rules.filter(r => r.category === catFilter);
 
+    function exportRules() {
+        const exportable = rules.map(({ pattern, matchType, category, label, priority, isActive, notes }) =>
+            ({ pattern, matchType, category, label, priority, isActive, notes })
+        );
+        const json = JSON.stringify(exportable, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `pmix-rules-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function importRules(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setImporting(true);
+        setImportMsg(null);
+        try {
+            const text = await file.text();
+            const body = JSON.parse(text);
+            const res  = await fetch("/api/pmix/item-rules/bulk", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setImportMsg(`Error: ${data.error ?? "Import failed"}`);
+            } else {
+                setImportMsg(`Imported ${data.created} rule${data.created !== 1 ? "s" : ""}, skipped ${data.skipped} duplicate${data.skipped !== 1 ? "s" : ""}.`);
+                await load();
+            }
+        } catch (err) {
+            setImportMsg(`Failed to parse file: ${err instanceof Error ? err.message : "Unknown error"}`);
+        } finally {
+            setImporting(false);
+        }
+    }
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             <div>
@@ -308,10 +352,27 @@ export default function PmixRulesPage() {
                             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
                                 <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
                             </Button>
+                            <Button size="sm" variant="outline" onClick={exportRules} disabled={rules.length === 0}
+                                title="Export all rules as JSON — import into another branch">
+                                <Download className="h-4 w-4 mr-1.5" /> Export
+                            </Button>
+                            <label className={`inline-flex items-center gap-1.5 h-9 rounded-md border border-input bg-background px-3 text-sm font-medium cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors ${importing ? "opacity-50 pointer-events-none" : ""}`}
+                                title="Import rules from another branch (JSON file)">
+                                {importing
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <Upload className="h-4 w-4" />}
+                                Import
+                                <input type="file" accept=".json,application/json" className="sr-only" onChange={importRules} disabled={importing} />
+                            </label>
                             <Button size="sm" onClick={openNew}>
                                 <Plus className="h-4 w-4 mr-1.5" /> Add Rule
                             </Button>
                         </div>
+                        {importMsg && (
+                            <p className={`text-xs mt-1 ${importMsg.startsWith("Error") ? "text-destructive" : "text-green-700 dark:text-green-400"}`}>
+                                {importMsg}
+                            </p>
+                        )}
                     </div>
                     {/* Filter */}
                     <div className="mt-3">

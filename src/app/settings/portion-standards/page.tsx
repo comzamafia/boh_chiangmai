@@ -22,6 +22,7 @@ import {
 import { portionStandardsApi, ingredientsApi, type PortionStandard, type Ingredient } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 import CompositeManager from "./composite-manager";
+import MenuNamePicker from "@/components/menu-name-picker";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 
@@ -590,14 +591,20 @@ export default function PortionStandardsPage() {
                             <Label className="text-sm font-medium">
                                 {form.type === "modifier" ? "Modifier Name" : "Menu Item Name"} <span className="text-destructive">*</span>
                             </Label>
-                            <Input
-                                value={form.itemName}
-                                onChange={e => f("itemName")(e.target.value)}
-                                placeholder={form.type === "modifier" ? "e.g. Extra Chicken" : "e.g. Pad Thai Chicken"}
-                                className="rounded-xl h-10"
-                            />
+                            {form.type === "modifier" ? (
+                                <Input
+                                    value={form.itemName}
+                                    onChange={e => f("itemName")(e.target.value)}
+                                    placeholder="e.g. Extra Chicken"
+                                    className="rounded-xl h-10"
+                                />
+                            ) : (
+                                <MenuNamePicker value={form.itemName} onChange={f("itemName")} placeholder="Pick the exact PMIX menu item…" />
+                            )}
                             <p className="text-xs text-muted-foreground">
-                                Must match the <strong>exact name</strong> shown in your PMIX report (case-insensitive)
+                                {form.type === "modifier"
+                                    ? "Type the exact modifier/add-on name from your PMIX report (case-insensitive)."
+                                    : "Pick the exact menu name from PMIX so it can't accidentally match the wrong dish."}
                             </p>
                         </div>
 

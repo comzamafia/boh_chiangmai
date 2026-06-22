@@ -18,6 +18,7 @@ import { Boxes, Plus, Pencil, Trash2, Loader2, Link2, Download, Upload, Search, 
 import {
     compositeApi, type CompositeRecipe, type MenuCompositeLink, type Ingredient,
 } from "@/lib/api";
+import MenuNamePicker from "@/components/menu-name-picker";
 
 const UNITS = ["oz", "g", "kg", "ml", "L", "fl oz", "piece", "portion", "scoop", "tbsp", "tsp"];
 
@@ -310,7 +311,7 @@ export default function CompositeManager({ ingredients, canManage }: { ingredien
                     {link && (
                         <div className="space-y-3 py-1">
                             <div className="space-y-1.5"><Label className="text-xs">Menu item name *</Label>
-                                <Input value={link.itemName} onChange={e => setLink({ ...link, itemName: e.target.value })} placeholder="e.g. Islamic Noodles" className="h-9" /></div>
+                                <MenuNamePicker value={link.itemName} onChange={v => setLink({ ...link, itemName: v })} placeholder="Pick the exact PMIX menu item…" /></div>
                             <div className="space-y-1.5"><Label className="text-xs">Composite *</Label>
                                 <Select value={link.compositeId} onValueChange={v => { const c = composites.find(x => x.id === v); setLink({ ...link, compositeId: v, unit: c?.yieldUnit ?? link.unit }); }}>
                                     <SelectTrigger className="h-9"><SelectValue placeholder="Pick a composite" /></SelectTrigger>

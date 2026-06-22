@@ -4,7 +4,7 @@
  * Appetizers, Desserts, Beverage), shown per weekday and convertible into any
  * unit of the ingredient's unit chain (Order / oz / piece / box / case…), like Stock Count.
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,23 +12,25 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, Link2, FileDown, Image as ImageIcon, Salad,
+    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, ChevronRight, Link2, FileDown, Image as ImageIcon, Salad, Boxes,
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
+    type IngredientUsageResult, type IngredientUsageRow,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
 import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-type Tab = "protein" | "curry" | "dessert" | "beverage" | "appetizer";
+type Tab = "protein" | "curry" | "dessert" | "beverage" | "appetizer" | "ingredients";
 const TABS: { key: Tab; label: string; icon: React.ElementType; color: string }[] = [
-    { key: "protein",   label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
-    { key: "curry",     label: "Main Curry",    icon: Soup,     color: "text-amber-600" },
-    { key: "appetizer", label: "Appetizers",    icon: Salad,    color: "text-green-600" },
-    { key: "dessert",   label: "Main Desserts", icon: IceCream, color: "text-pink-600" },
-    { key: "beverage",  label: "Beverages",     icon: Wine,     color: "text-purple-600" },
+    { key: "protein",     label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
+    { key: "curry",       label: "Main Curry",    icon: Soup,     color: "text-amber-600" },
+    { key: "appetizer",   label: "Appetizers",    icon: Salad,    color: "text-green-600" },
+    { key: "dessert",     label: "Main Desserts", icon: IceCream, color: "text-pink-600" },
+    { key: "beverage",    label: "Beverages",     icon: Wine,     color: "text-purple-600" },
+    { key: "ingredients", label: "Ingredients",   icon: Boxes,    color: "text-cyan-600" },
 ];
 
 // orders → chosen unit, using the item's chain (+ portion std as a bridge)
@@ -65,6 +67,8 @@ export default function UsageReportPage() {
     const [loading, setLoading] = useState(true);
     const [tab, setTab]         = useState<Tab>("protein");
     const [editChain, setEditChain] = useState<UsageReportItem | null>(null);
+    const [ingData, setIngData] = useState<IngredientUsageResult | null>(null);
+    const [ingLoading, setIngLoading] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -74,10 +78,24 @@ export default function UsageReportPage() {
     }, [days]);
     useEffect(() => { load(); }, [load]);
 
-    const rows = data ? data[tab] : [];
+    const isIng = tab === "ingredients";
+
+    // Lazy-load the ingredient roll-up only when its tab is open (or days change).
+    useEffect(() => {
+        if (!isIng) return;
+        let alive = true;
+        setIngLoading(true);
+        usageReportApi.ingredientUsage(days)
+            .then(d => { if (alive) setIngData(d); })
+            .catch(() => { if (alive) setIngData(null); })
+            .finally(() => { if (alive) setIngLoading(false); });
+        return () => { alive = false; };
+    }, [isIng, days]);
+
+    const rows = !isIng && data ? data[tab] : [];
 
     function exportPDF() {
-        if (!data) return;
+        if (!data || isIng) return;   // Ingredients tab exports via JPG (DOM capture)
         const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
@@ -150,10 +168,10 @@ export default function UsageReportPage() {
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
                         ))}
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={!data}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={isIng ? !ingData : !data}>
                         <ImageIcon className="w-4 h-4" /> JPG
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isIng} title={isIng ? "Use JPG for the Ingredients tab" : undefined}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
                 </div>
@@ -163,7 +181,9 @@ export default function UsageReportPage() {
             <div className="flex gap-1 overflow-x-auto pb-1">
                 {TABS.map(t => {
                     const Icon = t.icon; const active = tab === t.key;
-                    const n = data ? data[t.key].length : 0;
+                    const n = t.key === "ingredients"
+                        ? (ingData?.ingredients.length ?? 0)
+                        : (data ? data[t.key as Exclude<Tab, "ingredients">].length : 0);
                     return (
                         <button key={t.key} onClick={() => setTab(t.key)}
                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap shrink-0 border transition-all
@@ -175,7 +195,17 @@ export default function UsageReportPage() {
                 })}
             </div>
 
-            {loading ? (
+            {isIng ? (
+                ingLoading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+                ) : !ingData ? (
+                    <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards / Composites first.</CardContent></Card>
+                ) : (
+                    <div ref={captureRef} className="space-y-5 bg-background">
+                        <IngredientUsageTable data={ingData} />
+                    </div>
+                )
+            ) : loading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
             ) : !data ? (
                 <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports first.</CardContent></Card>
@@ -289,6 +319,86 @@ function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
                 <p className="text-[10px] text-muted-foreground mt-2">
                     Every configured unit is shown stacked per cell (Avg/d = average per day). <Link2 className="inline w-3 h-3 text-amber-500" /> = no Portion Standard linked yet (only Order count available).
                     Configure multi-level units (1 Case = 4 Box…) with the <Settings2 className="inline w-3 h-3" /> button.
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
+// ─── Ingredient roll-up table (aggregated across all dishes, drill-down) ─────
+function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
+    const [open, setOpen] = useState<Set<string>>(new Set());
+    const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
+    const toggle = (id: string) => setOpen(s => {
+        const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
+    });
+
+    if (data.ingredients.length === 0) {
+        return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
+            No ingredient usage yet. Link menu items to ingredients in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a> (and define Composites there).
+        </CardContent></Card>;
+    }
+
+    return (
+        <Card>
+            <CardContent className="px-2 sm:px-4 py-3">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs" style={{ minWidth: 760 }}>
+                        <thead>
+                            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                <th className="text-left py-2 pl-1 sticky left-0 bg-card">Ingredient</th>
+                                {DOW.map((d, i) => <th key={d} className="text-right py-2 px-2">{d}<span className="block text-[8px] opacity-60">×{data.dowCounts[i] || 0}</span></th>)}
+                                <th className="text-right py-2 px-2">Avg/d</th>
+                                <th className="text-right py-2 px-2">Total</th>
+                                <th className="w-6" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.ingredients.map(ing => {
+                                const isOpen = open.has(ing.ingredientId);
+                                const dayLines = (i: number) => ing.units.map(u => ({ u: u.unit, v: u.byDow[i] })).filter(x => x.v > 0);
+                                const totalLines = ing.units.map(u => ({ u: u.unit, v: u.total }));
+                                const avgLines   = ing.units.map(u => ({ u: u.unit, v: u.total / totalDays }));
+                                return (
+                                    <Fragment key={ing.ingredientId}>
+                                        <tr className="border-t border-border/40 hover:bg-muted/20 align-top cursor-pointer" onClick={() => toggle(ing.ingredientId)}>
+                                            <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[180px]">
+                                                <div className="flex items-start gap-1">
+                                                    {isOpen ? <ChevronDown className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />}
+                                                    <span className="truncate">{ing.name}</span>
+                                                </div>
+                                            </td>
+                                            {Array.from({ length: 7 }).map((_, i) => (
+                                                <td key={i} className="py-1.5 px-2 text-right"><MultiCell lines={dayLines(i)} /></td>
+                                            ))}
+                                            <td className="py-1.5 px-2 text-right bg-muted/20"><MultiCell lines={avgLines} muted /></td>
+                                            <td className="py-1.5 px-2 text-right"><MultiCell lines={totalLines} /></td>
+                                            <td />
+                                        </tr>
+                                        {isOpen && (
+                                            <tr className="bg-muted/10">
+                                                <td colSpan={11} className="px-3 py-2">
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Comes from</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {ing.sources.map((s, i) => (
+                                                            <span key={i} className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
+                                                                <span className="font-medium">{s.label}</span>
+                                                                {s.via && <span className="text-cyan-600 dark:text-cyan-400">via {s.via}</span>}
+                                                                <span className="tabular-nums text-muted-foreground">{fmtChainQty(s.total)} {s.unit}</span>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                    Each ingredient is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes). Click a row to see where it came from.
                 </p>
             </CardContent>
         </Card>

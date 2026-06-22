@@ -20,6 +20,10 @@ import {
     Search, Download, Info, Upload, FileSpreadsheet,
 } from "lucide-react";
 import { portionStandardsApi, ingredientsApi, type PortionStandard, type Ingredient } from "@/lib/api";
+import { useAuth } from "@/components/auth-provider";
+import CompositeManager from "./composite-manager";
+
+const EDIT_ROLES = ["admin", "manager", "chef"];
 
 // ─── Units ────────────────────────────────────────────────────────────────────
 const UNITS = ["oz", "g", "kg", "ml", "L", "fl oz", "piece", "portion", "scoop", "tbsp", "tsp"];
@@ -115,6 +119,8 @@ function IngredientPicker({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PortionStandardsPage() {
+    const { user } = useAuth();
+    const canManage = EDIT_ROLES.includes(user?.role ?? "");
     const [standards,    setStandards]   = useState<PortionStandard[]>([]);
     const [ingredients,  setIngredients] = useState<Ingredient[]>([]);
     const [loading,      setLoading]     = useState(true);
@@ -720,6 +726,9 @@ export default function PortionStandardsPage() {
                     <DialogFooter><Button size="sm" onClick={() => setImportResult(null)}>Done</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ── Composites + combined settings export/import ── */}
+            {!loading && <CompositeManager ingredients={ingredients} canManage={canManage} />}
         </div>
     );
 }

@@ -83,6 +83,7 @@ model Ingredient {
   inventoryTxns       InventoryTransaction[]
   ingredientSuppliers IngredientSupplier[]
   portionStandards    PortionStandard[]
+  compositeComponents CompositeComponent[]
 
   @@map("ingredients")
 }
@@ -798,4 +799,60 @@ model ServerSalesRow {
   createdAt     DateTime  @default(now())
   @@index([businessDate])
   @@map("server_sales_rows")
+}
+
+// ─── Usage Report: Composite sub-recipes (reusable) ──────────────────────────
+// A composite is a named sub-recipe (e.g. "Curry Sauce") that yields `yieldQty
+// yieldUnit` and is made of several real ingredients. Menu items reference a
+// composite via MenuCompositeLink with a used quantity; at report time the
+// composite expands and scales by (usedQty / yieldQty).
+//   "Curry Sauce" yields 14 oz = Panang 7 oz + Massaman 7 oz
+//   Islamic Noodles uses 14 oz Curry Sauce → 1 batch → Panang 7 + Massaman 7
+model CompositeRecipe {
+  id         String               @id @default(cuid())
+  name       String               @unique
+  yieldQty   Decimal              @db.Decimal(10, 4)
+  yieldUnit  String
+  notes      String?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  components CompositeComponent[]
+  menuLinks  MenuCompositeLink[]
+
+  @@map("composite_recipes")
+}
+
+model CompositeComponent {
+  id           String          @id @default(cuid())
+  compositeId  String
+  composite    CompositeRecipe @relation(fields: [compositeId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient      @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  qty          Decimal         @db.Decimal(10, 4) // amount of this ingredient per 1 batch (yieldQty)
+  unit         String
+
+  @@index([compositeId])
+  @@index([ingredientId])
+  @@map("composite_components")
+}
+
+// Links a POS menu item (by name) to a composite it consumes. Kept separate from
+// portion_standards (which holds the menu's raw-ingredient components) so the
+// existing portion-standard flow is untouched; a dish's full recipe is its
+// portion_standards rows PLUS its menu_composite_links.
+model MenuCompositeLink {
+  id          String          @id @default(cuid())
+  itemName    String          // POS menu item name (matched case-insensitively)
+  compositeId String
+  composite   CompositeRecipe @relation(fields: [compositeId], references: [id], onDelete: Cascade)
+  qty         Decimal         @db.Decimal(10, 4) // amount of composite used per 1 order
+  unit        String          // should match the composite's yieldUnit
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([itemName])
+  @@index([compositeId])
+  @@map("menu_composite_links")
 }

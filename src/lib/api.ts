@@ -651,6 +651,44 @@ export const usageReportApi = {
     chains: () => apiFetch<ReportUnitChainRow[]>("/report-unit-chains", { cache: "no-store" }),
     saveChain: (reportKey: string, base: string, relations: { from: string; qty: number; to: string }[]) =>
         apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ reportKey, base, relations }) }),
+    ingredientUsage: (days = 7) =>
+        apiFetch<IngredientUsageResult>(`/reports/ingredient-usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+};
+
+// ─── Ingredient-level usage (aggregated across all dishes) ──────────────────
+export interface IngredientUsageUnit { unit: string; byDow: number[]; total: number }
+export interface IngredientUsageSource { label: string; via: string | null; unit: string; total: number }
+export interface IngredientUsageRow {
+    ingredientId: string;
+    name: string;
+    units: IngredientUsageUnit[];
+    sources: IngredientUsageSource[];
+}
+export interface IngredientUsageResult {
+    days: number;
+    dowCounts: number[];
+    ingredients: IngredientUsageRow[];
+}
+
+// ─── Composite sub-recipes + menu links (Usage Report calc settings) ────────
+export interface CompositeComponent { id?: string; ingredientId: string; qty: number; unit: string; ingredient?: { id: string; name: string; recipeUnit?: string } }
+export interface CompositeRecipe {
+    id: string; name: string; yieldQty: number; yieldUnit: string; notes: string | null;
+    components: CompositeComponent[];
+}
+export interface MenuCompositeLink {
+    id: string; itemName: string; compositeId: string; qty: number; unit: string; notes: string | null;
+    composite?: { id: string; name: string; yieldQty: number; yieldUnit: string };
+}
+export const compositeApi = {
+    list:   () => apiFetch<CompositeRecipe[]>("/composites", { cache: "no-store" }),
+    create: (body: Partial<CompositeRecipe>) => apiFetch<CompositeRecipe>("/composites", { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: Partial<CompositeRecipe>) => apiFetch<CompositeRecipe>(`/composites/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    remove: (id: string) => apiFetch<{ ok: boolean }>(`/composites/${id}`, { method: "DELETE" }),
+    links:        () => apiFetch<MenuCompositeLink[]>("/menu-composite-links", { cache: "no-store" }),
+    createLink:   (body: Partial<MenuCompositeLink>) => apiFetch<MenuCompositeLink>("/menu-composite-links", { method: "POST", body: JSON.stringify(body) }),
+    updateLink:   (id: string, body: Partial<MenuCompositeLink>) => apiFetch<MenuCompositeLink>(`/menu-composite-links/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    removeLink:   (id: string) => apiFetch<{ ok: boolean }>(`/menu-composite-links/${id}`, { method: "DELETE" }),
 };
 
 // ─── Physical Stock Count (per storage area) ────────────────────────────────

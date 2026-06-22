@@ -980,3 +980,37 @@ INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name"
 INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), '86a2a3b290188eced1224394ff7ea576e1e0d29111dd8f6d7305c0d40aa270b7', now(), '20260606140000_add_loss_reason_map', now(), 1) ON CONFLICT DO NOTHING;
 INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), '9889c48c4c6e89d17fd11ea2c6b38b72c73233c015c11e4d06f2e24f20a96a90', now(), '20260608120000_add_server_performance', now(), 1) ON CONFLICT DO NOTHING;
 INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), '18ba192e236580805cf21118bd21ee2a225764451041acf146f1864febb9a226', now(), '20260609120000_report_unit_chain_per_item', now(), 1) ON CONFLICT DO NOTHING;
+
+-- ── Composite sub-recipes (migration 20260610120000_composite_recipes) ───────
+CREATE TABLE IF NOT EXISTS "composite_recipes" (
+    "id" TEXT NOT NULL, "name" TEXT NOT NULL, "yieldQty" DECIMAL(10,4) NOT NULL,
+    "yieldUnit" TEXT NOT NULL, "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "composite_recipes_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "composite_recipes_name_key" ON "composite_recipes"("name");
+CREATE TABLE IF NOT EXISTS "composite_components" (
+    "id" TEXT NOT NULL, "compositeId" TEXT NOT NULL, "ingredientId" TEXT NOT NULL,
+    "qty" DECIMAL(10,4) NOT NULL, "unit" TEXT NOT NULL,
+    CONSTRAINT "composite_components_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "composite_components_compositeId_idx" ON "composite_components"("compositeId");
+CREATE INDEX IF NOT EXISTS "composite_components_ingredientId_idx" ON "composite_components"("ingredientId");
+CREATE TABLE IF NOT EXISTS "menu_composite_links" (
+    "id" TEXT NOT NULL, "itemName" TEXT NOT NULL, "compositeId" TEXT NOT NULL,
+    "qty" DECIMAL(10,4) NOT NULL, "unit" TEXT NOT NULL, "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "menu_composite_links_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "menu_composite_links_itemName_idx" ON "menu_composite_links"("itemName");
+CREATE INDEX IF NOT EXISTS "menu_composite_links_compositeId_idx" ON "menu_composite_links"("compositeId");
+DO $$ BEGIN
+  ALTER TABLE "composite_components" ADD CONSTRAINT "composite_components_compositeId_fkey" FOREIGN KEY ("compositeId") REFERENCES "composite_recipes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "composite_components" ADD CONSTRAINT "composite_components_ingredientId_fkey" FOREIGN KEY ("ingredientId") REFERENCES "ingredients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "menu_composite_links" ADD CONSTRAINT "menu_composite_links_compositeId_fkey" FOREIGN KEY ("compositeId") REFERENCES "composite_recipes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), 'fa32bb54d0fd1c5e5ac0f605c82ae2f507961127b6f09a0e1b7fd674516af965', now(), '20260610120000_composite_recipes', now(), 1) ON CONFLICT DO NOTHING;

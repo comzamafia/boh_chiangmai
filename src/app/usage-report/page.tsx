@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
+    type DessertSection, type DessertDetailItem,
     type IngredientUsageResult, type IngredientUsageRow,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
@@ -23,11 +24,10 @@ import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-type Tab = "protein" | "curry" | "dessert" | "beverage" | "appetizer" | "ingredients";
+type Tab = "protein" | "curry" | "dessert" | "beverage" | "ingredients";
 const TABS: { key: Tab; label: string; icon: React.ElementType; color: string }[] = [
     { key: "protein",     label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
     { key: "curry",       label: "Main Curry",    icon: Soup,     color: "text-amber-600" },
-    { key: "appetizer",   label: "Appetizers",    icon: Salad,    color: "text-green-600" },
     { key: "dessert",     label: "Main Desserts", icon: IceCream, color: "text-pink-600" },
     { key: "beverage",    label: "Beverages",     icon: Wine,     color: "text-purple-600" },
     { key: "ingredients", label: "Ingredients",   icon: Boxes,    color: "text-cyan-600" },
@@ -79,6 +79,7 @@ export default function UsageReportPage() {
     useEffect(() => { load(); }, [load]);
 
     const isIng = tab === "ingredients";
+    const isDessert = tab === "dessert";
 
     // Lazy-load the ingredient roll-up only when its tab is open (or days change).
     useEffect(() => {
@@ -92,10 +93,10 @@ export default function UsageReportPage() {
         return () => { alive = false; };
     }, [isIng, days]);
 
-    const rows = !isIng && data ? data[tab] : [];
+    const rows = (!isIng && !isDessert && data) ? data[tab as "protein" | "curry" | "beverage"] : [];
 
     function exportPDF() {
-        if (!data || isIng) return;   // Ingredients tab exports via JPG (DOM capture)
+        if (!data || isIng || isDessert) return;   // Ingredients + Dessert tabs export via JPG (DOM capture)
         const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
@@ -113,14 +114,11 @@ export default function UsageReportPage() {
                 };
             }),
         });
-        // Export ONLY the station (tab) currently in view — one report per PDF
         const tabLabel = TABS.find(t => t.key === tab)?.label ?? "Usage";
         const payload: UsageReportExport = {
             days: data.days, dowCounts: data.dowCounts,
-            sections: [sectionFor(tabLabel, data[tab])],
-            iceCream: tab === "dessert"
-                ? data.iceCream.map(f => ({ flavor: f.flavor, cells: f.byDow.map(q => q ? String(q) : ""), total: String(f.total) }))
-                : [],
+            sections: [sectionFor(tabLabel, data[tab as "protein" | "curry" | "beverage"])],
+            iceCream: [],
             fileLabel: tabLabel,
         };
         exportUsageReportPDF(payload);
@@ -171,7 +169,7 @@ export default function UsageReportPage() {
                     <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={isIng ? !ingData : !data}>
                         <ImageIcon className="w-4 h-4" /> JPG
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isIng} title={isIng ? "Use JPG for the Ingredients tab" : undefined}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isIng || isDessert} title={isIng || isDessert ? "Use JPG for this tab" : undefined}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
                 </div>
@@ -183,7 +181,9 @@ export default function UsageReportPage() {
                     const Icon = t.icon; const active = tab === t.key;
                     const n = t.key === "ingredients"
                         ? (ingData?.ingredients.length ?? 0)
-                        : (data ? data[t.key as Exclude<Tab, "ingredients">].length : 0);
+                        : t.key === "dessert"
+                            ? (data?.dessertSections.reduce((s, sec) => s + sec.items.length, 0) ?? 0)
+                            : (data ? data[t.key as "protein" | "curry" | "beverage"].length : 0);
                     return (
                         <button key={t.key} onClick={() => setTab(t.key)}
                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap shrink-0 border transition-all
@@ -209,35 +209,14 @@ export default function UsageReportPage() {
                 <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
             ) : !data ? (
                 <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports first.</CardContent></Card>
+            ) : isDessert ? (
+                <div ref={captureRef} className="space-y-5 bg-background">
+                    <DessertSectionsView sections={data.dessertSections} dowCounts={data.dowCounts} />
+                </div>
             ) : (
                 <div ref={captureRef} className="space-y-5 bg-background">
                     <UsageTable rows={rows} dowCounts={data.dowCounts}
                         canManage={canManage} onEditChain={setEditChain} />
-                    {tab === "dessert" && data.iceCream.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm flex items-center gap-2"><IceCream className="w-4 h-4 text-pink-500" /> Ice Cream — by flavour (orders)</CardTitle>
-                            </CardHeader>
-                            <CardContent className="px-2 sm:px-4">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs min-w-[420px]">
-                                        <thead><tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                            <th className="text-left py-2 pl-2">Flavour</th>{DOW.map(d => <th key={d} className="text-right py-2 px-2">{d}</th>)}<th className="text-right py-2 pr-2">Total</th>
-                                        </tr></thead>
-                                        <tbody className="divide-y divide-border/40">
-                                            {data.iceCream.map(f => (
-                                                <tr key={f.flavor} className="hover:bg-muted/20">
-                                                    <td className="py-1.5 pl-2 font-medium">{f.flavor}</td>
-                                                    {f.byDow.map((q, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{q || <span className="text-muted-foreground/40">·</span>}</td>)}
-                                                    <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{f.total}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
                 </div>
             )}
 
@@ -322,6 +301,70 @@ function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
                 </p>
             </CardContent>
         </Card>
+    );
+}
+
+// ─── Dessert sections (Desserts + Kids Meal with item detail + modifiers) ────
+function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection[]; dowCounts: number[] }) {
+    const totalDays = Math.max(1, dowCounts.reduce((s, x) => s + x, 0));
+    if (sections.length === 0) return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No dessert or kids meal data in this window.</CardContent></Card>;
+    return (
+        <div className="space-y-5">
+            {sections.map(sec => (
+                <Card key={sec.category}>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                            {sec.category === "Kids Meal"
+                                ? <><Salad className="w-4 h-4 text-green-500" /> {sec.category}</>
+                                : <><IceCream className="w-4 h-4 text-pink-500" /> {sec.category}</>}
+                            <span className="text-xs font-normal text-muted-foreground">({sec.items.length} items)</span>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-2 sm:px-4 py-1">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs" style={{ minWidth: 660 }}>
+                                <thead>
+                                    <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                        <th className="text-left py-2 pl-2 sticky left-0 bg-card">Item</th>
+                                        {DOW.map((d, i) => <th key={d} className="text-right py-2 px-2">{d}<span className="block text-[8px] opacity-60">×{dowCounts[i] || 0}</span></th>)}
+                                        <th className="text-right py-2 px-2">Avg/d</th>
+                                        <th className="text-right py-2 pr-2">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sec.items.map(item => (
+                                        <Fragment key={item.itemName}>
+                                            <tr className="border-t border-border/40 hover:bg-muted/20 align-top">
+                                                <td className="py-1.5 pl-2 sticky left-0 bg-card font-medium max-w-[200px]">
+                                                    <span className="truncate block">{item.itemName}</span>
+                                                </td>
+                                                {item.byDow.map((q, i) => (
+                                                    <td key={i} className="py-1.5 px-2 text-right tabular-nums">{q > 0 ? q : <span className="text-muted-foreground/40">·</span>}</td>
+                                                ))}
+                                                <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground bg-muted/20">{fmtChainQty(item.total / totalDays)}</td>
+                                                <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{item.total}</td>
+                                            </tr>
+                                            {item.flavours.length > 0 && item.flavours.map(f => (
+                                                <tr key={f.name} className="bg-muted/10 hover:bg-muted/20">
+                                                    <td className="py-1 pl-6 sticky left-0 bg-muted/10 text-muted-foreground text-[11px]">
+                                                        ↳ {f.name}
+                                                    </td>
+                                                    {f.byDow.map((q, i) => (
+                                                        <td key={i} className="py-1 px-2 text-right tabular-nums text-[11px] text-muted-foreground">{q > 0 ? q : <span className="text-muted-foreground/40">·</span>}</td>
+                                                    ))}
+                                                    <td className="py-1 px-2 text-right tabular-nums text-[11px] text-muted-foreground bg-muted/20">{fmtChainQty(f.total / totalDays)}</td>
+                                                    <td className="py-1 pr-2 text-right tabular-nums text-[11px] font-medium text-muted-foreground">{f.total}</td>
+                                                </tr>
+                                            ))}
+                                        </Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
     );
 }
 

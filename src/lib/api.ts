@@ -630,16 +630,21 @@ export interface UsageReportItem {
     portionUnit:  string | null;
     chain:        { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
-export interface UsageReportFlavor { flavor: string; byDow: number[]; total: number }
+export interface DessertDetailItem {
+    itemName: string; byDow: number[]; total: number;
+    flavours: { name: string; byDow: number[]; total: number }[];
+}
+export interface DessertSection {
+    category: string;
+    items: DessertDetailItem[];
+}
 export interface UsageReportResult {
     days: number;
     dowCounts: number[];
     protein:  UsageReportItem[];
     curry:    UsageReportItem[];
-    dessert:  UsageReportItem[];
     beverage: UsageReportItem[];
-    appetizer: UsageReportItem[];
-    iceCream: UsageReportFlavor[];
+    dessertSections: DessertSection[];
 }
 export interface ReportUnitChainRow {
     reportKey:    string;

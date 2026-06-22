@@ -75,13 +75,19 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
         }),
     ]);
 
-    // ── Name → recipe lookups (case-insensitive) ──────────────────────────────
+    // ── Name → recipe lookups (case-insensitive), SPLIT BY TYPE ───────────────
+    // type="base"     rows describe a DISH    → matched against the sold item name.
+    // type="modifier" rows describe a MODIFIER → matched against modifier names.
+    // Keeping them separate is what stops e.g. a "Duck Panang" modifier row (Extra
+    // Chicken) from being added to every Duck Panang dish sold.
     interface RawComp { ingredientId: string; name: string; portionSize: number; portionUnit: string }
-    const psByName = new Map<string, RawComp[]>();
+    const psBaseByName = new Map<string, RawComp[]>();
+    const psModByName  = new Map<string, RawComp[]>();
     for (const s of standards) {
         if (!s.ingredient) continue;
         const k = String(s.itemName).toLowerCase().trim();
-        (psByName.get(k) ?? psByName.set(k, []).get(k)!).push({
+        const target = String(s.type) === "modifier" ? psModByName : psBaseByName;
+        (target.get(k) ?? target.set(k, []).get(k)!).push({
             ingredientId: s.ingredient.id, name: s.ingredient.name,
             portionSize: num(s.portionSize), portionUnit: s.portionUnit,
         });
@@ -120,15 +126,17 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
         byIng.set(ingredientId, acc);
     };
 
-    // Apply every portion-standard + composite link that matches a given name,
-    // scaled by `count` (orders for a dish, qtySold for a modifier).
-    const applyName = (rawName: string, count: number, d: number) => {
-        if (!(count > 0)) return;
-        const key = rawName.toLowerCase().trim();
-        for (const c of psByName.get(key) ?? []) {
+    const applyStds = (map: Map<string, RawComp[]>, rawName: string, count: number, d: number) => {
+        for (const c of map.get(rawName.toLowerCase().trim()) ?? []) {
             add(c.ingredientId, c.name, c.portionUnit, d, count * c.portionSize, rawName, null);
         }
-        for (const l of linkByName.get(key) ?? []) {
+    };
+
+    // DISH context: base portion standards + composite links (links are dish-level).
+    const applyDish = (rawName: string, count: number, d: number) => {
+        if (!(count > 0)) return;
+        applyStds(psBaseByName, rawName, count, d);
+        for (const l of linkByName.get(rawName.toLowerCase().trim()) ?? []) {
             const batches = l.yieldQty > 0 ? (count * l.usedQty) / l.yieldQty : 0;
             for (const comp of l.components) {
                 add(comp.ingredientId, comp.name, comp.unit, d, batches * comp.qty, rawName, l.compositeName);
@@ -139,9 +147,10 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
     for (const it of items) {
         const d = uploadDow.get(it.uploadId as string);
         if (d == null) continue;
-        applyName(it.itemName as string, num(it.qtySold), d);
+        applyDish(it.itemName as string, num(it.qtySold), d);
+        // MODIFIER context: only modifier-type standards, scaled by the modifier's own qty.
         for (const m of (it.modifiers ?? []) as { modifier: string; qtySold: number }[]) {
-            applyName(m.modifier, num(m.qtySold), d);
+            if (num(m.qtySold) > 0) applyStds(psModByName, m.modifier, num(m.qtySold), d);
         }
     }
 

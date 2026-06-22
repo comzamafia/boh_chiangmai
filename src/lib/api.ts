@@ -633,6 +633,8 @@ export interface UsageReportItem {
 export interface DessertDetailItem {
     itemName: string; byDow: number[]; total: number;
     flavours: { name: string; byDow: number[]; total: number }[];
+    reportKey: string;
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface DessertSection {
     category: string;
@@ -678,6 +680,8 @@ export interface ProteinReportRow {
     id: string; name: string; grouped: boolean; sortOrder: number;
     units: ProteinReportUnit[];
     members: ProteinReportMember[];
+    reportKey: string;
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface ProteinReportResult {
     days: number; dowCounts: number[];
@@ -709,6 +713,8 @@ export interface IngredientUsageRow {
     isProtein: boolean;
     units: IngredientUsageUnit[];
     sources: IngredientUsageSource[];
+    reportKey: string;
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface IngredientUsageResult {
     days: number;

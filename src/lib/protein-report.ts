@@ -37,6 +37,8 @@ export interface ProteinGroupRow {
     sortOrder: number;
     units: ProteinUnit[];      // summed across members
     members: ProteinMember[];  // drill-down
+    reportKey: string;         // unit-chain key ("protein::<groupId>" or "ingredient::<id>")
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface ProteinReportData {
     days: number;
@@ -66,13 +68,19 @@ const toMember = (r: IngredientUsageRow): ProteinMember => ({
 });
 
 export async function buildProteinReport(daysParam: number): Promise<ProteinReportData> {
-    const [usage, groups] = await Promise.all([
+    const [usage, groups, chains] = await Promise.all([
         buildIngredientUsage(daysParam),
         db.proteinGroup.findMany({
             orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
             include: { members: { select: { ingredientId: true } } },
         }),
+        db.reportUnitChain.findMany(),
     ]);
+
+    // Group-level unit chains, keyed "protein::<groupId>".
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chainByKey = new Map<string, any>();
+    for (const c of chains) if (c.reportKey) chainByKey.set(c.reportKey, { base: c.base, relations: c.relations });
 
     const byIngId = new Map<string, IngredientUsageRow>();
     for (const r of usage.ingredients) byIngId.set(r.ingredientId, r);
@@ -88,6 +96,7 @@ export async function buildProteinReport(daysParam: number): Promise<ProteinRepo
             claimed.add(m.ingredientId);     // claimed even with zero usage this window
             if (row) memberRows.push(row);
         }
+        const reportKey = `protein::${g.id}`;
         rows.push({
             id: g.id,
             name: g.name,
@@ -96,10 +105,13 @@ export async function buildProteinReport(daysParam: number): Promise<ProteinRepo
             units: sumUnits(memberRows),
             members: memberRows.map(toMember).sort((a, b) =>
                 (b.units[0]?.total ?? 0) - (a.units[0]?.total ?? 0)),
+            reportKey,
+            chain: chainByKey.get(reportKey) ?? null,
         });
     }
 
     // 2. Ungrouped proteins → one row each, after the groups, by total desc.
+    //    These reuse the ingredient's own chain (shared with the Ingredients tab).
     const ungrouped = usage.ingredients
         .filter(r => r.isProtein && !claimed.has(r.ingredientId))
         .sort((a, b) => (b.units[0]?.total ?? 0) - (a.units[0]?.total ?? 0));
@@ -112,6 +124,8 @@ export async function buildProteinReport(daysParam: number): Promise<ProteinRepo
             sortOrder: baseOrder,
             units: r.units,
             members: [toMember(r)],
+            reportKey: r.reportKey,
+            chain: r.chain,
         });
     }
 

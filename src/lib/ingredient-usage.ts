@@ -36,6 +36,8 @@ export interface IngredientUsageRow {
     isProtein: boolean;
     units: IngredientUsageUnit[];
     sources: IngredientUsageSource[];
+    reportKey: string;   // "ingredient::<id>" — key for its unit-conversion chain
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface IngredientUsageData {
     days: number;
@@ -84,14 +86,20 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
     const uploadIds = uploads.map((u: { id: string }) => u.id);
     if (uploadIds.length === 0) return { days, dowCounts, ingredients: [] };
 
-    const [items, standards, links, allIngredients] = await Promise.all([
+    const [items, standards, links, allIngredients, chains] = await Promise.all([
         db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
         db.portionStandard.findMany({ include: { ingredient: { select: { id: true, name: true } } } }),
         db.menuCompositeLink.findMany({
             include: { composite: { include: { components: { include: { ingredient: { select: { id: true, name: true } } } } } } },
         }),
         db.ingredient.findMany({ select: { id: true, category: { select: { name: true } } } }),
+        db.reportUnitChain.findMany(),
     ]);
+
+    // Per-ingredient unit-conversion chains, keyed "ingredient::<id>".
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chainByKey = new Map<string, any>();
+    for (const c of chains) if (c.reportKey) chainByKey.set(c.reportKey, { base: c.base, relations: c.relations });
 
     // ingredientId → category name (for the protein filter on the Main Protein tab)
     const catByIng = new Map<string, string | null>();
@@ -183,16 +191,21 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
     }
 
     // ── Shape output ──────────────────────────────────────────────────────────
-    const ingredients: IngredientUsageRow[] = [...byIng.entries()].map(([ingredientId, acc]) => ({
-        ingredientId,
-        name: acc.name,
-        categoryName: catByIng.get(ingredientId) ?? null,
-        isProtein: isProteinIng(ingredientId, acc.name),
-        units: [...acc.units.entries()]
-            .map(([unit, byDow]) => ({ unit, byDow, total: byDow.reduce((s, x) => s + x, 0) }))
-            .sort((a, b) => b.total - a.total),
-        sources: [...acc.sources.values()].sort((a, b) => b.total - a.total),
-    })).sort((a, b) => a.name.localeCompare(b.name));
+    const ingredients: IngredientUsageRow[] = [...byIng.entries()].map(([ingredientId, acc]) => {
+        const reportKey = `ingredient::${ingredientId}`;
+        return {
+            ingredientId,
+            name: acc.name,
+            categoryName: catByIng.get(ingredientId) ?? null,
+            isProtein: isProteinIng(ingredientId, acc.name),
+            units: [...acc.units.entries()]
+                .map(([unit, byDow]) => ({ unit, byDow, total: byDow.reduce((s, x) => s + x, 0) }))
+                .sort((a, b) => b.total - a.total),
+            sources: [...acc.sources.values()].sort((a, b) => b.total - a.total),
+            reportKey,
+            chain: chainByKey.get(reportKey) ?? null,
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name));
 
     return { days, dowCounts, ingredients };
 }

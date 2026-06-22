@@ -22,6 +22,8 @@ export interface UsageReportItem {
 export interface DessertDetailItem {
     itemName: string; byDow: number[]; total: number;
     flavours: { name: string; byDow: number[]; total: number }[];
+    reportKey: string;   // "dessert::<category>::<itemName>" — unit-chain key
+    chain: { base: string; relations: { from: string; qty: number; to: string }[] } | null;
 }
 export interface DessertSection {
     category: string;
@@ -217,14 +219,19 @@ export async function buildUsageReport(daysParam: number): Promise<UsageReportDa
     // ── Build dessert sections ──
     const buildDessertSection = (map: Map<string, DessertRaw>, catName: string): DessertSection => {
         const sectionItems: DessertDetailItem[] = [...map.entries()]
-            .map(([itemName, raw]) => ({
-                itemName,
-                byDow: raw.byDow,
-                total: raw.byDow.reduce((s, x) => s + x, 0),
-                flavours: [...raw.flavours.entries()]
-                    .map(([name, byDow]) => ({ name, byDow, total: byDow.reduce((s, x) => s + x, 0) }))
-                    .sort((a, b) => b.total - a.total),
-            }))
+            .map(([itemName, raw]) => {
+                const reportKey = `dessert::${catName}::${itemName}`;
+                return {
+                    itemName,
+                    byDow: raw.byDow,
+                    total: raw.byDow.reduce((s, x) => s + x, 0),
+                    flavours: [...raw.flavours.entries()]
+                        .map(([name, byDow]) => ({ name, byDow, total: byDow.reduce((s, x) => s + x, 0) }))
+                        .sort((a, b) => b.total - a.total),
+                    reportKey,
+                    chain: chainByKey.get(reportKey) ?? null,
+                };
+            })
             .sort((a, b) => b.total - a.total);
         return { category: catName, items: sectionItems };
     };

@@ -59,6 +59,38 @@ function converterFor(item: UsageReportItem) {
     return { units, convert };
 }
 
+// Chain type shared by ingredient/protein/dessert rows.
+type RowChain = { base: string; relations: { from: string; qty: number; to: string }[] } | null;
+
+// Expand a row's per-unit values into all configured units. Values whose unit
+// equals the chain base are converted into every solvable unit; others pass
+// through unchanged. With no chain, returns the values as-is.
+function applyChain(unitVals: { unit: string; v: number }[], chain: RowChain): { u: string; v: number }[] {
+    if (!chain || !chain.base) return unitVals.map(x => ({ u: x.unit, v: x.v }));
+    const perBase = solveChain(chain);
+    const solvable = solvableUnits(chain);
+    const out: { u: string; v: number }[] = [];
+    for (const { unit, v } of unitVals) {
+        if (unit === chain.base) {
+            for (const u of solvable) {
+                const per = perBase[u];
+                if (per != null && per > 0) out.push({ u, v: v / per });
+            }
+        } else {
+            out.push({ u: unit, v });
+        }
+    }
+    return out;
+}
+
+// Synthesize a UsageReportItem so the existing ChainEditor can edit any row's chain.
+function chainItem(reportKey: string, label: string, baseUnit: string, chain: RowChain): UsageReportItem {
+    return {
+        label, reportKey, byDow: [], total: 0,
+        ingredientId: null, portionSize: null, portionUnit: baseUnit, chain,
+    };
+}
+
 export default function UsageReportPage() {
     const { user } = useAuth();
     const canManage = EDIT_ROLES.includes(user?.role ?? "");
@@ -85,29 +117,30 @@ export default function UsageReportPage() {
     const isProteinTab = tab === "protein";
     const isDessert = tab === "dessert";
 
-    // Main Protein tab: protein groups (ingredient roll-up folded into display groups).
-    useEffect(() => {
-        if (!isProteinTab) return;
-        let alive = true;
+    const loadProtein = useCallback(async () => {
         setProtLoading(true);
-        usageReportApi.proteinUsage(days)
-            .then(d => { if (alive) setProtData(d); })
-            .catch(() => { if (alive) setProtData(null); })
-            .finally(() => { if (alive) setProtLoading(false); });
-        return () => { alive = false; };
-    }, [isProteinTab, days]);
-
-    // Ingredients tab: full ingredient roll-up.
-    useEffect(() => {
-        if (!isIng) return;
-        let alive = true;
+        try { setProtData(await usageReportApi.proteinUsage(days)); }
+        catch { setProtData(null); }
+        finally { setProtLoading(false); }
+    }, [days]);
+    const loadIngredient = useCallback(async () => {
         setIngLoading(true);
-        usageReportApi.ingredientUsage(days)
-            .then(d => { if (alive) setIngData(d); })
-            .catch(() => { if (alive) setIngData(null); })
-            .finally(() => { if (alive) setIngLoading(false); });
-        return () => { alive = false; };
-    }, [isIng, days]);
+        try { setIngData(await usageReportApi.ingredientUsage(days)); }
+        catch { setIngData(null); }
+        finally { setIngLoading(false); }
+    }, [days]);
+
+    // Main Protein tab: protein groups (ingredient roll-up folded into display groups).
+    useEffect(() => { if (isProteinTab) loadProtein(); }, [isProteinTab, loadProtein]);
+    // Ingredients tab: full ingredient roll-up.
+    useEffect(() => { if (isIng) loadIngredient(); }, [isIng, loadIngredient]);
+
+    // After a unit-chain edit, refresh whichever tab is showing.
+    const reloadActive = useCallback(async () => {
+        if (isProteinTab) await loadProtein();
+        else if (isIng) await loadIngredient();
+        else await load();
+    }, [isProteinTab, isIng, loadProtein, loadIngredient, load]);
 
     // Protein, Ingredients, and Dessert tabs render rich tables captured to JPG;
     // Curry/Beverage use the order-based UsageTable (+ PDF export).
@@ -223,7 +256,7 @@ export default function UsageReportPage() {
                     <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards first.</CardContent></Card>
                 ) : (
                     <div ref={captureRef} className="space-y-5 bg-background">
-                        <ProteinGroupTable data={protData} />
+                        <ProteinGroupTable data={protData} canManage={canManage} onEditChain={setEditChain} />
                     </div>
                 )
             ) : isIng ? (
@@ -233,7 +266,7 @@ export default function UsageReportPage() {
                     <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards / Composites first.</CardContent></Card>
                 ) : (
                     <div ref={captureRef} className="space-y-5 bg-background">
-                        <IngredientUsageTable data={ingData} />
+                        <IngredientUsageTable data={ingData} canManage={canManage} onEditChain={setEditChain} />
                     </div>
                 )
             ) : loading ? (
@@ -242,7 +275,8 @@ export default function UsageReportPage() {
                 <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports first.</CardContent></Card>
             ) : isDessert ? (
                 <div ref={captureRef} className="space-y-5 bg-background">
-                    <DessertSectionsView sections={data.dessertSections} dowCounts={data.dowCounts} />
+                    <DessertSectionsView sections={data.dessertSections} dowCounts={data.dowCounts}
+                        canManage={canManage} onEditChain={setEditChain} />
                 </div>
             ) : (
                 <div ref={captureRef} className="space-y-5 bg-background">
@@ -252,7 +286,7 @@ export default function UsageReportPage() {
             )}
 
             {editChain && (
-                <ChainEditor item={editChain} onClose={() => setEditChain(null)} onSaved={() => { setEditChain(null); load(); }} />
+                <ChainEditor item={editChain} onClose={() => setEditChain(null)} onSaved={() => { setEditChain(null); reloadActive(); }} />
             )}
         </div>
     );
@@ -336,7 +370,7 @@ function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
 }
 
 // ─── Main Protein (display groups, each summing its member ingredients) ──────
-function ProteinGroupTable({ data }: { data: ProteinReportResult }) {
+function ProteinGroupTable({ data, canManage, onEditChain }: { data: ProteinReportResult; canManage: boolean; onEditChain: (i: UsageReportItem) => void }) {
     const [open, setOpen] = useState<Set<string>>(new Set());
     const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
     const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -365,9 +399,10 @@ function ProteinGroupTable({ data }: { data: ProteinReportResult }) {
                                 const hasData = g.units.some(u => u.total > 0);
                                 const canExpand = g.members.length > 0;
                                 const isOpen = open.has(g.id);
-                                const dayLines = (i: number) => g.units.map(u => ({ u: u.unit, v: u.byDow[i] })).filter(x => x.v > 0);
-                                const totalLines = g.units.map(u => ({ u: u.unit, v: u.total }));
-                                const avgLines   = g.units.map(u => ({ u: u.unit, v: u.total / totalDays }));
+                                const dayLines = (i: number) => applyChain(g.units.map(u => ({ unit: u.unit, v: u.byDow[i] })).filter(x => x.v > 0), g.chain);
+                                const totalLines = applyChain(g.units.map(u => ({ unit: u.unit, v: u.total })), g.chain);
+                                const avgLines   = applyChain(g.units.map(u => ({ unit: u.unit, v: u.total / totalDays })), g.chain);
+                                const baseUnit = g.units[0]?.unit ?? "oz";
                                 return (
                                     <Fragment key={g.id}>
                                         <tr className={`border-t border-border/40 hover:bg-muted/20 align-top ${canExpand ? "cursor-pointer" : ""}`} onClick={() => canExpand && toggle(g.id)}>
@@ -388,7 +423,14 @@ function ProteinGroupTable({ data }: { data: ProteinReportResult }) {
                                             ))}
                                             <td className="py-1.5 px-2 text-right bg-muted/20"><MultiCell lines={avgLines} muted /></td>
                                             <td className="py-1.5 px-2 text-right"><MultiCell lines={totalLines} /></td>
-                                            <td />
+                                            <td className="py-1.5 text-right pr-1">
+                                                {canManage && (
+                                                    <button onClick={e => { e.stopPropagation(); onEditChain(chainItem(g.reportKey, g.name, baseUnit, g.chain)); }}
+                                                        title="Configure units for this item" className="text-muted-foreground hover:text-primary">
+                                                        <Settings2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </td>
                                         </tr>
                                         {isOpen && canExpand && (
                                             <tr className="bg-muted/10">
@@ -429,7 +471,7 @@ function ProteinGroupTable({ data }: { data: ProteinReportResult }) {
 }
 
 // ─── Dessert sections (Desserts + Kids Meal with item detail + modifiers) ────
-function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection[]; dowCounts: number[] }) {
+function DessertSectionsView({ sections, dowCounts, canManage, onEditChain }: { sections: DessertSection[]; dowCounts: number[]; canManage: boolean; onEditChain: (i: UsageReportItem) => void }) {
     const totalDays = Math.max(1, dowCounts.reduce((s, x) => s + x, 0));
     if (sections.length === 0) return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No dessert or kids meal data in this window.</CardContent></Card>;
     return (
@@ -452,21 +494,38 @@ function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection
                                         <th className="text-left py-2 pl-2 sticky left-0 bg-card">Item</th>
                                         {DOW.map((d, i) => <th key={d} className="text-right py-2 px-2">{d}<span className="block text-[8px] opacity-60">×{dowCounts[i] || 0}</span></th>)}
                                         <th className="text-right py-2 px-2">Avg/d</th>
-                                        <th className="text-right py-2 pr-2">Total</th>
+                                        <th className="text-right py-2 px-2">Total</th>
+                                        <th className="w-6" />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sec.items.map(item => (
+                                    {sec.items.map(item => {
+                                        const ch = item.chain;
+                                        return (
                                         <Fragment key={item.itemName}>
                                             <tr className="border-t border-border/40 hover:bg-muted/20 align-top">
                                                 <td className="py-1.5 pl-2 sticky left-0 bg-card font-medium max-w-[200px]">
                                                     <span className="truncate block">{item.itemName}</span>
                                                 </td>
                                                 {item.byDow.map((q, i) => (
-                                                    <td key={i} className="py-1.5 px-2 text-right tabular-nums">{q > 0 ? q : <span className="text-muted-foreground/40">·</span>}</td>
+                                                    <td key={i} className="py-1.5 px-2 text-right tabular-nums">
+                                                        {ch ? <MultiCell lines={applyChain(q > 0 ? [{ unit: "Order", v: q }] : [], ch)} /> : (q > 0 ? q : <span className="text-muted-foreground/40">·</span>)}
+                                                    </td>
                                                 ))}
-                                                <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground bg-muted/20">{fmtChainQty(item.total / totalDays)}</td>
-                                                <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{item.total}</td>
+                                                <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground bg-muted/20">
+                                                    {ch ? <MultiCell muted lines={applyChain([{ unit: "Order", v: item.total / totalDays }], ch)} /> : fmtChainQty(item.total / totalDays)}
+                                                </td>
+                                                <td className="py-1.5 px-2 text-right tabular-nums font-semibold">
+                                                    {ch ? <MultiCell lines={applyChain([{ unit: "Order", v: item.total }], ch)} /> : item.total}
+                                                </td>
+                                                <td className="py-1.5 text-right pr-1">
+                                                    {canManage && (
+                                                        <button onClick={() => onEditChain(chainItem(item.reportKey, item.itemName, "Order", item.chain))}
+                                                            title="Configure units for this item" className="text-muted-foreground hover:text-primary">
+                                                            <Settings2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                             {item.flavours.length > 0 && item.flavours.map(f => (
                                                 <tr key={f.name} className="bg-muted/10 hover:bg-muted/20">
@@ -478,10 +537,12 @@ function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection
                                                     ))}
                                                     <td className="py-1 px-2 text-right tabular-nums text-[11px] text-muted-foreground bg-muted/20">{fmtChainQty(f.total / totalDays)}</td>
                                                     <td className="py-1 pr-2 text-right tabular-nums text-[11px] font-medium text-muted-foreground">{f.total}</td>
+                                                    <td />
                                                 </tr>
                                             ))}
                                         </Fragment>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -493,7 +554,7 @@ function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection
 }
 
 // ─── Ingredient roll-up table (aggregated across all dishes, drill-down) ─────
-function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
+function IngredientUsageTable({ data, canManage, onEditChain }: { data: IngredientUsageResult; canManage: boolean; onEditChain: (i: UsageReportItem) => void }) {
     const [open, setOpen] = useState<Set<string>>(new Set());
     const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
     const toggle = (id: string) => setOpen(s => {
@@ -525,9 +586,10 @@ function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
                         <tbody>
                             {rows.map(ing => {
                                 const isOpen = open.has(ing.ingredientId);
-                                const dayLines = (i: number) => ing.units.map(u => ({ u: u.unit, v: u.byDow[i] })).filter(x => x.v > 0);
-                                const totalLines = ing.units.map(u => ({ u: u.unit, v: u.total }));
-                                const avgLines   = ing.units.map(u => ({ u: u.unit, v: u.total / totalDays }));
+                                const dayLines = (i: number) => applyChain(ing.units.map(u => ({ unit: u.unit, v: u.byDow[i] })).filter(x => x.v > 0), ing.chain);
+                                const totalLines = applyChain(ing.units.map(u => ({ unit: u.unit, v: u.total })), ing.chain);
+                                const avgLines   = applyChain(ing.units.map(u => ({ unit: u.unit, v: u.total / totalDays })), ing.chain);
+                                const baseUnit = ing.units[0]?.unit ?? "oz";
                                 return (
                                     <Fragment key={ing.ingredientId}>
                                         <tr className="border-t border-border/40 hover:bg-muted/20 align-top cursor-pointer" onClick={() => toggle(ing.ingredientId)}>
@@ -542,7 +604,14 @@ function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
                                             ))}
                                             <td className="py-1.5 px-2 text-right bg-muted/20"><MultiCell lines={avgLines} muted /></td>
                                             <td className="py-1.5 px-2 text-right"><MultiCell lines={totalLines} /></td>
-                                            <td />
+                                            <td className="py-1.5 text-right pr-1">
+                                                {canManage && (
+                                                    <button onClick={e => { e.stopPropagation(); onEditChain(chainItem(ing.reportKey, ing.name, baseUnit, ing.chain)); }}
+                                                        title="Configure units for this item" className="text-muted-foreground hover:text-primary">
+                                                        <Settings2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </td>
                                         </tr>
                                         {isOpen && (
                                             <tr className="bg-muted/10">

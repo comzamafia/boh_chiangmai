@@ -84,6 +84,7 @@ model Ingredient {
   ingredientSuppliers IngredientSupplier[]
   portionStandards    PortionStandard[]
   compositeComponents CompositeComponent[]
+  proteinGroupMembers ProteinGroupMember[]
 
   @@map("ingredients")
 }
@@ -855,4 +856,33 @@ model MenuCompositeLink {
   @@index([itemName])
   @@index([compositeId])
   @@map("menu_composite_links")
+}
+
+// Protein display groups for the Usage Report's Main Protein tab. A group is a
+// named protein (e.g. "Chicken", "CM Wings") whose usage = the sum of its member
+// ingredients across every dish/modifier/composite (same figures as the
+// Ingredients tab, just consolidated under one display name and order).
+model ProteinGroup {
+  id        String               @id @default(cuid())
+  name      String               @unique
+  sortOrder Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  members   ProteinGroupMember[]
+
+  @@map("protein_groups")
+}
+
+model ProteinGroupMember {
+  id           String       @id @default(cuid())
+  groupId      String
+  group        ProteinGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, ingredientId])
+  @@index([groupId])
+  @@index([ingredientId])
+  @@map("protein_group_members")
 }

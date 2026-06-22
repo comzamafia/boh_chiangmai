@@ -16,28 +16,15 @@ import {
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
-    type DessertSection, type DessertDetailItem,
-    type IngredientUsageResult, type IngredientUsageRow,
+    type DessertSection,
+    type IngredientUsageResult,
+    type ProteinReportResult,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
 import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-// Display order for the Main Protein tab. Proteins not listed here (but in the
-// "Proteins" category) sort after these, by total desc.
-const PROTEIN_ORDER = [
-    "chicken", "beef", "shrimp", "lobster", "squid", "soft shell crab",
-    "crying tiger steak", "duck", "cm wings", "gai yaang.",
-    "kfc ( korean fried cauliflower)", "kfc (korean fried cauliflower)",
-    "wagyu khao soi dumplings", "lemongrass chicken dumplings",
-    "crispy fish", "salmon crudo", "thai tuna ceviche",
-];
-const proteinRank = (name: string) => {
-    const i = PROTEIN_ORDER.indexOf(name.toLowerCase().trim());
-    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
-};
 type Tab = "protein" | "curry" | "dessert" | "beverage" | "ingredients";
 const TABS: { key: Tab; label: string; icon: React.ElementType; color: string }[] = [
     { key: "protein",     label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
@@ -83,6 +70,8 @@ export default function UsageReportPage() {
     const [editChain, setEditChain] = useState<UsageReportItem | null>(null);
     const [ingData, setIngData] = useState<IngredientUsageResult | null>(null);
     const [ingLoading, setIngLoading] = useState(false);
+    const [protData, setProtData] = useState<ProteinReportResult | null>(null);
+    const [protLoading, setProtLoading] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -95,12 +84,22 @@ export default function UsageReportPage() {
     const isIng = tab === "ingredients";
     const isProteinTab = tab === "protein";
     const isDessert = tab === "dessert";
-    // Both the Main Protein and Ingredients tabs share the ingredient roll-up engine.
-    const needsIng = isIng || isProteinTab;
 
-    // Lazy-load the ingredient roll-up only when a tab that needs it is open (or days change).
+    // Main Protein tab: protein groups (ingredient roll-up folded into display groups).
     useEffect(() => {
-        if (!needsIng) return;
+        if (!isProteinTab) return;
+        let alive = true;
+        setProtLoading(true);
+        usageReportApi.proteinUsage(days)
+            .then(d => { if (alive) setProtData(d); })
+            .catch(() => { if (alive) setProtData(null); })
+            .finally(() => { if (alive) setProtLoading(false); });
+        return () => { alive = false; };
+    }, [isProteinTab, days]);
+
+    // Ingredients tab: full ingredient roll-up.
+    useEffect(() => {
+        if (!isIng) return;
         let alive = true;
         setIngLoading(true);
         usageReportApi.ingredientUsage(days)
@@ -108,13 +107,15 @@ export default function UsageReportPage() {
             .catch(() => { if (alive) setIngData(null); })
             .finally(() => { if (alive) setIngLoading(false); });
         return () => { alive = false; };
-    }, [needsIng, days]);
+    }, [isIng, days]);
 
-    const rows = (!needsIng && !isDessert && data) ? data[tab as "curry" | "beverage"] : [];
+    // Protein, Ingredients, and Dessert tabs render rich tables captured to JPG;
+    // Curry/Beverage use the order-based UsageTable (+ PDF export).
+    const isDomCapture = isProteinTab || isIng || isDessert;
+    const rows = (!isDomCapture && data) ? data[tab as "curry" | "beverage"] : [];
 
     function exportPDF() {
-        // Protein, Ingredients, and Dessert tabs export via JPG (DOM capture).
-        if (!data || needsIng || isDessert) return;
+        if (!data || isDomCapture) return;
         const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
@@ -184,10 +185,10 @@ export default function UsageReportPage() {
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
                         ))}
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={needsIng ? !ingData : !data}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={isProteinTab ? !protData : isIng ? !ingData : !data}>
                         <ImageIcon className="w-4 h-4" /> JPG
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || needsIng || isDessert} title={needsIng || isDessert ? "Use JPG for this tab" : undefined}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isDomCapture} title={isDomCapture ? "Use JPG for this tab" : undefined}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
                 </div>
@@ -200,7 +201,7 @@ export default function UsageReportPage() {
                     const n = t.key === "ingredients"
                         ? (ingData?.ingredients.length ?? 0)
                         : t.key === "protein"
-                            ? (ingData?.ingredients.filter(x => x.isProtein).length ?? 0)
+                            ? (protData?.groups.length ?? 0)
                             : t.key === "dessert"
                                 ? (data?.dessertSections.reduce((s, sec) => s + sec.items.length, 0) ?? 0)
                                 : (data ? data[t.key as "curry" | "beverage"].length : 0);
@@ -215,14 +216,24 @@ export default function UsageReportPage() {
                 })}
             </div>
 
-            {needsIng ? (
+            {isProteinTab ? (
+                protLoading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+                ) : !protData ? (
+                    <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards first.</CardContent></Card>
+                ) : (
+                    <div ref={captureRef} className="space-y-5 bg-background">
+                        <ProteinGroupTable data={protData} />
+                    </div>
+                )
+            ) : isIng ? (
                 ingLoading ? (
                     <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
                 ) : !ingData ? (
                     <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards / Composites first.</CardContent></Card>
                 ) : (
                     <div ref={captureRef} className="space-y-5 bg-background">
-                        <IngredientUsageTable data={ingData} proteinOnly={isProteinTab} />
+                        <IngredientUsageTable data={ingData} />
                     </div>
                 )
             ) : loading ? (
@@ -324,6 +335,99 @@ function UsageTable({ rows, dowCounts, canManage, onEditChain }: {
     );
 }
 
+// ─── Main Protein (display groups, each summing its member ingredients) ──────
+function ProteinGroupTable({ data }: { data: ProteinReportResult }) {
+    const [open, setOpen] = useState<Set<string>>(new Set());
+    const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
+    const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+    if (data.groups.length === 0) {
+        return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
+            No protein usage yet. Set up protein groups in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards → Protein Groups</a> (click <strong>Quick start</strong> to create the default 16), or tag ingredients with the <strong>Proteins</strong> category.
+        </CardContent></Card>;
+    }
+    return (
+        <Card>
+            <CardContent className="px-2 sm:px-4 py-3">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs" style={{ minWidth: 760 }}>
+                        <thead>
+                            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                <th className="text-left py-2 pl-1 sticky left-0 bg-card">Protein</th>
+                                {DOW.map((d, i) => <th key={d} className="text-right py-2 px-2">{d}<span className="block text-[8px] opacity-60">×{data.dowCounts[i] || 0}</span></th>)}
+                                <th className="text-right py-2 px-2">Avg/d</th>
+                                <th className="text-right py-2 px-2">Total</th>
+                                <th className="w-6" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.groups.map(g => {
+                                const hasData = g.units.some(u => u.total > 0);
+                                const canExpand = g.members.length > 0;
+                                const isOpen = open.has(g.id);
+                                const dayLines = (i: number) => g.units.map(u => ({ u: u.unit, v: u.byDow[i] })).filter(x => x.v > 0);
+                                const totalLines = g.units.map(u => ({ u: u.unit, v: u.total }));
+                                const avgLines   = g.units.map(u => ({ u: u.unit, v: u.total / totalDays }));
+                                return (
+                                    <Fragment key={g.id}>
+                                        <tr className={`border-t border-border/40 hover:bg-muted/20 align-top ${canExpand ? "cursor-pointer" : ""}`} onClick={() => canExpand && toggle(g.id)}>
+                                            <td className="py-1.5 pl-1 sticky left-0 bg-card font-medium max-w-[200px]">
+                                                <div className="flex items-start gap-1">
+                                                    {canExpand
+                                                        ? (isOpen ? <ChevronDown className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />)
+                                                        : <span className="w-3 shrink-0" />}
+                                                    <span className="truncate">{g.name}</span>
+                                                    {!g.grouped && <span className="text-[9px] px-1 rounded bg-muted text-muted-foreground shrink-0" title="Not assigned to a group">other</span>}
+                                                </div>
+                                                {g.grouped && g.members.length > 0 && (
+                                                    <span className="block text-[10px] text-muted-foreground/70 pl-4 truncate">{g.members.map(m => m.name).join(", ")}</span>
+                                                )}
+                                            </td>
+                                            {Array.from({ length: 7 }).map((_, i) => (
+                                                <td key={i} className="py-1.5 px-2 text-right"><MultiCell lines={dayLines(i)} /></td>
+                                            ))}
+                                            <td className="py-1.5 px-2 text-right bg-muted/20"><MultiCell lines={avgLines} muted /></td>
+                                            <td className="py-1.5 px-2 text-right"><MultiCell lines={totalLines} /></td>
+                                            <td />
+                                        </tr>
+                                        {isOpen && canExpand && (
+                                            <tr className="bg-muted/10">
+                                                <td colSpan={11} className="px-3 py-2 space-y-2">
+                                                    {!hasData && <p className="text-[11px] text-amber-600">No usage in this window — check the ingredient links in Portion Standards.</p>}
+                                                    {g.members.map(m => (
+                                                        <div key={m.ingredientId} className="text-[11px]">
+                                                            <span className="font-medium">{m.name}</span>
+                                                            <span className="text-muted-foreground"> — {m.units.map(u => `${fmtChainQty(u.total)} ${u.unit}`).join(", ") || "0"}</span>
+                                                            {m.sources.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1 mt-0.5 pl-2">
+                                                                    {m.sources.map((s, i) => (
+                                                                        <span key={i} className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-0.5 text-[10px]">
+                                                                            <span>{s.label}</span>
+                                                                            {s.via && <span className="text-cyan-600 dark:text-cyan-400">via {s.via}</span>}
+                                                                            <span className="tabular-nums text-muted-foreground">{fmtChainQty(s.total)} {s.unit}</span>
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                    Each protein is summed across <strong>every</strong> dish, modifier, add-on, and composite it appears in (same figures as the Ingredients tab). Rows tagged <span className="px-1 rounded bg-muted">other</span> are proteins not yet assigned to a group — set groups up in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards → Protein Groups</a>.
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
 // ─── Dessert sections (Desserts + Kids Meal with item detail + modifiers) ────
 function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection[]; dowCounts: number[] }) {
     const totalDays = Math.max(1, dowCounts.reduce((s, x) => s + x, 0));
@@ -389,32 +493,18 @@ function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection
 }
 
 // ─── Ingredient roll-up table (aggregated across all dishes, drill-down) ─────
-function IngredientUsageTable({ data, proteinOnly = false }: { data: IngredientUsageResult; proteinOnly?: boolean }) {
+function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
     const [open, setOpen] = useState<Set<string>>(new Set());
     const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
     const toggle = (id: string) => setOpen(s => {
         const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
     });
 
-    // Main Protein tab: show only protein ingredients, ordered by PROTEIN_ORDER
-    // (then any remaining proteins by total). Otherwise: all ingredients by name.
-    const rows = proteinOnly
-        ? data.ingredients
-            .filter(x => x.isProtein)
-            .sort((a, b) => {
-                const ra = proteinRank(a.name), rb = proteinRank(b.name);
-                if (ra !== rb) return ra - rb;
-                const ta = a.units.reduce((s, u) => s + u.total, 0);
-                const tb = b.units.reduce((s, u) => s + u.total, 0);
-                return tb - ta;
-            })
-        : data.ingredients;
+    const rows = data.ingredients;
 
     if (rows.length === 0) {
         return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
-            {proteinOnly
-                ? <>No protein usage yet. Tag ingredients with the <strong>Proteins</strong> category and link menu items in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a>.</>
-                : <>No ingredient usage yet. Link menu items to ingredients in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a> (and define Composites there).</>}
+            No ingredient usage yet. Link menu items to ingredients in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a> (and define Composites there).
         </CardContent></Card>;
     }
 
@@ -477,9 +567,7 @@ function IngredientUsageTable({ data, proteinOnly = false }: { data: IngredientU
                     </table>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-2">
-                    {proteinOnly
-                        ? <>Each protein is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes) — same figures as the Ingredients tab. Click a row to see where it came from.</>
-                        : <>Each ingredient is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes). Click a row to see where it came from.</>}
+                    Each ingredient is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes). Click a row to see where it came from.
                 </p>
             </CardContent>
         </Card>

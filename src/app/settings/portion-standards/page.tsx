@@ -23,6 +23,7 @@ import { portionStandardsApi, ingredientsApi, type PortionStandard, type Ingredi
 import { useAuth } from "@/components/auth-provider";
 import CompositeManager from "./composite-manager";
 import UsageAuditCard from "./audit-card";
+import ProteinGroupManager from "./protein-group-manager";
 import MenuNamePicker from "@/components/menu-name-picker";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
@@ -737,6 +738,9 @@ export default function PortionStandardsPage() {
                     <DialogFooter><Button size="sm" onClick={() => setImportResult(null)}>Done</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ── Protein groups (Main Protein tab) ── */}
+            {!loading && <ProteinGroupManager ingredients={ingredients} canManage={canManage} />}
 
             {/* ── Composites + combined settings export/import ── */}
             {!loading && <CompositeManager ingredients={ingredients} canManage={canManage} />}

@@ -658,6 +658,45 @@ export const usageReportApi = {
         apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ reportKey, base, relations }) }),
     ingredientUsage: (days = 7) =>
         apiFetch<IngredientUsageResult>(`/reports/ingredient-usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+    proteinUsage: (days = 7) =>
+        apiFetch<ProteinReportResult>(`/reports/protein-usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+};
+
+// ─── Protein display groups (Main Protein tab) ──────────────────────────────
+export interface ProteinGroupMember { id?: string; ingredientId: string; ingredient?: { id: string; name: string; recipeUnit?: string } }
+export interface ProteinGroup {
+    id: string; name: string; sortOrder: number;
+    members: ProteinGroupMember[];
+}
+export interface ProteinReportUnit { unit: string; byDow: number[]; total: number }
+export interface ProteinReportMember {
+    ingredientId: string; name: string;
+    units: ProteinReportUnit[];
+    sources: { label: string; via: string | null; unit: string; total: number }[];
+}
+export interface ProteinReportRow {
+    id: string; name: string; grouped: boolean; sortOrder: number;
+    units: ProteinReportUnit[];
+    members: ProteinReportMember[];
+}
+export interface ProteinReportResult {
+    days: number; dowCounts: number[];
+    groups: ProteinReportRow[];
+}
+export interface ProteinQuickStartResult {
+    groups: ProteinGroup[];
+    assigned: { ingredient: string; group: string }[];
+    unmatched: string[];
+}
+export const proteinGroupApi = {
+    list: () => apiFetch<ProteinGroup[]>("/protein-groups", { cache: "no-store" }),
+    create: (data: { name: string; sortOrder?: number; ingredientIds?: string[] }) =>
+        apiFetch<ProteinGroup>("/protein-groups", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; sortOrder?: number; ingredientIds?: string[] }) =>
+        apiFetch<ProteinGroup>(`/protein-groups/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) => apiFetch<void>(`/protein-groups/${id}`, { method: "DELETE" }),
+    quickStart: (autoMap = true) =>
+        apiFetch<ProteinQuickStartResult>("/protein-groups/quick-start", { method: "POST", body: JSON.stringify({ autoMap }) }),
 };
 
 // ─── Ingredient-level usage (aggregated across all dishes) ──────────────────

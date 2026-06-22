@@ -1014,3 +1014,25 @@ DO $$ BEGIN
   ALTER TABLE "menu_composite_links" ADD CONSTRAINT "menu_composite_links_compositeId_fkey" FOREIGN KEY ("compositeId") REFERENCES "composite_recipes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), 'fa32bb54d0fd1c5e5ac0f605c82ae2f507961127b6f09a0e1b7fd674516af965', now(), '20260610120000_composite_recipes', now(), 1) ON CONFLICT DO NOTHING;
+
+-- ── Protein display groups (migration 20260622120000_protein_groups) ─────────
+CREATE TABLE IF NOT EXISTS "protein_groups" (
+    "id" TEXT NOT NULL, "name" TEXT NOT NULL, "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "protein_groups_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "protein_groups_name_key" ON "protein_groups"("name");
+CREATE TABLE IF NOT EXISTS "protein_group_members" (
+    "id" TEXT NOT NULL, "groupId" TEXT NOT NULL, "ingredientId" TEXT NOT NULL,
+    CONSTRAINT "protein_group_members_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "protein_group_members_groupId_ingredientId_key" ON "protein_group_members"("groupId", "ingredientId");
+CREATE INDEX IF NOT EXISTS "protein_group_members_groupId_idx" ON "protein_group_members"("groupId");
+CREATE INDEX IF NOT EXISTS "protein_group_members_ingredientId_idx" ON "protein_group_members"("ingredientId");
+DO $$ BEGIN
+  ALTER TABLE "protein_group_members" ADD CONSTRAINT "protein_group_members_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "protein_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "protein_group_members" ADD CONSTRAINT "protein_group_members_ingredientId_fkey" FOREIGN KEY ("ingredientId") REFERENCES "ingredients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","started_at","applied_steps_count") VALUES (gen_random_uuid(), 'fcb39ad9a0575e0cc97874540d3a2e99d67d95ebeff83570c9ff55245102244e', now(), '20260622120000_protein_groups', now(), 1) ON CONFLICT DO NOTHING;

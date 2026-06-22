@@ -680,6 +680,19 @@ export interface MenuCompositeLink {
     id: string; itemName: string; compositeId: string; qty: number; unit: string; notes: string | null;
     composite?: { id: string; name: string; yieldQty: number; yieldUnit: string };
 }
+export interface UsageAuditResult {
+    havePmix: boolean;
+    counts: { pmixItems: number; pmixModifiers: number };
+    total: number;
+    duplicates: { itemName: string; type: string; ingredientName: string; count: number }[];
+    baseNameMismatch: { itemName: string; ingredientName: string }[];
+    modifierNameMismatch: { itemName: string; ingredientName: string }[];
+    linkNameMismatch: { itemName: string; compositeName: string }[];
+}
+export const usageSettingsApi = {
+    audit: () => apiFetch<UsageAuditResult>(`/usage-settings/audit?_t=${Date.now()}`, { cache: "no-store" }),
+};
+
 export const compositeApi = {
     list:   () => apiFetch<CompositeRecipe[]>("/composites", { cache: "no-store" }),
     create: (body: Partial<CompositeRecipe>) => apiFetch<CompositeRecipe>("/composites", { method: "POST", body: JSON.stringify(body) }),

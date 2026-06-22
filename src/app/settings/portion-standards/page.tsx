@@ -22,6 +22,7 @@ import {
 import { portionStandardsApi, ingredientsApi, type PortionStandard, type Ingredient } from "@/lib/api";
 import { useAuth } from "@/components/auth-provider";
 import CompositeManager from "./composite-manager";
+import UsageAuditCard from "./audit-card";
 import MenuNamePicker from "@/components/menu-name-picker";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
@@ -368,6 +369,9 @@ export default function PortionStandardsPage() {
                     </p>
                 </div>
             </div>
+
+            {/* ── Auto data-quality audit ── */}
+            {canManage && <UsageAuditCard />}
 
             {/* ── Stats ── */}
             {standards.length > 0 && (

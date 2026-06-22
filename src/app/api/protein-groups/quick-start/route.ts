@@ -30,10 +30,13 @@ export const DEFAULT_PROTEIN_GROUPS = [
 ];
 
 // Keyword → group, most specific first. Returns the group name or null.
+// Order matters: e.g. "Beef NY steak" must hit Crying Tiger before the Beef rule,
+// and "Chicken - Boneless Thigh" must hit Gai Yaang before the Chicken rule.
 const NON_PROTEIN = /\b(sauce|powder|paste|oil|stock|broth|seasoning|marinade|glaze|dressing)\b/i;
 function matchGroup(rawName: string): string | null {
     const n = rawName.toLowerCase();
     if (NON_PROTEIN.test(n)) return null;
+    if (/crying\s*tiger|ny\s*steak/.test(n)) return "Crying Tiger Steak";
     if (/wagyu|gyoza/.test(n) || (/dumpling/.test(n) && /beef/.test(n))) return "Wagyu Khao Soi Dumplings";
     if (/dumpling/.test(n) && (/lemongrass|leamon\s*grass|lemon\s*grass/.test(n) || /chicken/.test(n))) return "Lemongrass Chicken Dumplings";
     if (/cauliflower/.test(n)) return "KFC ( Korean Fried Cauliflower)";
@@ -44,8 +47,7 @@ function matchGroup(rawName: string): string | null {
     if (/salmon/.test(n)) return "Salmon Crudo";
     if (/tuna/.test(n)) return "Thai Tuna Ceviche";
     if (/basa|tilapia|\bcod\b|crispy\s*fish|\bfish\b/.test(n)) return "Crispy Fish";
-    if (/crying\s*tiger/.test(n)) return "Crying Tiger Steak";
-    if (/gai\s*ya?ang/.test(n)) return "Gai Yaang.";
+    if (/gai\s*ya?ang|boneless\s*thigh/.test(n)) return "Gai Yaang.";
     if (/duck/.test(n)) return "Duck";
     if (/\bwing/.test(n)) return "CM Wings";
     if (/beef|brasied|braised/.test(n)) return "Beef";

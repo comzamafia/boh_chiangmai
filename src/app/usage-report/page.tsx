@@ -21,7 +21,7 @@ import {
     type ProteinReportResult,
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
-import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report-pdf";
+import { exportUsageReportPDF } from "@/lib/usage-report-pdf";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -142,13 +142,75 @@ export default function UsageReportPage() {
         else await load();
     }, [isProteinTab, isIng, loadProtein, loadIngredient, load]);
 
-    // Protein, Ingredients, and Dessert tabs render rich tables captured to JPG;
-    // Curry/Beverage use the order-based UsageTable (+ PDF export).
     const isDomCapture = isProteinTab || isIng || isDessert;
     const rows = (!isDomCapture && data) ? data[tab as "curry" | "beverage"] : [];
 
+    // Whether the active tab has data ready to export.
+    const canExport = isProteinTab ? !!protData : isIng ? !!ingData : !!data;
+
+    // Export the CURRENT tab to PDF. Every tab now supports PDF — each builds the
+    // generic { sections, iceCream } payload exportUsageReportPDF expects.
     function exportPDF() {
-        if (!data || isDomCapture) return;
+        const tabLabel = TABS.find(t => t.key === tab)?.label ?? "Usage";
+        const linesToStr = (lines: { u: string; v: number }[]) => lines.map(l => `${fmtChainQty(l.v)} ${l.u}`).join("\n");
+
+        // Protein groups + Ingredients share the same { units, chain } row shape.
+        const unitRowToPdf = (label: string, units: { unit: string; byDow: number[]; total: number }[], chain: RowChain, totalDays: number) => ({
+            label,
+            dayCells: Array.from({ length: 7 }).map((_, i) =>
+                linesToStr(applyChain(units.map(u => ({ unit: u.unit, v: u.byDow[i] })).filter(x => x.v > 0), chain))),
+            dayOrders: Array.from({ length: 7 }).map((_, i) => units[0]?.byDow[i] ?? 0),
+            total: linesToStr(applyChain(units.map(u => ({ unit: u.unit, v: u.total })), chain)),
+            avg: linesToStr(applyChain(units.map(u => ({ unit: u.unit, v: u.total / totalDays })), chain)),
+        });
+
+        if (isProteinTab) {
+            if (!protData) return;
+            const totalDays = Math.max(1, protData.dowCounts.reduce((s, x) => s + x, 0));
+            exportUsageReportPDF({
+                days: protData.days, dowCounts: protData.dowCounts, iceCream: [], fileLabel: tabLabel,
+                sections: [{ title: tabLabel, rows: protData.groups.map(g => unitRowToPdf(g.name, g.units, g.chain, totalDays)) }],
+            });
+            return;
+        }
+        if (isIng) {
+            if (!ingData) return;
+            const totalDays = Math.max(1, ingData.dowCounts.reduce((s, x) => s + x, 0));
+            exportUsageReportPDF({
+                days: ingData.days, dowCounts: ingData.dowCounts, iceCream: [], fileLabel: tabLabel,
+                sections: [{ title: tabLabel, rows: ingData.ingredients.map(ing => unitRowToPdf(ing.name, ing.units, ing.chain, totalDays)) }],
+            });
+            return;
+        }
+        if (isDessert) {
+            if (!data) return;
+            const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
+            const sections = data.dessertSections.map(sec => ({
+                title: sec.category,
+                rows: sec.items.flatMap(item => {
+                    const itemRow = {
+                        label: item.itemName,
+                        dayCells: item.byDow.map(q => item.chain ? (q > 0 ? linesToStr(applyChain([{ unit: "Order", v: q }], item.chain)) : "") : (q > 0 ? String(q) : "")),
+                        dayOrders: item.byDow.map(q => q > 0 ? q : null),
+                        total: item.chain ? linesToStr(applyChain([{ unit: "Order", v: item.total }], item.chain)) : String(item.total),
+                        avg: item.chain ? linesToStr(applyChain([{ unit: "Order", v: item.total / totalDays }], item.chain)) : fmtChainQty(item.total / totalDays),
+                    };
+                    const flavourRows = item.flavours.map(f => ({
+                        label: `   ↳ ${f.name}`,
+                        dayCells: f.byDow.map(q => q > 0 ? String(q) : ""),
+                        dayOrders: f.byDow.map(q => q > 0 ? q : null),
+                        total: String(f.total),
+                        avg: fmtChainQty(f.total / totalDays),
+                    }));
+                    return [itemRow, ...flavourRows];
+                }),
+            }));
+            exportUsageReportPDF({ days: data.days, dowCounts: data.dowCounts, sections, iceCream: [], fileLabel: tabLabel });
+            return;
+        }
+
+        // Curry / Beverage (order-based).
+        if (!data) return;
         const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
@@ -166,14 +228,11 @@ export default function UsageReportPage() {
                 };
             }),
         });
-        const tabLabel = TABS.find(t => t.key === tab)?.label ?? "Usage";
-        const payload: UsageReportExport = {
+        exportUsageReportPDF({
             days: data.days, dowCounts: data.dowCounts,
             sections: [sectionFor(tabLabel, data[tab as "curry" | "beverage"])],
-            iceCream: [],
-            fileLabel: tabLabel,
-        };
-        exportUsageReportPDF(payload);
+            iceCream: [], fileLabel: tabLabel,
+        });
     }
 
     const captureRef = useRef<HTMLDivElement>(null);
@@ -218,10 +277,10 @@ export default function UsageReportPage() {
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
                         ))}
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={isProteinTab ? !protData : isIng ? !ingData : !data}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={!canExport}>
                         <ImageIcon className="w-4 h-4" /> JPG
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isDomCapture} title={isDomCapture ? "Use JPG for this tab" : undefined}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!canExport}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
                 </div>

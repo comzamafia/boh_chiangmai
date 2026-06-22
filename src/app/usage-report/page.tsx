@@ -24,6 +24,20 @@ import { exportUsageReportPDF, type UsageReportExport } from "@/lib/usage-report
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// Display order for the Main Protein tab. Proteins not listed here (but in the
+// "Proteins" category) sort after these, by total desc.
+const PROTEIN_ORDER = [
+    "chicken", "beef", "shrimp", "lobster", "squid", "soft shell crab",
+    "crying tiger steak", "duck", "cm wings", "gai yaang.",
+    "kfc ( korean fried cauliflower)", "kfc (korean fried cauliflower)",
+    "wagyu khao soi dumplings", "lemongrass chicken dumplings",
+    "crispy fish", "salmon crudo", "thai tuna ceviche",
+];
+const proteinRank = (name: string) => {
+    const i = PROTEIN_ORDER.indexOf(name.toLowerCase().trim());
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+};
 type Tab = "protein" | "curry" | "dessert" | "beverage" | "ingredients";
 const TABS: { key: Tab; label: string; icon: React.ElementType; color: string }[] = [
     { key: "protein",     label: "Main Protein",  icon: Beef,     color: "text-rose-600" },
@@ -79,11 +93,14 @@ export default function UsageReportPage() {
     useEffect(() => { load(); }, [load]);
 
     const isIng = tab === "ingredients";
+    const isProteinTab = tab === "protein";
     const isDessert = tab === "dessert";
+    // Both the Main Protein and Ingredients tabs share the ingredient roll-up engine.
+    const needsIng = isIng || isProteinTab;
 
-    // Lazy-load the ingredient roll-up only when its tab is open (or days change).
+    // Lazy-load the ingredient roll-up only when a tab that needs it is open (or days change).
     useEffect(() => {
-        if (!isIng) return;
+        if (!needsIng) return;
         let alive = true;
         setIngLoading(true);
         usageReportApi.ingredientUsage(days)
@@ -91,12 +108,13 @@ export default function UsageReportPage() {
             .catch(() => { if (alive) setIngData(null); })
             .finally(() => { if (alive) setIngLoading(false); });
         return () => { alive = false; };
-    }, [isIng, days]);
+    }, [needsIng, days]);
 
-    const rows = (!isIng && !isDessert && data) ? data[tab as "protein" | "curry" | "beverage"] : [];
+    const rows = (!needsIng && !isDessert && data) ? data[tab as "curry" | "beverage"] : [];
 
     function exportPDF() {
-        if (!data || isIng || isDessert) return;   // Ingredients + Dessert tabs export via JPG (DOM capture)
+        // Protein, Ingredients, and Dessert tabs export via JPG (DOM capture).
+        if (!data || needsIng || isDessert) return;
         const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
         const sectionFor = (title: string, items: UsageReportItem[]) => ({
             title,
@@ -117,7 +135,7 @@ export default function UsageReportPage() {
         const tabLabel = TABS.find(t => t.key === tab)?.label ?? "Usage";
         const payload: UsageReportExport = {
             days: data.days, dowCounts: data.dowCounts,
-            sections: [sectionFor(tabLabel, data[tab as "protein" | "curry" | "beverage"])],
+            sections: [sectionFor(tabLabel, data[tab as "curry" | "beverage"])],
             iceCream: [],
             fileLabel: tabLabel,
         };
@@ -166,10 +184,10 @@ export default function UsageReportPage() {
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
                         ))}
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={isIng ? !ingData : !data}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={needsIng ? !ingData : !data}>
                         <ImageIcon className="w-4 h-4" /> JPG
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || isIng || isDessert} title={isIng || isDessert ? "Use JPG for this tab" : undefined}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!data || needsIng || isDessert} title={needsIng || isDessert ? "Use JPG for this tab" : undefined}>
                         <FileDown className="w-4 h-4" /> PDF
                     </Button>
                 </div>
@@ -181,9 +199,11 @@ export default function UsageReportPage() {
                     const Icon = t.icon; const active = tab === t.key;
                     const n = t.key === "ingredients"
                         ? (ingData?.ingredients.length ?? 0)
-                        : t.key === "dessert"
-                            ? (data?.dessertSections.reduce((s, sec) => s + sec.items.length, 0) ?? 0)
-                            : (data ? data[t.key as "protein" | "curry" | "beverage"].length : 0);
+                        : t.key === "protein"
+                            ? (ingData?.ingredients.filter(x => x.isProtein).length ?? 0)
+                            : t.key === "dessert"
+                                ? (data?.dessertSections.reduce((s, sec) => s + sec.items.length, 0) ?? 0)
+                                : (data ? data[t.key as "curry" | "beverage"].length : 0);
                     return (
                         <button key={t.key} onClick={() => setTab(t.key)}
                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap shrink-0 border transition-all
@@ -195,14 +215,14 @@ export default function UsageReportPage() {
                 })}
             </div>
 
-            {isIng ? (
+            {needsIng ? (
                 ingLoading ? (
                     <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
                 ) : !ingData ? (
                     <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Failed to load. Upload PMIX reports and configure Portion Standards / Composites first.</CardContent></Card>
                 ) : (
                     <div ref={captureRef} className="space-y-5 bg-background">
-                        <IngredientUsageTable data={ingData} />
+                        <IngredientUsageTable data={ingData} proteinOnly={isProteinTab} />
                     </div>
                 )
             ) : loading ? (
@@ -369,16 +389,32 @@ function DessertSectionsView({ sections, dowCounts }: { sections: DessertSection
 }
 
 // ─── Ingredient roll-up table (aggregated across all dishes, drill-down) ─────
-function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
+function IngredientUsageTable({ data, proteinOnly = false }: { data: IngredientUsageResult; proteinOnly?: boolean }) {
     const [open, setOpen] = useState<Set<string>>(new Set());
     const totalDays = Math.max(1, data.dowCounts.reduce((s, x) => s + x, 0));
     const toggle = (id: string) => setOpen(s => {
         const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
     });
 
-    if (data.ingredients.length === 0) {
+    // Main Protein tab: show only protein ingredients, ordered by PROTEIN_ORDER
+    // (then any remaining proteins by total). Otherwise: all ingredients by name.
+    const rows = proteinOnly
+        ? data.ingredients
+            .filter(x => x.isProtein)
+            .sort((a, b) => {
+                const ra = proteinRank(a.name), rb = proteinRank(b.name);
+                if (ra !== rb) return ra - rb;
+                const ta = a.units.reduce((s, u) => s + u.total, 0);
+                const tb = b.units.reduce((s, u) => s + u.total, 0);
+                return tb - ta;
+            })
+        : data.ingredients;
+
+    if (rows.length === 0) {
         return <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">
-            No ingredient usage yet. Link menu items to ingredients in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a> (and define Composites there).
+            {proteinOnly
+                ? <>No protein usage yet. Tag ingredients with the <strong>Proteins</strong> category and link menu items in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a>.</>
+                : <>No ingredient usage yet. Link menu items to ingredients in <a href="/settings/portion-standards" className="underline text-primary">Portion Standards</a> (and define Composites there).</>}
         </CardContent></Card>;
     }
 
@@ -397,7 +433,7 @@ function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {data.ingredients.map(ing => {
+                            {rows.map(ing => {
                                 const isOpen = open.has(ing.ingredientId);
                                 const dayLines = (i: number) => ing.units.map(u => ({ u: u.unit, v: u.byDow[i] })).filter(x => x.v > 0);
                                 const totalLines = ing.units.map(u => ({ u: u.unit, v: u.total }));
@@ -441,7 +477,9 @@ function IngredientUsageTable({ data }: { data: IngredientUsageResult }) {
                     </table>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-2">
-                    Each ingredient is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes). Click a row to see where it came from.
+                    {proteinOnly
+                        ? <>Each protein is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes) — same figures as the Ingredients tab. Click a row to see where it came from.</>
+                        : <>Each ingredient is summed across <strong>every</strong> dish &amp; modifier it appears in (main dishes, appetizers, add-ons, and composite sub-recipes). Click a row to see where it came from.</>}
                 </p>
             </CardContent>
         </Card>

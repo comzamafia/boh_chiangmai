@@ -32,6 +32,8 @@ export interface IngredientUsageSource { label: string; via: string | null; unit
 export interface IngredientUsageRow {
     ingredientId: string;
     name: string;
+    categoryName: string | null;
+    isProtein: boolean;
     units: IngredientUsageUnit[];
     sources: IngredientUsageSource[];
 }
@@ -46,6 +48,21 @@ interface Acc {
     units: Map<string, number[]>;                 // unit → byDow[7]
     sources: Map<string, IngredientUsageSource>;   // "label|||via|||unit" → source
 }
+
+// Explicit protein display order for the Main Protein tab (lowercase, trimmed).
+// Ingredients in the "Proteins" category that aren't listed here still count as
+// proteins — they just sort after these, by total.
+export const PROTEIN_DISPLAY_ORDER = [
+    "chicken", "beef", "shrimp", "lobster", "squid", "soft shell crab",
+    "crying tiger steak", "duck", "cm wings", "gai yaang.",
+    "kfc ( korean fried cauliflower)", "kfc (korean fried cauliflower)",
+    "wagyu khao soi dumplings", "lemongrass chicken dumplings",
+    "crispy fish", "salmon crudo", "thai tuna ceviche",
+];
+const proteinRank = (name: string) => {
+    const i = PROTEIN_DISPLAY_ORDER.indexOf(name.toLowerCase().trim());
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+};
 
 export async function buildIngredientUsage(daysParam: number): Promise<IngredientUsageData> {
     const days = Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60);
@@ -67,13 +84,24 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
     const uploadIds = uploads.map((u: { id: string }) => u.id);
     if (uploadIds.length === 0) return { days, dowCounts, ingredients: [] };
 
-    const [items, standards, links] = await Promise.all([
+    const [items, standards, links, allIngredients] = await Promise.all([
         db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
         db.portionStandard.findMany({ include: { ingredient: { select: { id: true, name: true } } } }),
         db.menuCompositeLink.findMany({
             include: { composite: { include: { components: { include: { ingredient: { select: { id: true, name: true } } } } } } },
         }),
+        db.ingredient.findMany({ select: { id: true, category: { select: { name: true } } } }),
     ]);
+
+    // ingredientId → category name (for the protein filter on the Main Protein tab)
+    const catByIng = new Map<string, string | null>();
+    for (const ig of allIngredients as { id: string; category: { name: string } | null }[]) {
+        catByIng.set(ig.id, ig.category?.name ?? null);
+    }
+    const isProteinIng = (ingredientId: string, name: string) => {
+        const cat = (catByIng.get(ingredientId) ?? "").toLowerCase();
+        return /protein/.test(cat) || proteinRank(name) !== Number.MAX_SAFE_INTEGER;
+    };
 
     // ── Name → recipe lookups (case-insensitive), SPLIT BY TYPE ───────────────
     // type="base"     rows describe a DISH    → matched against the sold item name.
@@ -158,6 +186,8 @@ export async function buildIngredientUsage(daysParam: number): Promise<Ingredien
     const ingredients: IngredientUsageRow[] = [...byIng.entries()].map(([ingredientId, acc]) => ({
         ingredientId,
         name: acc.name,
+        categoryName: catByIng.get(ingredientId) ?? null,
+        isProtein: isProteinIng(ingredientId, acc.name),
         units: [...acc.units.entries()]
             .map(([unit, byDow]) => ({ unit, byDow, total: byDow.reduce((s, x) => s + x, 0) }))
             .sort((a, b) => b.total - a.total),

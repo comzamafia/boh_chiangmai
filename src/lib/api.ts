@@ -666,6 +666,8 @@ export interface IngredientUsageSource { label: string; via: string | null; unit
 export interface IngredientUsageRow {
     ingredientId: string;
     name: string;
+    categoryName: string | null;
+    isProtein: boolean;
     units: IngredientUsageUnit[];
     sources: IngredientUsageSource[];
 }

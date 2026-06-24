@@ -186,7 +186,7 @@ export default function UsageReportPage() {
             if (!protData) return;
             const totalDays = Math.max(1, protData.dowCounts.reduce((s, x) => s + x, 0));
             exportUsageReportPDF({
-                days: protData.days, dowCounts: protData.dowCounts, iceCream: [], fileLabel: tabLabel,
+                days: protData.days, dowCounts: protData.dowCounts, iceCream: [], fileLabel: tabLabel, branch: STORE_SHORT,
                 sections: [{ title: tabLabel, rows: protData.groups.map(g => unitRowToPdf(g.name, g.units, g.chain, totalDays)) }],
             });
             return;
@@ -195,7 +195,7 @@ export default function UsageReportPage() {
             if (!ingData) return;
             const totalDays = Math.max(1, ingData.dowCounts.reduce((s, x) => s + x, 0));
             exportUsageReportPDF({
-                days: ingData.days, dowCounts: ingData.dowCounts, iceCream: [], fileLabel: tabLabel,
+                days: ingData.days, dowCounts: ingData.dowCounts, iceCream: [], fileLabel: tabLabel, branch: STORE_SHORT,
                 sections: [{ title: tabLabel, rows: ingData.ingredients.map(ing => unitRowToPdf(ing.name, ing.units, ing.chain, totalDays)) }],
             });
             return;
@@ -223,7 +223,7 @@ export default function UsageReportPage() {
                     return [itemRow, ...flavourRows];
                 }),
             }));
-            exportUsageReportPDF({ days: data.days, dowCounts: data.dowCounts, sections, iceCream: [], fileLabel: tabLabel });
+            exportUsageReportPDF({ days: data.days, dowCounts: data.dowCounts, sections, iceCream: [], fileLabel: tabLabel, branch: STORE_SHORT });
             return;
         }
 
@@ -249,7 +249,7 @@ export default function UsageReportPage() {
         exportUsageReportPDF({
             days: data.days, dowCounts: data.dowCounts,
             sections: [sectionFor(tabLabel, data[tab as "curry" | "beverage"])],
-            iceCream: [], fileLabel: tabLabel,
+            iceCream: [], fileLabel: tabLabel, branch: STORE_SHORT,
         });
     }
 

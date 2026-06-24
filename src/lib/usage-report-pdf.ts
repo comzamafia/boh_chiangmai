@@ -27,6 +27,7 @@ export interface UsageReportExport {
     sections: UsageExportSection[];
     iceCream: UsageFlavorRow[];
     fileLabel?: string;   // e.g. "main-protein" — used in the filename
+    branch?: string;      // e.g. "Mississauga" — shown in the PDF header
 }
 
 export function exportUsageReportPDF(d: UsageReportExport) {
@@ -37,12 +38,17 @@ export function exportUsageReportPDF(d: UsageReportExport) {
 
     doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...NAVY);
     doc.text("Usage Report", M, 36);
+    let subY = 50;
+    if (d.branch) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY);
+        doc.text(d.branch, M, subY); subY += 13;
+    }
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(`Last ${d.days} days · from PMIX sales`, M, 50);
-    doc.text(`Generated: ${new Date().toLocaleString("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`, pageW - M, 50, { align: "right" });
+    doc.text(`Last ${d.days} days · from PMIX sales`, M, subY);
+    doc.text(`Generated: ${new Date().toLocaleString("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`, pageW - M, subY, { align: "right" });
 
     const dowHead = DOW.map((dd, i) => `${dd}\n×${d.dowCounts[i] ?? 0}`);
-    let y = 64;
+    let y = subY + 14;
     const DAY0 = 1, TOTAL = DAY0 + 7, AVG = TOTAL + 1;
 
     for (const s of d.sections) {

@@ -15,7 +15,7 @@
  * aren't assigned to any group are returned individually as ungrouped rows, so
  * nothing protein-related ever silently drops out ("Protein อื่นๆ").
  */
-import { buildIngredientUsage, type IngredientUsageRow } from "@/lib/ingredient-usage";
+import { buildIngredientUsage, type IngredientUsageRow, type DateRangeOpts } from "@/lib/ingredient-usage";
 import { prisma } from "@/lib/db";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,9 +67,9 @@ const toMember = (r: IngredientUsageRow): ProteinMember => ({
     sources: r.sources,
 });
 
-export async function buildProteinReport(daysParam: number): Promise<ProteinReportData> {
+export async function buildProteinReport(daysParam: number, range?: DateRangeOpts): Promise<ProteinReportData> {
     const [usage, groups, chains] = await Promise.all([
-        buildIngredientUsage(daysParam),
+        buildIngredientUsage(daysParam, range),
         db.proteinGroup.findMany({
             orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
             include: { members: { select: { ingredientId: true } } },

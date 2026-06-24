@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { salesApi, SalesSummary, SalesTrend, recipesApi, RecipeWithIngredients } from "@/lib/api";
 import { useCurrency } from "@/components/currency-context";
+import { STORE_NAME, STORE_SHORT } from "@/lib/branding";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -204,6 +205,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap justify-between items-start gap-3">
                 <div>
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary">Dashboard</h2>
+                    <p className="text-sm font-medium text-primary/80">{STORE_NAME}</p>
                     <p className="text-muted-foreground">
                         {isToday
                             ? new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })

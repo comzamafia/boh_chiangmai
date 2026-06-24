@@ -66,12 +66,19 @@ const proteinRank = (name: string) => {
     return i < 0 ? Number.MAX_SAFE_INTEGER : i;
 };
 
-export async function buildIngredientUsage(daysParam: number): Promise<IngredientUsageData> {
-    const days = Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60);
-    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+export interface DateRangeOpts { from?: string; to?: string }
+
+export async function buildIngredientUsage(daysParam: number, range?: DateRangeOpts): Promise<IngredientUsageData> {
+    const from = range?.from ? new Date(range.from + "T00:00:00Z") : new Date(Date.now() - Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60) * 24 * 60 * 60 * 1000);
+    const to = range?.to ? new Date(range.to + "T23:59:59.999Z") : undefined;
+    const days = to ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000)) : Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60);
+
+    const dateFilter = to
+        ? { OR: [{ businessDate: { gte: from, lte: to } }, { businessDate: null, uploadedAt: { gte: from, lte: to } }] }
+        : { OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] };
 
     const uploads = await db.pmixUpload.findMany({
-        where: { OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] },
+        where: dateFilter,
         select: { id: true, businessDate: true, uploadedAt: true },
     });
     const uploadDow = new Map<string, number>();

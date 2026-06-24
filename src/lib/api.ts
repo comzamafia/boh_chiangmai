@@ -653,15 +653,22 @@ export interface ReportUnitChainRow {
     base:         string;
     relations:    { from: string; qty: number; to: string }[];
 }
+function rangeQS(days: number, range?: { from?: string; to?: string }) {
+    let qs = `days=${days}`;
+    if (range?.from) qs += `&from=${range.from}`;
+    if (range?.to) qs += `&to=${range.to}`;
+    return qs + `&_t=${Date.now()}`;
+}
 export const usageReportApi = {
-    get: (days = 7) => apiFetch<UsageReportResult>(`/reports/usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+    get: (days = 7, range?: { from?: string; to?: string }) =>
+        apiFetch<UsageReportResult>(`/reports/usage?${rangeQS(days, range)}`, { cache: "no-store" }),
     chains: () => apiFetch<ReportUnitChainRow[]>("/report-unit-chains", { cache: "no-store" }),
     saveChain: (reportKey: string, base: string, relations: { from: string; qty: number; to: string }[]) =>
         apiFetch<{ ok: boolean }>("/report-unit-chains", { method: "PUT", body: JSON.stringify({ reportKey, base, relations }) }),
-    ingredientUsage: (days = 7) =>
-        apiFetch<IngredientUsageResult>(`/reports/ingredient-usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
-    proteinUsage: (days = 7) =>
-        apiFetch<ProteinReportResult>(`/reports/protein-usage?days=${days}&_t=${Date.now()}`, { cache: "no-store" }),
+    ingredientUsage: (days = 7, range?: { from?: string; to?: string }) =>
+        apiFetch<IngredientUsageResult>(`/reports/ingredient-usage?${rangeQS(days, range)}`, { cache: "no-store" }),
+    proteinUsage: (days = 7, range?: { from?: string; to?: string }) =>
+        apiFetch<ProteinReportResult>(`/reports/protein-usage?${rangeQS(days, range)}`, { cache: "no-store" }),
 };
 
 // ─── Protein display groups (Main Protein tab) ──────────────────────────────

@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const days = Number(new URL(req.url).searchParams.get("days") ?? 7);
-    return NextResponse.json(await buildIngredientUsage(days));
+    const sp = new URL(req.url).searchParams;
+    const days = Number(sp.get("days") ?? 7);
+    const from = sp.get("from") ?? undefined;
+    const to = sp.get("to") ?? undefined;
+    const range = from ? { from, to } : undefined;
+    return NextResponse.json(await buildIngredientUsage(days, range));
 }

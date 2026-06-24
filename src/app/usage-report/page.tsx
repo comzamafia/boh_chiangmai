@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, ChevronRight, Link2, FileDown, Image as ImageIcon, Salad, Boxes,
+    Gauge, Loader2, Beef, Soup, IceCream, Wine, Settings2, Plus, Trash2, ChevronDown, ChevronRight, Link2, FileDown, Image as ImageIcon, Salad, Boxes, CalendarDays,
 } from "lucide-react";
 import {
     usageReportApi, type UsageReportResult, type UsageReportItem,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { solveChain, solvableUnits, fmtChainQty } from "@/lib/unit-chain";
 import { exportUsageReportPDF } from "@/lib/usage-report-pdf";
+import { STORE_SHORT } from "@/lib/branding";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -91,11 +92,23 @@ function chainItem(reportKey: string, label: string, baseUnit: string, chain: Ro
     };
 }
 
+function localToday(): string {
+    return new Date().toLocaleDateString("en-CA");
+}
+
+type RangeMode = "quick" | "custom";
+
 export default function UsageReportPage() {
     const { user } = useAuth();
     const canManage = EDIT_ROLES.includes(user?.role ?? "");
 
     const [days, setDays]       = useState(7);
+    const [rangeMode, setRangeMode] = useState<RangeMode>("quick");
+    const [dateFrom, setDateFrom] = useState(() => {
+        const d = new Date(); d.setDate(d.getDate() - 6);
+        return d.toLocaleDateString("en-CA");
+    });
+    const [dateTo, setDateTo] = useState(localToday);
     const [data, setData]       = useState<UsageReportResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [tab, setTab]         = useState<Tab>("protein");
@@ -105,12 +118,14 @@ export default function UsageReportPage() {
     const [protData, setProtData] = useState<ProteinReportResult | null>(null);
     const [protLoading, setProtLoading] = useState(false);
 
+    const range = rangeMode === "custom" ? { from: dateFrom, to: dateTo } : undefined;
+
     const load = useCallback(async () => {
         setLoading(true);
-        try { setData(await usageReportApi.get(days)); }
+        try { setData(await usageReportApi.get(days, range)); }
         catch { setData(null); }
         finally { setLoading(false); }
-    }, [days]);
+    }, [days, rangeMode, dateFrom, dateTo]);
     useEffect(() => { load(); }, [load]);
 
     const isIng = tab === "ingredients";
@@ -119,16 +134,19 @@ export default function UsageReportPage() {
 
     const loadProtein = useCallback(async () => {
         setProtLoading(true);
-        try { setProtData(await usageReportApi.proteinUsage(days)); }
+        try { setProtData(await usageReportApi.proteinUsage(days, range)); }
         catch { setProtData(null); }
         finally { setProtLoading(false); }
-    }, [days]);
+    }, [days, rangeMode, dateFrom, dateTo]);
     const loadIngredient = useCallback(async () => {
         setIngLoading(true);
-        try { setIngData(await usageReportApi.ingredientUsage(days)); }
+        try { setIngData(await usageReportApi.ingredientUsage(days, range)); }
         catch { setIngData(null); }
         finally { setIngLoading(false); }
-    }, [days]);
+    }, [days, rangeMode, dateFrom, dateTo]);
+
+    const pickQuick = (d: number) => { setRangeMode("quick"); setDays(d); };
+    const applyRange = () => { setRangeMode("custom"); };
 
     // Main Protein tab: protein groups (ingredient roll-up folded into display groups).
     useEffect(() => { if (isProteinTab) loadProtein(); }, [isProteinTab, loadProtein]);
@@ -261,6 +279,10 @@ export default function UsageReportPage() {
         }
     }
 
+    const rangeLabel = rangeMode === "custom"
+        ? `${dateFrom} — ${dateTo}`
+        : `Last ${days}-day`;
+
     return (
         <div className="space-y-5 max-w-6xl mx-auto pb-12">
             <div className="flex flex-wrap justify-between items-start gap-3">
@@ -268,21 +290,37 @@ export default function UsageReportPage() {
                     <h2 className="text-3xl font-bold font-playfair tracking-tight text-primary flex items-center gap-2">
                         <Gauge className="w-7 h-7" /> Usage Report
                     </h2>
-                    <p className="text-muted-foreground">Last {days}-day usage from PMIX — view any unit (orders, oz, pieces, boxes, cases).</p>
+                    <p className="text-sm font-medium text-primary/80">{STORE_SHORT}</p>
+                    <p className="text-muted-foreground">{rangeLabel} usage from PMIX — view any unit (orders, oz, pieces, boxes, cases).</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
-                        {[7, 14, 30].map(d => (
-                            <button key={d} onClick={() => setDays(d)}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium ${days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
-                        ))}
+                <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
+                            {[7, 14, 30].map(d => (
+                                <button key={d} onClick={() => pickQuick(d)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium ${rangeMode === "quick" && days === d ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{d}d</button>
+                            ))}
+                        </div>
+                        <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={!canExport}>
+                            <ImageIcon className="w-4 h-4" /> JPG
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!canExport}>
+                            <FileDown className="w-4 h-4" /> PDF
+                        </Button>
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportJpg} disabled={!canExport}>
-                        <ImageIcon className="w-4 h-4" /> JPG
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPDF} disabled={!canExport}>
-                        <FileDown className="w-4 h-4" /> PDF
-                    </Button>
+                    <div className="flex items-center gap-1.5 text-xs">
+                        <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                        <Input type="date" value={dateFrom} max={dateTo || localToday()}
+                            onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setDateFrom(e.target.value); }}
+                            className="border rounded px-1.5 py-1 h-7 w-[130px] text-xs bg-background" />
+                        <span className="text-muted-foreground">→</span>
+                        <Input type="date" value={dateTo} min={dateFrom} max={localToday()}
+                            onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setDateTo(e.target.value); }}
+                            className="border rounded px-1.5 py-1 h-7 w-[130px] text-xs bg-background" />
+                        <Button variant={rangeMode === "custom" ? "default" : "outline"} size="sm" className="h-7 px-3 text-xs" onClick={applyRange}>
+                            Apply
+                        </Button>
+                    </div>
                 </div>
             </div>
 

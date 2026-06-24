@@ -31,9 +31,12 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const days = Number(url.searchParams.get("days") ?? 7);
+    const from = url.searchParams.get("from") ?? undefined;
+    const to = url.searchParams.get("to") ?? undefined;
+    const range = from ? { from, to } : undefined;
     const proteinOnly = /^(1|true|yes)$/i.test(url.searchParams.get("proteinOnly") ?? "");
     try {
-        const data = await buildIngredientUsage(days);
+        const data = await buildIngredientUsage(days, range);
         const ingredients = proteinOnly ? data.ingredients.filter(i => i.isProtein) : data.ingredients;
         return NextResponse.json(
             { ok: true, source: "sujeevan-boh", branch: branchIdentity(), generatedAt: new Date().toISOString(),

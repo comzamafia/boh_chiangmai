@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
     const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    if (!session || !["admin", "manager", "chef"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const body = await req.json().catch(() => ({}));

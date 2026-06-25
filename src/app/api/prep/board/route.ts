@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const date = new URL(req.url).searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
-    const isManager = ["admin", "manager"].includes(session.role);
+    const isManager = ["admin", "manager", "chef"].includes(session.role);
 
     // Stations visible to this user
     const allStations = await prisma.prepStation.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });

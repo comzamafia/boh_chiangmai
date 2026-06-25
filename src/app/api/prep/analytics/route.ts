@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
     const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    if (!session || !["admin", "manager", "chef"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { searchParams } = new URL(req.url);

@@ -14,7 +14,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-const MANAGER = ["admin", "manager"];
+const MANAGER = ["admin", "manager", "chef"];
 
 export async function POST(req: NextRequest) {
     const session = await getSession();

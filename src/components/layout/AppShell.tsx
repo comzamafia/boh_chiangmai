@@ -1,13 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Menu } from "lucide-react";
 
+const COLLAPSED_KEY = "sidebar-collapsed";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [collapsed, setCollapsed] = useState(false);
+
+    useEffect(() => {
+        setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
+    }, []);
+
+    const toggleCollapsed = () => {
+        const next = !collapsed;
+        setCollapsed(next);
+        localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+    };
 
     const isLoginPage = pathname === "/login";
     if (isLoginPage) return <>{children}</>;
@@ -22,13 +35,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 />
             )}
 
-            {/* Sidebar — fixed drawer on mobile, static on desktop */}
+            {/* Sidebar — fixed drawer on mobile, collapsible on desktop */}
             <div className={[
-                "fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out",
+                "fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out",
                 "md:relative md:translate-x-0 md:flex md:shrink-0",
                 sidebarOpen ? "translate-x-0" : "-translate-x-full",
             ].join(" ")}>
-                <Sidebar onClose={() => setSidebarOpen(false)} />
+                <Sidebar onClose={() => setSidebarOpen(false)} collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
             </div>
 
             {/* Main content */}

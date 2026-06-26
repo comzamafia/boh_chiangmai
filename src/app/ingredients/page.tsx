@@ -597,6 +597,8 @@ export default function IngredientsPage() {
                             <TableHead className="w-12 pl-3 pr-0" />
                             {/* 2 – name block (name + category + supplier + group) */}
                             <TableHead>Ingredient</TableHead>
+                            {/* 2b – location + tracking */}
+                            <TableHead className="w-28">Location</TableHead>
                             {/* 3 – purchase price + conversion */}
                             <TableHead className="w-40">
                                 <span className="flex items-center gap-1">
@@ -676,6 +678,20 @@ export default function IngredientsPage() {
                                                 <span className="ml-1.5 font-mono opacity-60">{item.sku}</span>
                                             )}
                                         </p>
+                                    </TableCell>
+
+                                    {/* 2b ─ Location + tracking status */}
+                                    <TableCell className="py-2.5">
+                                        {item.storageArea ? (
+                                            <span className="text-xs font-medium">{item.storageArea.name}</span>
+                                        ) : (
+                                            <span className="text-[10px] text-amber-600">⚠ No area</span>
+                                        )}
+                                        <div className="mt-0.5">
+                                            {item.inventoryItem != null
+                                                ? <Badge variant="outline" className="text-[9px] py-0 text-emerald-600 border-emerald-300">Tracked</Badge>
+                                                : <Badge variant="outline" className="text-[9px] py-0 text-muted-foreground">Not tracked</Badge>}
+                                        </div>
                                     </TableCell>
 
                                     {/* 3 ─ Purchase price + conversion */}

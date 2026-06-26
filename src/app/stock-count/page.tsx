@@ -17,10 +17,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import {
     Loader2, ClipboardCheck, ChevronLeft, ChevronRight, Search, Plus, Thermometer,
-    Warehouse, Check, Snowflake, FileDown, Printer, ListFilter, Boxes, Package, Pencil,
+    Warehouse, Check, Snowflake, FileDown, Printer, ListFilter, Boxes, Package, Pencil, AlertTriangle,
 } from "lucide-react";
 import {
-    inventoryApi, storageAreasApi, stockCountApi,
+    inventoryApi, ingredientsApi, storageAreasApi, stockCountApi,
     type InventoryItem, type StorageArea,
 } from "@/lib/api";
 import {
@@ -121,9 +121,17 @@ function AreaPicker({ areas, items, onPick }: { areas: StorageArea[]; items: Inv
                 })}
             </div>
             {unassigned > 0 && (
-                <p className="text-xs text-muted-foreground">
-                    {unassigned} tracked ingredient{unassigned !== 1 ? "s have" : " has"} no storage area — set one in <a href="/inventory" className="underline">Inventory</a> to count them here.
-                </p>
+                <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                            {unassigned} ingredient{unassigned !== 1 ? "s" : ""} without a storage area
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                            Assign them in <a href="/inventory" className="underline font-medium">Inventory → Setup Health</a> so they appear in the right count sheet.
+                        </p>
+                    </div>
+                </div>
             )}
         </>
     );
@@ -300,7 +308,12 @@ function AreaCount({ area, items, onBack, onSaved, onStockUpdated }: {
                         {list.map(it => (
                             <CountCard key={it.id} item={it} row={draft[it.id] ?? EMPTY} onSet={set}
                                 last={counts[it.ingredientId]} isExtra={(it.ingredient.storageAreaId ?? null) !== area?.id}
-                                onEditPack={() => setPackEdit(it)} />
+                                onEditPack={() => setPackEdit(it)}
+                                areaName={area?.name}
+                                onSetHome={!it.ingredient.storageAreaId && area ? async () => {
+                                    await ingredientsApi.update(it.ingredientId, { storageAreaId: area.id } as never);
+                                    await onSaved();
+                                } : undefined} />
                         ))}
                     </div>
                 ))
@@ -351,8 +364,9 @@ function AreaCount({ area, items, onBack, onSaved, onStockUpdated }: {
 }
 
 // ─── Single count card ──────────────────────────────────────────────────────
-function CountCard({ item, row, onSet, last, isExtra, onEditPack }: {
+function CountCard({ item, row, onSet, last, isExtra, onEditPack, areaName, onSetHome }: {
     item: InventoryItem; row: Row; onSet: (id: string, f: keyof Row, v: string) => void; last?: number; isExtra: boolean; onEditPack: () => void;
+    areaName?: string; onSetHome?: () => void;
 }) {
     const cfg = cfgOf(item);
     const entry = entryOf(row);
@@ -360,15 +374,31 @@ function CountCard({ item, row, onSet, last, isExtra, onEditPack }: {
     const has = countHasValue(entry);
     const current = Number(item.currentStock);
     const variance = has ? total - current : 0;
+    const homeName = item.ingredient.storageArea?.name ?? null;
+    const noHome = !item.ingredient.storageAreaId;
 
     return (
         <Card className={has ? "border-primary/40" : ""}>
             <CardContent className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                        <p className="font-medium leading-tight flex items-center gap-1.5">
+                        <p className="font-medium leading-tight flex items-center gap-1.5 flex-wrap">
                             {item.ingredient.name}
-                            {isExtra && <Badge variant="outline" className="text-[9px] py-0">also here</Badge>}
+                            {isExtra && homeName && <Badge variant="outline" className="text-[9px] py-0">Home: {homeName}</Badge>}
+                            {isExtra && !homeName && (
+                                onSetHome
+                                    ? <button onClick={onSetHome} className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100">
+                                        ⚠ Set {areaName} as home
+                                    </button>
+                                    : <Badge variant="outline" className="text-[9px] py-0 border-amber-400 text-amber-600">⚠ No home</Badge>
+                            )}
+                            {!isExtra && noHome && (
+                                onSetHome
+                                    ? <button onClick={onSetHome} className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0 rounded border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100">
+                                        ⚠ Set as home
+                                    </button>
+                                    : <Badge variant="outline" className="text-[9px] py-0 border-amber-400 text-amber-600">⚠ No home</Badge>
+                            )}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                             <span className="font-semibold text-foreground">

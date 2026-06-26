@@ -42,6 +42,8 @@ export const ingredientsApi = {
     update: (id: string, data: Partial<Ingredient>) =>
         apiFetch<Ingredient>(`/ingredients/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch<void>(`/ingredients/${id}`, { method: "DELETE" }),
+    bulkAssignArea: (ingredientIds: string[], storageAreaId: string) =>
+        apiFetch<{ ok: boolean; updated: number }>("/ingredients/bulk-assign-area", { method: "PUT", body: JSON.stringify({ ingredientIds, storageAreaId }) }),
 };
 
 // ─── Equipment ───────────────────────────────────────────────────────────────
@@ -118,7 +120,25 @@ export const inventoryApi = {
             `/inventory/ingredient-trend?days=${days}&types=${encodeURIComponent(types)}&top=${top}`,
             { cache: "no-store" },
         ),
+    setupAudit: () => apiFetch<SetupAuditResult>("/inventory/setup-audit", { cache: "no-store" }),
 };
+
+// ─── Setup Audit types ────────────────────────────────────────────────────────
+export interface SetupAuditItem { id: string; name: string; category: string | null; area: string | null; supplier: string | null }
+export interface SetupAuditIssue<T = SetupAuditItem> { count: number; items: T[] }
+export interface SetupAuditResult {
+    totalIngredients: number; totalTracked: number;
+    areas: { id: string; name: string }[];
+    issues: {
+        noStorageArea: SetupAuditIssue;
+        notTracked: SetupAuditIssue;
+        noPar: SetupAuditIssue<SetupAuditItem & { inventoryItemId: string }>;
+        noSupplier: SetupAuditIssue;
+        suspectConversion: SetupAuditIssue<SetupAuditItem & { purchaseUnit: string; recipeUnit: string }>;
+        neverCounted: SetupAuditIssue;
+        staleCount: SetupAuditIssue<SetupAuditItem & { lastCountDate: string }>;
+    };
+}
 
 // ─── Purchase Orders ──────────────────────────────────────────────────────────
 export type POStatus = "Draft" | "Sent" | "Received" | "Cancelled";

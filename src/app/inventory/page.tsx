@@ -9,6 +9,7 @@ import {
     type IngredientTrendResult, type ProteinHeatmapResult,
     type DessertHeatmapResult, type BeverageHeatmapResult, type CurryHeatmapResult,
     type ParSuggestion,
+    type SetupAuditResult,
 } from "@/lib/api";
 import IngredientUsageHeatmap from "@/components/inventory/IngredientUsageHeatmap";
 import { exportProteinHeatmapToPDF } from "@/lib/protein-pdf-export";
@@ -40,7 +41,9 @@ import {
     Trash2, Loader2, Plus, ClipboardList, AlertTriangle,
     CheckCircle2, TrendingDown, BarChart2, ChevronLeft, Thermometer,
     DollarSign, TrendingUp, RefreshCw, FileDown, SlidersHorizontal, Sparkles,
+    ShieldCheck, ChevronDown, ChevronRight, MapPin, Clock, Link2,
 } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DataPagination, paginate } from "@/components/ui/data-pagination";
 import {
@@ -116,6 +119,210 @@ function StockBar({ item }: { item: InventoryItem }) {
                 <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
             </div>
             <span className="text-xs text-muted-foreground tabular-nums w-8 text-right">{pct}%</span>
+        </div>
+    );
+}
+
+// ─── Setup Health Banner ──────────────────────────────────────────────────────
+
+function SetupHealthBanner({ onFixed }: { onFixed: () => void }) {
+    const [audit, setAudit] = useState<SetupAuditResult | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [open, setOpen] = useState(false);
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [assignArea, setAssignArea] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        inventoryApi.setupAudit().then(setAudit).catch(() => setAudit(null)).finally(() => setLoading(false));
+    }, []);
+
+    if (loading || !audit) return null;
+
+    const issues = audit.issues;
+    const totalIssues = issues.noStorageArea.count + issues.notTracked.count + issues.noPar.count
+        + issues.noSupplier.count + issues.suspectConversion.count + issues.neverCounted.count + issues.staleCount.count;
+    if (totalIssues === 0) return (
+        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-2.5">
+            <ShieldCheck className="w-4 h-4" /> Setup Health: All {audit.totalTracked} tracked ingredients are properly configured.
+        </div>
+    );
+
+    const cards: { key: string; label: string; count: number; icon: React.ElementType; color: string }[] = [
+        { key: "noStorageArea",     label: "No Location",       count: issues.noStorageArea.count,     icon: MapPin,          color: "text-red-600" },
+        { key: "notTracked",        label: "Not Tracked",       count: issues.notTracked.count,        icon: Link2,           color: "text-amber-600" },
+        { key: "noPar",             label: "No PAR",            count: issues.noPar.count,             icon: SlidersHorizontal, color: "text-orange-600" },
+        { key: "neverCounted",      label: "Never Counted",     count: issues.neverCounted.count,      icon: ClipboardList,   color: "text-blue-600" },
+        { key: "staleCount",        label: "Stale Count",       count: issues.staleCount.count,        icon: Clock,           color: "text-purple-600" },
+        { key: "suspectConversion", label: "Check Conversion",  count: issues.suspectConversion.count, icon: AlertTriangle,   color: "text-yellow-600" },
+        { key: "noSupplier",        label: "No Supplier",       count: issues.noSupplier.count,        icon: PackagePlus,     color: "text-slate-500" },
+    ].filter(c => c.count > 0);
+
+    async function bulkAssignArea() {
+        const entries = Object.entries(assignArea).filter(([, v]) => v);
+        if (entries.length === 0) return;
+        setSaving(true);
+        const byArea = new Map<string, string[]>();
+        for (const [ingId, areaId] of entries) {
+            byArea.set(areaId, [...(byArea.get(areaId) ?? []), ingId]);
+        }
+        for (const [areaId, ids] of byArea) {
+            await ingredientsApi.bulkAssignArea(ids, areaId);
+        }
+        setSaving(false); setAssignArea({});
+        inventoryApi.setupAudit().then(setAudit);
+        onFixed();
+    }
+
+    async function quickTrack(ingredientId: string) {
+        await inventoryApi.create({ ingredientId });
+        inventoryApi.setupAudit().then(setAudit);
+        onFixed();
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const issueItems = (key: string) => (issues as any)[key]?.items ?? [];
+
+    return (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+            <button onClick={() => setOpen(!open)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left">
+                <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-amber-600" />
+                    <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        Setup Health — {totalIssues} issue{totalIssues !== 1 ? "s" : ""} found
+                    </span>
+                </div>
+                {open ? <ChevronDown className="w-4 h-4 text-amber-600" /> : <ChevronRight className="w-4 h-4 text-amber-600" />}
+            </button>
+
+            {open && (
+                <div className="px-4 pb-4 space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                        {cards.map(c => {
+                            const Icon = c.icon;
+                            const active = expanded === c.key;
+                            return (
+                                <button key={c.key} onClick={() => setExpanded(active ? null : c.key)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                                        ${active ? "bg-card border-primary shadow-sm" : "bg-background border-border hover:border-foreground/30"}`}>
+                                    <Icon className={`w-3.5 h-3.5 ${c.color}`} />
+                                    {c.label} <span className="tabular-nums font-bold">{c.count}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {expanded && (
+                        <div className="rounded-lg border bg-card p-3 max-h-[300px] overflow-y-auto space-y-1">
+                            {expanded === "noStorageArea" && (
+                                <>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-semibold text-muted-foreground">Tracked but no storage area assigned</p>
+                                        {Object.values(assignArea).some(Boolean) && (
+                                            <Button size="sm" className="h-7 text-xs" onClick={bulkAssignArea} disabled={saving}>
+                                                {saving ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <MapPin className="w-3 h-3 mr-1" />}
+                                                Assign Selected
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {issueItems("noStorageArea").map((item: { id: string; name: string; category: string | null }) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-border/40 last:border-0">
+                                            <div className="min-w-0">
+                                                <span className="font-medium">{item.name}</span>
+                                                {item.category && <span className="text-xs text-muted-foreground ml-2">{item.category}</span>}
+                                            </div>
+                                            <select value={assignArea[item.id] ?? ""}
+                                                onChange={e => setAssignArea(p => ({ ...p, [item.id]: e.target.value }))}
+                                                className="text-xs border rounded px-2 py-1 bg-background w-[140px]">
+                                                <option value="">— Area —</option>
+                                                {audit.areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            {expanded === "notTracked" && (
+                                <>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">Ingredients not yet added to inventory tracking</p>
+                                    {issueItems("notTracked").map((item: { id: string; name: string; category: string | null }) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-border/40 last:border-0">
+                                            <div className="min-w-0">
+                                                <span className="font-medium">{item.name}</span>
+                                                {item.category && <span className="text-xs text-muted-foreground ml-2">{item.category}</span>}
+                                            </div>
+                                            <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => quickTrack(item.id)}>
+                                                <Plus className="w-3 h-3 mr-1" /> Track
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            {expanded === "noPar" && (
+                                <>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">Tracked but PAR Min & Reorder Point both = 0</p>
+                                    {issueItems("noPar").map((item: { id: string; name: string; area: string | null }) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-border/40 last:border-0">
+                                            <span className="font-medium">{item.name}</span>
+                                            <span className="text-xs text-muted-foreground">{item.area ?? "No area"}</span>
+                                        </div>
+                                    ))}
+                                    <p className="text-[11px] text-muted-foreground mt-2">
+                                        Set PAR levels in the Stock Levels tab → click any item → edit PAR Min/ROP/Max, or use Auto-fill from PMIX.
+                                    </p>
+                                </>
+                            )}
+
+                            {(expanded === "neverCounted" || expanded === "staleCount") && (
+                                <>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">
+                                        {expanded === "neverCounted" ? "Never physically counted" : "Last count >14 days ago"}
+                                    </p>
+                                    {issueItems(expanded).map((item: { id: string; name: string; area: string | null; lastCountDate?: string }) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-border/40 last:border-0">
+                                            <span className="font-medium">{item.name}</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {item.lastCountDate ?? "Never"} · {item.area ?? "No area"}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <p className="text-[11px] text-muted-foreground mt-2">
+                                        Go to <a href="/stock-count" className="underline text-primary">Stock Count</a> to run a physical count.
+                                    </p>
+                                </>
+                            )}
+
+                            {expanded === "suspectConversion" && (
+                                <>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">Conversion rate = 1 but purchase ≠ recipe unit (may be wrong)</p>
+                                    {issueItems("suspectConversion").map((item: { id: string; name: string; purchaseUnit: string; recipeUnit: string }) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-border/40 last:border-0">
+                                            <span className="font-medium">{item.name}</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                1 {item.purchaseUnit} = 1 {item.recipeUnit} ❓
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <p className="text-[11px] text-muted-foreground mt-2">
+                                        Edit each ingredient in <a href="/ingredients" className="underline text-primary">Ingredients</a> to fix conversion rates.
+                                    </p>
+                                </>
+                            )}
+
+                            {expanded === "noSupplier" && (
+                                <>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">No supplier assigned</p>
+                                    {issueItems("noSupplier").map((item: { id: string; name: string }) => (
+                                        <div key={item.id} className="text-sm py-1 border-b border-border/40 last:border-0 font-medium">{item.name}</div>
+                                    ))}
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -541,6 +748,9 @@ export default function InventoryPage() {
                     </AlertDescription>
                 </Alert>
             )}
+
+            {/* ── Setup Health ── */}
+            <SetupHealthBanner onFixed={loadData} />
 
             {/* ── Stat Cards ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">

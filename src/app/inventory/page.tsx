@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import {
     inventoryApi, ingredientsApi, suppliersApi, storageAreasApi, ingredientSuppliersApi,
     pmixApi,
@@ -407,16 +407,22 @@ export default function InventoryPage() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
 
+    // Per-area stock breakdown (which areas each ingredient is stored in)
+    const [breakdown, setBreakdown] = useState<Record<string, { total: number; areas: { areaId: string; areaName: string; recipeQty: number; countedAt: string }[] }>>({});
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const toggleRow = (id: string) => setExpandedRows(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
     // Load data
     const loadData = useCallback(async () => {
         try {
-            const [inv, ingr, sup, alrt, t, areas] = await Promise.all([
+            const [inv, ingr, sup, alrt, t, areas, brk] = await Promise.all([
                 inventoryApi.list(),
                 ingredientsApi.list(),
                 suppliersApi.list(),
                 inventoryApi.alerts(),
                 inventoryApi.transactions({ limit: 300 }),
                 storageAreasApi.list(),
+                inventoryApi.areaBreakdown().catch(() => ({ byIngredient: {} })),
             ]);
             setItems(inv);
             setAllIngr(ingr);
@@ -424,6 +430,7 @@ export default function InventoryPage() {
             setAlerts(alrt);
             setTxns(t);
             setStorageAreas(areas.filter((a: StorageArea) => a.isActive));
+            setBreakdown(brk.byIngredient);
         } finally {
             setLoading(false);
         }
@@ -941,10 +948,30 @@ export default function InventoryPage() {
                                     })
                                     .map(item => {
                                     const status = stockStatus(item);
+                                    const brk = breakdown[item.ingredientId];
+                                    const multiArea = brk && brk.areas.length > 1;
+                                    const isExpanded = expandedRows.has(item.ingredientId);
                                     return (
-                                        <TableRow key={item.id} className={status === "critical" ? "bg-destructive/5" : status === "low" ? "bg-yellow-500/5" : ""}>
+                                        <Fragment key={item.id}>
+                                        <TableRow className={status === "critical" ? "bg-destructive/5" : status === "low" ? "bg-yellow-500/5" : ""}>
                                             <TableCell className="font-medium">
-                                                {item.ingredient.name}
+                                                <div className="flex items-center gap-1.5">
+                                                    {multiArea ? (
+                                                        <button onClick={() => toggleRow(item.ingredientId)}
+                                                            className="inline-flex items-center gap-1 hover:text-primary transition-colors"
+                                                            title="Stored in multiple areas — click to see breakdown">
+                                                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                                                            {item.ingredient.name}
+                                                        </button>
+                                                    ) : (
+                                                        item.ingredient.name
+                                                    )}
+                                                    {multiArea && (
+                                                        <Badge variant="outline" className="text-[9px] py-0 px-1 border-cyan-300 text-cyan-600 dark:text-cyan-400">
+                                                            {brk.areas.length} areas
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                                 <span className="sm:hidden block text-xs text-muted-foreground">{item.ingredient.recipeUnit}</span>
                                             </TableCell>
                                             <TableCell className="hidden sm:table-cell text-muted-foreground">{item.ingredient.recipeUnit}</TableCell>
@@ -1006,6 +1033,26 @@ export default function InventoryPage() {
                                                 </div>
                                             </TableCell>
                                         </TableRow>
+                                        {multiArea && isExpanded && (
+                                            <TableRow className="bg-cyan-50/40 dark:bg-cyan-950/10 hover:bg-cyan-50/40">
+                                                <TableCell colSpan={8} className="py-2">
+                                                    <div className="flex flex-wrap items-center gap-2 pl-5">
+                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Stored in:</span>
+                                                        {brk.areas.map(a => (
+                                                            <span key={a.areaId} className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 dark:border-cyan-800 bg-card px-2.5 py-1 text-xs">
+                                                                <Warehouse className="h-3 w-3 text-cyan-600" />
+                                                                <span className="font-medium">{a.areaName}</span>
+                                                                <span className="tabular-nums text-muted-foreground">{a.recipeQty % 1 === 0 ? a.recipeQty.toLocaleString() : a.recipeQty.toFixed(1)} {item.ingredient.recipeUnit}</span>
+                                                            </span>
+                                                        ))}
+                                                        <span className="inline-flex items-center gap-1 rounded-full bg-cyan-100 dark:bg-cyan-900/40 px-2.5 py-1 text-xs font-semibold text-cyan-800 dark:text-cyan-300">
+                                                            = {brk.total % 1 === 0 ? brk.total.toLocaleString() : brk.total.toFixed(1)} {item.ingredient.recipeUnit} total
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                        </Fragment>
                                     );
                                 })}
                                 {filteredItems.length === 0 && (

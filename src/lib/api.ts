@@ -121,7 +121,14 @@ export const inventoryApi = {
             { cache: "no-store" },
         ),
     setupAudit: () => apiFetch<SetupAuditResult>("/inventory/setup-audit", { cache: "no-store" }),
+    areaBreakdown: () => apiFetch<AreaBreakdownResult>("/inventory/area-breakdown", { cache: "no-store" }),
 };
+
+// ─── Per-area stock breakdown ─────────────────────────────────────────────────
+export interface AreaBreakdownEntry { areaId: string; areaName: string; recipeQty: number; countedAt: string }
+export interface AreaBreakdownResult {
+    byIngredient: Record<string, { total: number; areas: AreaBreakdownEntry[] }>;
+}
 
 // ─── Setup Audit types ────────────────────────────────────────────────────────
 export interface SetupAuditItem { id: string; name: string; category: string | null; area: string | null; supplier: string | null }

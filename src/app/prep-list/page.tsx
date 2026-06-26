@@ -46,6 +46,8 @@ export default function PrepBoardPage() {
     const [importOpen, setImportOpen] = useState(false);
     const [importText, setImportText] = useState("");
     const [importing, setImporting] = useState(false);
+    const [editTask, setEditTask] = useState<{ templateId: string; name: string; qty: string; dueTime: string } | null>(null);
+    const [editSaving, setEditSaving] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -125,6 +127,17 @@ export default function PrepBoardPage() {
     async function deleteTemplate(id: string) {
         if (!window.confirm("Remove this task from the master list?")) return;
         await prepApi.deleteTemplate(id); load();
+    }
+    function openEditTask(card: PrepCard) {
+        setEditTask({ templateId: card.templateId, name: card.name, qty: card.qty ?? "", dueTime: card.dueTime ?? "" });
+    }
+    async function saveEditTask() {
+        if (!editTask || !editTask.name.trim()) return;
+        setEditSaving(true);
+        try {
+            await prepApi.updateTemplate(editTask.templateId, { name: editTask.name.trim(), qty: editTask.qty || undefined, dueTime: editTask.dueTime || undefined });
+            setEditTask(null); load();
+        } finally { setEditSaving(false); }
     }
     async function resetBoard() {
         if (!window.confirm("Reset the board? All To-Do and Complete tasks return to the Task List.")) return;
@@ -223,7 +236,9 @@ export default function PrepBoardPage() {
                                 onDragEnd={onDragEnd}>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <Column col="tasklist" title="Task List" subtitle="Backlog" accent="bg-slate-400"
-                                        cards={station.taskList} canManage={station.canManage} onMove={moveCard}>
+                                        cards={station.taskList} canManage={station.canManage} onMove={moveCard}
+                                        onDelete={station.canManage ? deleteTemplate : undefined}
+                                        onEdit={station.canManage ? openEditTask : undefined}>
                                         {station.canManage && (
                                             <div className="mt-2 pt-2 border-t border-border/60 space-y-1.5">
                                                 <div className="flex flex-wrap items-end gap-1.5">
@@ -241,9 +256,13 @@ export default function PrepBoardPage() {
                                         )}
                                     </Column>
                                     <Column col="todo" title="To-Do" subtitle={`${station.todo.length} planned`} accent="bg-blue-500"
-                                        cards={station.todo} canManage={station.canManage} onMove={moveCard} onDelete={station.canManage ? deleteTemplate : undefined} />
+                                        cards={station.todo} canManage={station.canManage} onMove={moveCard}
+                                        onDelete={station.canManage ? deleteTemplate : undefined}
+                                        onEdit={station.canManage ? openEditTask : undefined} />
                                     <Column col="complete" title="Complete" subtitle={`${station.complete.length} done`} accent="bg-emerald-500"
-                                        cards={station.complete} canManage={station.canManage} onMove={moveCard} done />
+                                        cards={station.complete} canManage={station.canManage} onMove={moveCard} done
+                                        onDelete={station.canManage ? deleteTemplate : undefined}
+                                        onEdit={station.canManage ? openEditTask : undefined} />
                                 </div>
 
                                 <DragOverlay>
@@ -260,6 +279,41 @@ export default function PrepBoardPage() {
                     )}
                 </>
             )}
+
+            {/* Edit task dialog */}
+            <Dialog open={!!editTask} onOpenChange={v => { if (!v) setEditTask(null); }}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
+                    {editTask && (
+                        <div className="space-y-3 py-2">
+                            <div className="space-y-1">
+                                <Label className="text-xs">Task name</Label>
+                                <Input value={editTask.name} onChange={e => setEditTask(p => p ? { ...p, name: e.target.value } : p)} className="h-10" autoFocus />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Quantity</Label>
+                                    <Input placeholder="e.g. 5 kg, 2 pans" value={editTask.qty} onChange={e => setEditTask(p => p ? { ...p, qty: e.target.value } : p)} className="h-10" />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Due time</Label>
+                                    <Input placeholder="e.g. 10:00" value={editTask.dueTime} onChange={e => setEditTask(p => p ? { ...p, dueTime: e.target.value } : p)} className="h-10" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter className="gap-2">
+                        <Button variant="destructive" size="sm" className="mr-auto"
+                            onClick={() => { if (editTask && window.confirm("Delete this task?")) { deleteTemplate(editTask.templateId); setEditTask(null); } }}>
+                            <X className="w-4 h-4 mr-1" /> Delete
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditTask(null)}>Cancel</Button>
+                        <Button size="sm" onClick={saveEditTask} disabled={editSaving || !editTask?.name.trim()}>
+                            {editSaving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {stationDlg && (
                 <StationDialog mode={stationDlg.mode} station={stationDlg.station}
@@ -300,10 +354,11 @@ export default function PrepBoardPage() {
 }
 
 // ─── Column (droppable) ─────────────────────────────────────────────────────
-function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete, onMove, children }: {
+function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete, onEdit, onMove, children }: {
     col: Col; title: string; subtitle: string; accent: string;
     cards: PrepCard[]; canManage: boolean; done?: boolean;
     onDelete?: (templateId: string) => void;
+    onEdit?: (card: PrepCard) => void;
     onMove?: (card: PrepCard, from: Col, to: Col) => void;
     children?: React.ReactNode;
 }) {
@@ -322,7 +377,8 @@ function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete
                 {cards.map(c => (
                     <DraggableCard key={c.id ?? c.templateId} card={c} from={col} done={done}
                         canManage={canManage} onMove={onMove}
-                        onDelete={col === "tasklist" && canManage && onDelete ? () => onDelete(c.templateId) : undefined} />
+                        onEdit={canManage && onEdit ? () => onEdit(c) : undefined}
+                        onDelete={canManage && onDelete ? () => onDelete(c.templateId) : undefined} />
                 ))}
                 {cards.length === 0 && <p className="text-xs text-muted-foreground/60 italic text-center py-3">Drop tasks here</p>}
             </div>
@@ -332,46 +388,60 @@ function Column({ col, title, subtitle, accent, cards, canManage, done, onDelete
 }
 
 // ─── Draggable card ─────────────────────────────────────────────────────────
-function DraggableCard({ card, from, done, canManage, onDelete, onMove }: {
+function DraggableCard({ card, from, done, canManage, onDelete, onEdit, onMove }: {
     card: PrepCard; from: Col; done?: boolean; canManage?: boolean;
     onDelete?: () => void;
+    onEdit?: () => void;
     onMove?: (card: PrepCard, from: Col, to: Col) => void;
 }) {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: card.id ?? card.templateId, data: { card, from },
     });
 
-    // Tap-to-move actions (primary interaction on touch / mobile)
     const move = (to: Col) => onMove?.(card, from, to);
 
     return (
         <div ref={setNodeRef}
             className={`group rounded-lg border bg-card px-2.5 py-2 ${isDragging ? "opacity-30" : ""} ${done ? "border-emerald-200 dark:border-emerald-800" : "border-border"}`}>
             <div className="flex items-start gap-2">
-                {/* Drag handle (desktop) — only this grips, so taps elsewhere don't start a drag */}
                 <button {...attributes} {...listeners}
                     className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground"
                     aria-label="Drag to move" tabIndex={-1}>
                     <GripVertical className="w-3.5 h-3.5" />
                 </button>
                 <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium leading-tight ${done ? "text-muted-foreground" : ""}`}>{card.name}</p>
-                    <div className="flex flex-wrap gap-x-2 mt-0.5 text-[11px] text-muted-foreground">
-                        {card.qty && <span>{card.qty}</span>}
-                        {card.dueTime && <span>· {card.dueTime}</span>}
-                        {done && card.completedBy && <span className="text-emerald-600 dark:text-emerald-400">✓ {card.completedBy}</span>}
-                    </div>
+                    <p className={`text-sm font-medium leading-tight ${done ? "text-muted-foreground line-through" : ""}`}>{card.name}</p>
+                    {(card.qty || card.dueTime || (done && card.completedBy)) && (
+                        <div className="flex flex-wrap gap-x-2 mt-1 text-[11px]">
+                            {card.qty && (
+                                <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 font-medium">
+                                    {card.qty}
+                                </span>
+                            )}
+                            {card.dueTime && (
+                                <span className="inline-flex items-center gap-0.5 text-muted-foreground">⏰ {card.dueTime}</span>
+                            )}
+                            {done && card.completedBy && <span className="text-emerald-600 dark:text-emerald-400">✓ {card.completedBy}</span>}
+                        </div>
+                    )}
                 </div>
                 {done && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
-                {onDelete && (
-                    <button onClick={onDelete} onPointerDown={e => e.stopPropagation()}
-                        className="text-muted-foreground/40 hover:text-destructive transition-colors shrink-0 sm:opacity-0 sm:group-hover:opacity-100">
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
+                <div className="flex items-center gap-0.5 shrink-0" onPointerDown={e => e.stopPropagation()}>
+                    {onEdit && (
+                        <button onClick={onEdit}
+                            className="text-muted-foreground/40 hover:text-primary transition-colors sm:opacity-0 sm:group-hover:opacity-100">
+                            <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                    {onDelete && (
+                        <button onClick={onDelete}
+                            className="text-muted-foreground/40 hover:text-destructive transition-colors sm:opacity-0 sm:group-hover:opacity-100">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Quick move buttons — work on touch where drag is awkward */}
             {onMove && (
                 <div className="flex flex-wrap gap-1.5 mt-2" onPointerDown={e => e.stopPropagation()}>
                     {from === "tasklist" && canManage && (

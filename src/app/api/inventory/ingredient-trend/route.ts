@@ -11,14 +11,15 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export const dynamic   = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const days  = Math.max(1, Math.min(30, Number(searchParams.get("days") ?? 7)));
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     // Fetch transactions — include purchaseUnit + conversionRate for unit conversion
     const txns = await prisma.inventoryTransaction.findMany({
         where: {
+            branchId,
             type: { in: types as ("In" | "Out" | "Waste" | "Adjust" | "Stocktake")[] },
             date: { gte: fromStr, lte: toStr },
         },

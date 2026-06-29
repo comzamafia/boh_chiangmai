@@ -5,6 +5,7 @@
  * next day's planning. Activity log + templates are preserved.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { resetPrepBoards } from "@/lib/prep-reset";
 
 export const maxDuration = 30;
@@ -18,8 +19,13 @@ function authorize(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
     if (!authorize(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const result = await resetPrepBoards();   // clears today and earlier
-    return NextResponse.json({ ok: true, ...result });
+    const branches = await prisma.branch.findMany({ where: { isActive: true }, select: { id: true, slug: true } });
+    const results = [];
+    for (const b of branches) {
+        const result = await resetPrepBoards(undefined, b.id);   // clears today and earlier, per branch
+        results.push({ branch: b.slug, ...result });
+    }
+    return NextResponse.json({ ok: true, branches: results });
 }
 
 export async function POST(req: NextRequest) { return GET(req); }

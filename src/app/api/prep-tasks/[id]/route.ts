@@ -6,16 +6,21 @@
  * DELETE /api/prep-tasks/[id]   — remove a task (admin/manager/chef)
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
 
     const { id } = await params;
+
+    const existing = await prisma.prepTask.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
     const body = await req.json();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,11 +50,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { id } = await params;
+
+    const existing = await prisma.prepTask.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
     await prisma.prepTask.delete({ where: { id } });
     return new NextResponse(null, { status: 204 });
 }

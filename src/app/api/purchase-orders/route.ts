@@ -8,7 +8,7 @@
  *   poNumber is generated server-side (PO-{year}-{seq}).
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -16,7 +16,12 @@ const INCLUDE = { items: true, supplier: { select: { id: true, name: true } } };
 
 export async function GET() {
     try {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { branchId } = ctx;
+
         const orders = await prisma.purchaseOrder.findMany({
+            where: { branchId },
             include: INCLUDE,
             orderBy: { createdAt: "desc" },
         });
@@ -27,11 +32,11 @@ export async function GET() {
 }
 
 /** Generate the next PO number for the current year, race-tolerant. */
-async function nextPoNumber(): Promise<string> {
+async function nextPoNumber(branchId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `PO-${year}-`;
     const last = await prisma.purchaseOrder.findFirst({
-        where:   { poNumber: { startsWith: prefix } },
+        where:   { poNumber: { startsWith: prefix }, branchId },
         orderBy: { poNumber: "desc" },
         select:  { poNumber: true },
     });
@@ -41,8 +46,10 @@ async function nextPoNumber(): Promise<string> {
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getSession();
-        if (!session || !["admin", "manager"].includes(session.role)) {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (!["admin", "manager"].includes(session.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
@@ -71,6 +78,7 @@ export async function POST(req: NextRequest) {
                     unit:           i.unit || "",
                     unitPrice,
                     total:          Math.round(qty * unitPrice * 100) / 100,
+                    branchId,
                 };
             });
 
@@ -79,7 +87,7 @@ export async function POST(req: NextRequest) {
         // Retry once on the (rare) unique-poNumber race.
         let order;
         for (let attempt = 0; attempt < 2; attempt++) {
-            const poNumber = await nextPoNumber();
+            const poNumber = await nextPoNumber(branchId);
             try {
                 order = await prisma.purchaseOrder.create({
                     data: {
@@ -92,6 +100,7 @@ export async function POST(req: NextRequest) {
                         notes:        notes || null,
                         grandTotal,
                         createdById:  session.userId ?? null,
+                        branchId,
                         items:        { create: lineItems },
                     },
                     include: INCLUDE,
@@ -112,6 +121,7 @@ export async function POST(req: NextRequest) {
                 targetId:    order.id,
                 targetName:  `${order.poNumber} · ${order.supplierName}`,
                 newValues:   { status: order.status, grandTotal: order.grandTotal, items: lineItems.length },
+                branchId,
                 request:     req,
             });
         }

@@ -19,12 +19,13 @@ export type AuditAction =
 export interface LogAuditParams {
     session:     SessionPayload | null;
     action:      AuditAction;
-    targetTable: string;          // e.g. "Ingredient", "Recipe", "InventoryTransaction"
+    targetTable: string;
     targetId:    string;
-    targetName?: string;          // human-readable name of the record
+    targetName?: string;
     oldValues?:  Record<string, unknown>;
     newValues?:  Record<string, unknown>;
-    request?:    Request;         // pass the incoming Request to capture IP
+    request?:    Request;
+    branchId?:   string;
 }
 
 /** Extract client IP from request headers (works behind proxies). */
@@ -58,6 +59,7 @@ export async function logAudit(params: LogAuditParams): Promise<void> {
                 oldValues:   sanitize(params.oldValues) as Prisma.InputJsonValue ?? undefined,
                 newValues:   sanitize(params.newValues) as Prisma.InputJsonValue ?? undefined,
                 ipAddress:   getIp(params.request),
+                branchId:    params.branchId ?? null,
             },
         });
     } catch {

@@ -8,14 +8,16 @@
  *   staffPerformance : completed tasks per person per day — productivity.
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager", "chef"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager", "chef"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { searchParams } = new URL(req.url);
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") ?? to;
 
     const logs = await prisma.prepActivityLog.findMany({
-        where:  { date: { gte: from, lte: to } },
+        where:  { date: { gte: from, lte: to }, branchId },
         select: { date: true, stationName: true, taskName: true, action: true, userName: true },
     });
 

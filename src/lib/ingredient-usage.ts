@@ -68,7 +68,7 @@ const proteinRank = (name: string) => {
 
 export interface DateRangeOpts { from?: string; to?: string }
 
-export async function buildIngredientUsage(daysParam: number, range?: DateRangeOpts): Promise<IngredientUsageData> {
+export async function buildIngredientUsage(branchId: string, daysParam: number, range?: DateRangeOpts): Promise<IngredientUsageData> {
     const from = range?.from ? new Date(range.from + "T00:00:00Z") : new Date(Date.now() - Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60) * 24 * 60 * 60 * 1000);
     const to = range?.to ? new Date(range.to + "T23:59:59.999Z") : undefined;
     const days = to ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000)) : Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60);
@@ -78,7 +78,7 @@ export async function buildIngredientUsage(daysParam: number, range?: DateRangeO
         : { OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] };
 
     const uploads = await db.pmixUpload.findMany({
-        where: dateFilter,
+        where: { branchId, ...dateFilter },
         select: { id: true, businessDate: true, uploadedAt: true },
     });
     const uploadDow = new Map<string, number>();
@@ -94,13 +94,14 @@ export async function buildIngredientUsage(daysParam: number, range?: DateRangeO
     if (uploadIds.length === 0) return { days, dowCounts, ingredients: [] };
 
     const [items, standards, links, allIngredients, chains] = await Promise.all([
-        db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
-        db.portionStandard.findMany({ include: { ingredient: { select: { id: true, name: true } } } }),
+        db.pmixItem.findMany({ where: { uploadId: { in: uploadIds }, branchId }, include: { modifiers: true } }),
+        db.portionStandard.findMany({ where: { branchId }, include: { ingredient: { select: { id: true, name: true } } } }),
         db.menuCompositeLink.findMany({
+            where: { branchId },
             include: { composite: { include: { components: { include: { ingredient: { select: { id: true, name: true } } } } } } },
         }),
-        db.ingredient.findMany({ select: { id: true, category: { select: { name: true } } } }),
-        db.reportUnitChain.findMany(),
+        db.ingredient.findMany({ where: { branchId }, select: { id: true, category: { select: { name: true } } } }),
+        db.reportUnitChain.findMany({ where: { branchId } }),
     ]);
 
     // Per-ingredient unit-conversion chains, keyed "ingredient::<id>".

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
@@ -9,15 +9,19 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const category = searchParams.get("category");
 
+        // ── Branch scoping ─────────────────────────────────────────────────
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+
         // ── Row-level recipe category filtering ────────────────────────────
         // Admin & Manager always see all. Other roles are restricted to their
         // assigned recipe categories (if any are configured; none = see all).
-        const session = await getSession();
         let allowedCategories: string[] | null = null;
 
         if (session && !["admin", "manager"].includes(session.role)) {
             const perms = await prisma.userRecipeCategoryPermission.findMany({
-                where: { userId: session.userId },
+                where: { userId: session.userId, branchId },
                 include: { category: { select: { name: true } } },
             });
             if (perms.length > 0) {
@@ -25,7 +29,7 @@ export async function GET(request: Request) {
             }
         }
 
-        const where: { category?: string | { in: string[] } } = {};
+        const where: { branchId: string; category?: string | { in: string[] } } = { branchId };
         if (category) {
             // Explicit filter from query param — respect category restriction too
             where.category = allowedCategories
@@ -52,12 +56,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const body = await request.json();
         const recipe = await prisma.recipe.create({
             data: {
+                branchId,
                 name:               body.name,
                 category:           body.category,
                 yieldAmount:        body.yieldAmount,
@@ -87,7 +93,7 @@ export async function POST(request: Request) {
             session, action: "CREATE", targetTable: "Recipe",
             targetId: recipe.id, targetName: recipe.name,
             newValues: { name: recipe.name, category: recipe.category, isSubRecipe: recipe.isSubRecipe },
-            request,
+            branchId, request,
         });
         // If flagged as Sub Recipe, auto-create the linked Ingredient (fire-and-forget)
         if (recipe.isSubRecipe) syncSubRecipe(recipe.id);

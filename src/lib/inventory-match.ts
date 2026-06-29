@@ -15,9 +15,10 @@ export interface InvSnapshot {
     conversionRate:  number;
 }
 
-/** Load all tracked inventory items into a name→snapshot map. */
-export async function loadInventoryByName(): Promise<Map<string, InvSnapshot>> {
+/** Load all tracked inventory items (for one branch) into a name→snapshot map. */
+export async function loadInventoryByName(branchId: string): Promise<Map<string, InvSnapshot>> {
     const items = await prisma.inventoryItem.findMany({
+        where: { branchId },
         select: {
             id:           true,
             currentStock: true,

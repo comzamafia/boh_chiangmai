@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // PUT /api/storage-areas/[id] — update (admin only)
 export async function PUT(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;
+
+    const existing = await prisma.storageArea.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Storage area not found" }, { status: 404 });
+
     const body = await req.json();
     const { name, temperature, isActive, sortOrder } = body;
     // Notification routing fields (optional)
@@ -57,15 +63,17 @@ export async function DELETE(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await params;
 
-    const area = await prisma.storageArea.findUnique({
-        where: { id },
+    const area = await prisma.storageArea.findFirst({
+        where: { id, branchId },
         include: { _count: { select: { ingredients: true } } },
     });
 

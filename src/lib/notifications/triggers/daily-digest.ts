@@ -21,12 +21,14 @@ export interface DigestRunSummary {
     failed:       number;
 }
 
-export async function runDailyDigest(opts: { cadence?: "daily" | "weekly" } = {}): Promise<DigestRunSummary> {
+export async function runDailyDigest(opts: { cadence?: "daily" | "weekly"; branchId: string }): Promise<DigestRunSummary> {
     const cadence = opts.cadence ?? "daily";
+    const branchId = opts.branchId;
 
     // 1. Pull all inventory items with low stock, ingredient + storage area
     const items = await db.inventoryItem.findMany({
         where: {
+            branchId,
             ingredient: { storageAreaId: { not: null } },
         },
         include: {
@@ -124,6 +126,7 @@ export async function runDailyDigest(opts: { cadence?: "daily" | "weekly" } = {}
             type:          "low_stock_digest",
             dedupeKey:     `low_stock_digest:${areaId}:${dateKey}:${cadence}`,
             subject,
+            branchId,
             storageAreaId: areaId,
             recipients,
             react: React.createElement(DailyDigest, {

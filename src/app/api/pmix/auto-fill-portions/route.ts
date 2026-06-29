@@ -23,12 +23,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
     if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Load PMIX items with modifiers
     const pmixItems = await db.pmixItem.findMany({
-        where: { uploadId },
+        where: { uploadId, branchId },
         include: { modifiers: true },
     });
     if (pmixItems.length === 0) {
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Load all ingredients (case-insensitive name lookup)
     const ingredients = await prisma.ingredient.findMany({
+        where: { branchId },
         select: { id: true, name: true },
     });
     const ingByName = new Map<string, { id: string; name: string }>();
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest) {
 
     // Also load existing portion standards to avoid duplicates
     const existing = await prisma.portionStandard.findMany({
+        where: { branchId },
         select: { ingredientId: true, itemName: true },
     });
     const existingKeys = new Set(
@@ -125,7 +128,7 @@ export async function POST(req: NextRequest) {
     // For auto-create: need a default supplier
     let defaultSupplierId: string | null = null;
     if (createMissingIngredients) {
-        const anySupplier = await prisma.supplier.findFirst({ select: { id: true } });
+        const anySupplier = await prisma.supplier.findFirst({ where: { branchId }, select: { id: true } });
         defaultSupplierId = anySupplier?.id ?? null;
     }
 
@@ -150,6 +153,7 @@ export async function POST(req: NextRequest) {
                     yieldPercent:   100,
                     conversionRate: 1,
                     groupId:        "Weight",
+                    branchId,
                 },
                 select: { id: true, name: true },
             });
@@ -165,6 +169,7 @@ export async function POST(req: NextRequest) {
                 targetId:    newIng.id,
                 targetName:  `${newIng.name} (placeholder via PMIX auto-fill)`,
                 newValues:   { name: newIng.name, supplierId: defaultSupplierId },
+                branchId,
             });
         }
 
@@ -186,6 +191,7 @@ export async function POST(req: NextRequest) {
                 type:         "modifier",
                 portionSize:  portionSize,
                 portionUnit:  portionUnit,
+                branchId,
             },
             include: { ingredient: { select: { name: true } } },
         });
@@ -200,6 +206,7 @@ export async function POST(req: NextRequest) {
             targetId:    row.id,
             targetName:  `${row.ingredient.name} — ${row.itemName} (auto-fill)`,
             newValues:   { portionSize, portionUnit, type: "modifier" },
+            branchId,
         });
     }
 

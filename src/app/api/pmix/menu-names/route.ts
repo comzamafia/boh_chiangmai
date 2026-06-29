@@ -8,19 +8,21 @@
  * Response: { items: { itemName, category, linked, totalQty }[] }
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextResponse } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: from } },
                 { businessDate: null, uploadedAt: { gte: from } },
@@ -32,7 +34,7 @@ export async function GET() {
     if (uploadIds.length === 0) return NextResponse.json({ items: [] });
 
     const rows = await db.pmixItem.findMany({
-        where:  { uploadId: { in: uploadIds } },
+        where:  { uploadId: { in: uploadIds }, branchId },
         select: { itemName: true, category: true, recipeId: true, qtySold: true },
     });
 

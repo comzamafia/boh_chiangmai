@@ -33,6 +33,7 @@ export interface SendAlertParams {
     subject:       string;
     react:         React.ReactElement;
     recipients:    AlertRecipient[];
+    branchId:      string;
     storageAreaId?: string;
     ingredientId?:  string;
 }
@@ -59,8 +60,8 @@ export async function sendAlert(p: SendAlertParams): Promise<SendAlertResult> {
         return { sent: 0, skipped: 0, failed: 0, logIds: [] };
     }
 
-    // 1. Dedupe — has *anything* with this key gone out already?
-    const existing = await db.notificationLog.findUnique({ where: { dedupeKey: p.dedupeKey } });
+    // 1. Dedupe — has *anything* with this key gone out already? (per branch)
+    const existing = await db.notificationLog.findFirst({ where: { dedupeKey: p.dedupeKey, branchId: p.branchId } });
     if (existing && existing.status === "sent") {
         return { sent: 0, skipped: p.recipients.length, failed: 0, logIds: [existing.id] };
     }
@@ -95,6 +96,7 @@ export async function sendAlert(p: SendAlertParams): Promise<SendAlertResult> {
         db.notificationLog.create({
             data: {
                 type:          p.type,
+                branchId:      p.branchId,
                 storageAreaId: p.storageAreaId ?? null,
                 ingredientId:  p.ingredientId  ?? null,
                 userId:        r.userId        ?? null,

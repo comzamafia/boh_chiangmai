@@ -1,20 +1,23 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
     try {
-        const session = await getSession();
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+
         const { searchParams } = new URL(request.url);
         const group = searchParams.get("group");
 
-        // Build where clause — start with group filter
-        const where: Record<string, unknown> = {};
+        // Build where clause — start with branch + group filter
+        const where: Record<string, unknown> = { branchId };
         if (group) where.groupId = group;
 
         // Row-level category filtering for non-admin/manager roles
-        if (session && !["admin", "manager"].includes(session.role)) {
+        if (!["admin", "manager"].includes(session.role)) {
             const perms = await prisma.userCategoryPermission.findMany({
                 where: { userId: session.userId },
                 select: { categoryId: true },
@@ -46,16 +49,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-        }
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+
         const body = await request.json();
 
         // Auto-generate SKU if not provided
         let sku: string | null = body.sku?.trim() || null;
         if (!sku && body.name) {
-            sku = await generateUniqueSku(body.name, body.groupId, body.categoryId);
+            sku = await generateUniqueSku(body.name, branchId, body.groupId, body.categoryId);
         }
 
         const ingredient = await prisma.ingredient.create({
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
                 categoryId:     body.categoryId ?? null,
                 storageAreaId:  body.storageAreaId ?? null,
                 imageUrl:       body.imageUrl ?? null,
+                branchId,
             },
             include: {
                 supplier:           { select: { id: true, name: true } },
@@ -89,6 +93,7 @@ export async function POST(request: Request) {
                 name: ingredient.name, sku, supplierId: ingredient.supplierId,
                 categoryId: ingredient.categoryId, storageAreaId: ingredient.storageAreaId,
             },
+            branchId,
             request,
         });
         return NextResponse.json(ingredient, { status: 201 });
@@ -98,11 +103,11 @@ export async function POST(request: Request) {
 }
 
 // ── SKU Auto-generation ────────────────────────────────────────────────────────
-async function generateUniqueSku(name: string, groupId?: string, categoryId?: string): Promise<string> {
+async function generateUniqueSku(name: string, branchId: string, groupId?: string, categoryId?: string): Promise<string> {
     // Derive category abbreviation if we have a categoryId
     let catAbbr = "GEN";
     if (categoryId) {
-        const cat = await prisma.ingredientCategory.findUnique({ where: { id: categoryId }, select: { name: true } });
+        const cat = await prisma.ingredientCategory.findFirst({ where: { id: categoryId, branchId }, select: { name: true } });
         if (cat) catAbbr = cat.name.slice(0, 3).toUpperCase().replace(/\s/g, "");
     }
     const grpMap: Record<string, string> = { Weight: "WGT", Volume: "VOL", Count: "CNT" };
@@ -113,7 +118,7 @@ async function generateUniqueSku(name: string, groupId?: string, categoryId?: st
     // Ensure uniqueness — append suffix if collision
     let candidate = base;
     let suffix = 2;
-    while (await prisma.ingredient.findUnique({ where: { sku: candidate } })) {
+    while (await prisma.ingredient.findFirst({ where: { sku: candidate, branchId } })) {
         candidate = `${base}${suffix}`;
         suffix++;
     }

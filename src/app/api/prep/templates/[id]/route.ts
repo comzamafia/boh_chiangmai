@@ -1,14 +1,20 @@
 /** PUT/DELETE /api/prep/templates/[id] — edit / remove a backlog task. */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT = ["admin", "manager", "chef"];
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { id } = await params;
+
+    const existing = await prisma.prepTaskTemplate.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
     const body = await req.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: Record<string, any> = {};
@@ -21,9 +27,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { id } = await params;
+
+    const existing = await prisma.prepTaskTemplate.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
     await prisma.prepTaskTemplate.delete({ where: { id } });  // cascades board tasks
     return new NextResponse(null, { status: 204 });
 }

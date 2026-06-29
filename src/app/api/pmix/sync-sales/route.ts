@@ -9,12 +9,12 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 /** Compute BOM cost per recipe-unit for a linked recipe */
-async function calcUnitCost(recipeId: string): Promise<number | null> {
-    const recipe = await prisma.recipe.findUnique({
-        where: { id: recipeId },
+async function calcUnitCost(recipeId: string, branchId: string): Promise<number | null> {
+    const recipe = await prisma.recipe.findFirst({
+        where: { id: recipeId, branchId },
         include: {
             ingredients: {
                 include: {
@@ -48,8 +48,10 @@ async function calcUnitCost(recipeId: string): Promise<number | null> {
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager", "analyst"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager", "analyst"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -66,13 +68,13 @@ export async function POST(req: NextRequest) {
 
     // Verify upload exists
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const upload = await (prisma as any).pmixUpload.findUnique({ where: { id: uploadId } });
+    const upload = await (prisma as any).pmixUpload.findFirst({ where: { id: uploadId, branchId } });
     if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
 
     // Load all PMIX items for this upload
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pmixItems: any[] = await (prisma as any).pmixItem.findMany({
-        where: { uploadId },
+        where: { uploadId, branchId },
     });
 
     const itemsToSync = pmixItems.filter(i => i.qtySold > 0);
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
     const costCache: Record<string, number | null> = {};
     await Promise.all(
         linkedRecipeIds.map(async id => {
-            costCache[id] = await calcUnitCost(id);
+            costCache[id] = await calcUnitCost(id, branchId);
         })
     );
 
@@ -97,6 +99,7 @@ export async function POST(req: NextRequest) {
             where: {
                 date,
                 notes: { startsWith: "pmix:" },
+                branchId,
             },
         });
     }
@@ -124,11 +127,12 @@ export async function POST(req: NextRequest) {
             revenue,
             unitCost,
             notes: `pmix:${uploadId}`,
+            branchId,
         };
     }).filter(Boolean) as {
         date: string; recipeId: string | null; recipeName: string;
         qty: number; unitPrice: number; revenue: number;
-        unitCost: number | null; notes: string;
+        unitCost: number | null; notes: string; branchId: string;
     }[];
 
     await prisma.salesEntry.createMany({ data: rows });
@@ -151,15 +155,16 @@ export async function POST(req: NextRequest) {
  * Returns sync status: which dates this upload has been synced to.
  */
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const uploadId = new URL(req.url).searchParams.get("uploadId");
     if (!uploadId) return NextResponse.json({ error: "uploadId required" }, { status: 400 });
 
     // Find distinct dates in SalesEntry where notes = pmix:{uploadId}
     const entries = await prisma.salesEntry.findMany({
-        where: { notes: `pmix:${uploadId}` },
+        where: { notes: `pmix:${uploadId}`, branchId },
         select: { date: true, id: true },
         orderBy: { date: "asc" },
     });

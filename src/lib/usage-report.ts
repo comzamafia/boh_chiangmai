@@ -45,7 +45,7 @@ const PROTEIN_SORT_ORDER = [
 
 export interface DateRangeOpts { from?: string; to?: string }
 
-export async function buildUsageReport(daysParam: number, range?: DateRangeOpts): Promise<UsageReportData> {
+export async function buildUsageReport(branchId: string, daysParam: number, range?: DateRangeOpts): Promise<UsageReportData> {
     const from = range?.from ? new Date(range.from + "T00:00:00Z") : new Date(Date.now() - Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60) * 24 * 60 * 60 * 1000);
     const to = range?.to ? new Date(range.to + "T23:59:59.999Z") : undefined;
     const days = to ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000)) : Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 60);
@@ -55,7 +55,7 @@ export async function buildUsageReport(daysParam: number, range?: DateRangeOpts)
         : { OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] };
 
     const uploads = await db.pmixUpload.findMany({
-        where: dateFilter,
+        where: { branchId, ...dateFilter },
         select: { id: true, businessDate: true, uploadedAt: true },
     });
     const uploadDow = new Map<string, number>();
@@ -71,14 +71,14 @@ export async function buildUsageReport(daysParam: number, range?: DateRangeOpts)
     if (uploadIds.length === 0) return { days, dowCounts, protein: [], curry: [], beverage: [], dessertSections: [] };
 
     const [items, rules, standards, chains, ingredients] = await Promise.all([
-        db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, include: { modifiers: true } }),
-        db.pmixItemRule.findMany({ where: { isActive: true }, orderBy: [{ priority: "desc" }, { pattern: "asc" }] }),
+        db.pmixItem.findMany({ where: { uploadId: { in: uploadIds }, branchId }, include: { modifiers: true } }),
+        db.pmixItemRule.findMany({ where: { isActive: true, branchId }, orderBy: [{ priority: "desc" }, { pattern: "asc" }] }),
         db.portionStandard.findMany({
-            where: { type: { in: ["modifier", "base"] } },
+            where: { type: { in: ["modifier", "base"] }, branchId },
             include: { ingredient: { select: { id: true, name: true } } },
         }),
-        db.reportUnitChain.findMany(),
-        db.ingredient.findMany({ select: { id: true, name: true } }),
+        db.reportUnitChain.findMany({ where: { branchId } }),
+        db.ingredient.findMany({ where: { branchId }, select: { id: true, name: true } }),
     ]);
 
     type StdVal = { ingredientId: string; portionSize: number; portionUnit: string };

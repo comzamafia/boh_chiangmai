@@ -14,14 +14,15 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
@@ -31,20 +32,21 @@ export async function GET(req: NextRequest) {
     const db = prisma as any;
 
     // 1. Upload header
-    const upload = await db.pmixUpload.findUnique({
-        where:  { id: uploadId },
+    const upload = await db.pmixUpload.findFirst({
+        where:  { id: uploadId, branchId },
         select: { id: true, periodLabel: true, uploadedAt: true },
     });
     if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
 
     // 2. All items + modifiers
     const pmixItems = await db.pmixItem.findMany({
-        where:   { uploadId },
+        where:   { uploadId, branchId },
         include: { modifiers: true },
     });
 
     // 3. Portion standards
     const standards = await db.portionStandard.findMany({
+        where:   { branchId },
         include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
     });
     type StdVal = { ingredientName: string; portionSize: number; portionUnit: string; ingredientId: string };
@@ -70,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     // 4. Item rules (sorted priority desc)
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 

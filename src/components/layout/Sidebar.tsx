@@ -7,7 +7,7 @@ import {
     Wrench, Users, Package, FileText,
     PieChart, Calendar, ClipboardList, ClipboardCheck, Gauge,
     Sun, Moon, LogOut, ShieldCheck, Loader2, X, ShoppingBag, BookOpen, ScrollText, Warehouse, Tag, UtensilsCrossed, Bell, Carrot, ShieldAlert, Trophy,
-    PanelLeftClose, PanelLeft,
+    PanelLeftClose, PanelLeft, Building2, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
@@ -72,7 +72,7 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: {
     const pathname = usePathname();
     const { theme, setTheme } = useTheme();
 
-    const { user, loading, permittedSlugs, logout } = useAuth();
+    const { user, loading, permittedSlugs, logout, activeBranch, availableBranches, switchBranch } = useAuth();
 
     const visibleItems = navItems.filter(item => permittedSlugs.includes(item.slug));
 
@@ -202,6 +202,44 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: {
                         <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                     </button>
                 </div>
+
+                {/* Branch switcher */}
+                {availableBranches.length > 1 && (
+                    <div className={cn("pt-3 border-t border-sidebar-border", collapsed ? "flex justify-center" : "")}>
+                        {collapsed ? (
+                            <div
+                                title={activeBranch?.name ?? "Branch"}
+                                className="flex items-center justify-center w-8 h-8 rounded-lg bg-sidebar-primary/10 text-sidebar-primary text-xs font-bold"
+                            >
+                                {activeBranch?.name?.[0] ?? "B"}
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 px-1">
+                                    Branch
+                                </span>
+                                <div className="relative">
+                                    <select
+                                        value={activeBranch?.id ?? ""}
+                                        onChange={(e) => switchBranch(e.target.value)}
+                                        className="w-full appearance-none rounded-lg border border-sidebar-border bg-sidebar px-3 py-1.5 pr-8 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-sidebar-primary"
+                                    >
+                                        {availableBranches.map((b) => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/40 pointer-events-none" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                {availableBranches.length === 1 && activeBranch && !collapsed && (
+                    <div className="pt-3 border-t border-sidebar-border flex items-center gap-2 px-1">
+                        <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
+                        <span className="text-xs text-sidebar-foreground/50 truncate">{activeBranch.name}</span>
+                    </div>
+                )}
 
                 {/* User */}
                 {user && (

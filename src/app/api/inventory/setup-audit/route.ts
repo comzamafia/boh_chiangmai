@@ -6,7 +6,7 @@
  * stock counting and tracking accuracy.
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextResponse } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,13 +17,16 @@ export const dynamic = "force-dynamic";
 const STALE_DAYS = 14;
 
 export async function GET() {
-    const session = await getSession();
-    if (!session || !["admin", "manager", "chef"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager", "chef"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const [ingredients, inventoryItems, areas] = await Promise.all([
         db.ingredient.findMany({
+            where: { branchId },
             select: {
                 id: true, name: true, supplierId: true, storageAreaId: true,
                 purchaseUnit: true, recipeUnit: true, conversionRate: true,
@@ -33,12 +36,13 @@ export async function GET() {
             },
         }),
         db.inventoryItem.findMany({
+            where: { branchId },
             select: {
                 id: true, ingredientId: true, parMin: true, reorderPoint: true,
                 lastCountDate: true,
             },
         }),
-        db.storageArea.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
+        db.storageArea.findMany({ where: { branchId, isActive: true }, select: { id: true, name: true } }),
     ]);
 
     const trackedSet = new Set<string>();

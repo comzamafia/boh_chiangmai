@@ -3,7 +3,7 @@
  * POST /api/prep-stations   — create a station { name, icon?, color? }
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
@@ -16,32 +16,36 @@ const DEFAULTS = [
 ];
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
-    let stations = await prisma.prepStation.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+    let stations = await prisma.prepStation.findMany({ where: { branchId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
     if (stations.length === 0) {
-        await prisma.prepStation.createMany({ data: DEFAULTS });
-        stations = await prisma.prepStation.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+        await prisma.prepStation.createMany({ data: DEFAULTS.map(d => ({ ...d, branchId })) });
+        stations = await prisma.prepStation.findMany({ where: { branchId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
     }
     return NextResponse.json(stations);
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { name, icon, color } = await req.json();
     if (!name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
-    const last = await prisma.prepStation.findFirst({ orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
+    const last = await prisma.prepStation.findFirst({ where: { branchId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
     const station = await prisma.prepStation.create({
         data: {
             name:      name.trim(),
             icon:      icon  || "utensils",
             color:     color || "bg-slate-500",
             sortOrder: (last?.sortOrder ?? 0) + 1,
+            branchId,
         },
     });
     return NextResponse.json(station, { status: 201 });

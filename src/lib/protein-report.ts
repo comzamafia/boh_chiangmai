@@ -67,14 +67,15 @@ const toMember = (r: IngredientUsageRow): ProteinMember => ({
     sources: r.sources,
 });
 
-export async function buildProteinReport(daysParam: number, range?: DateRangeOpts): Promise<ProteinReportData> {
+export async function buildProteinReport(branchId: string, daysParam: number, range?: DateRangeOpts): Promise<ProteinReportData> {
     const [usage, groups, chains] = await Promise.all([
-        buildIngredientUsage(daysParam, range),
+        buildIngredientUsage(branchId, daysParam, range),
         db.proteinGroup.findMany({
+            where: { branchId },
             orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
             include: { members: { select: { ingredientId: true } } },
         }),
-        db.reportUnitChain.findMany(),
+        db.reportUnitChain.findMany({ where: { branchId } }),
     ]);
 
     // Group-level unit chains, keyed "protein::<groupId>".

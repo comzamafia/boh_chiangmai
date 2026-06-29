@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextResponse } from "next/server";
 
 // GET /api/audit-logs — admin + manager only
 export async function GET(request: Request) {
     try {
-        const session = await getSession();
-        if (!session || !["admin", "manager"].includes(session.role)) {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (!["admin", "manager"].includes(session.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
 
         const logs = await prisma.auditLog.findMany({
             where: {
+                branchId,
                 ...(userId      ? { userId }      : {}),
                 ...(action      ? { action }      : {}),
                 ...(targetTable ? { targetTable } : {}),

@@ -17,7 +17,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { buildIngredientUsage } from "@/lib/ingredient-usage";
-import { authPublicRequest, branchIdentity, CORS } from "@/lib/public-api";
+import { authPublicRequest, branchIdentity, resolvePublicBranch, CORS } from "@/lib/public-api";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
     const denied = authPublicRequest(req, ["INGREDIENT_USAGE_API_KEY"]);
     if (denied) return denied;
 
+    const branch = await resolvePublicBranch(req);
+    if (branch instanceof NextResponse) return branch;
+
     const url = new URL(req.url);
     const days = Number(url.searchParams.get("days") ?? 7);
     const from = url.searchParams.get("from") ?? undefined;
@@ -36,10 +39,10 @@ export async function GET(req: NextRequest) {
     const range = from ? { from, to } : undefined;
     const proteinOnly = /^(1|true|yes)$/i.test(url.searchParams.get("proteinOnly") ?? "");
     try {
-        const data = await buildIngredientUsage(days, range);
+        const data = await buildIngredientUsage(branch.branchId, days, range);
         const ingredients = proteinOnly ? data.ingredients.filter(i => i.isProtein) : data.ingredients;
         return NextResponse.json(
-            { ok: true, source: "sujeevan-boh", branch: branchIdentity(), generatedAt: new Date().toISOString(),
+            { ok: true, source: "sujeevan-boh", branch: branchIdentity(branch), generatedAt: new Date().toISOString(),
               days: data.days, dowCounts: data.dowCounts, proteinOnly, ingredients },
             { headers: { ...CORS, "Cache-Control": "no-store" } },
         );

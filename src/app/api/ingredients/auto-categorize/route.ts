@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
@@ -165,8 +165,10 @@ function matchCategory(name: string): string | null {
 // Body: { overwrite?: boolean }  — if true, re-assign even already-categorised items
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session || !["admin", "manager"].includes(session.role)) {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (!["admin", "manager"].includes(session.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
@@ -174,7 +176,7 @@ export async function POST(request: Request) {
         const overwrite: boolean = body.overwrite === true;
 
         // 1. Fetch all categories (by name → id map)
-        const cats = await prisma.ingredientCategory.findMany({ select: { id: true, name: true } });
+        const cats = await prisma.ingredientCategory.findMany({ where: { branchId }, select: { id: true, name: true } });
         const catMap = new Map(cats.map(c => [c.name, c.id]));
 
         if (cats.length === 0) {
@@ -182,7 +184,7 @@ export async function POST(request: Request) {
         }
 
         // 2. Fetch ingredients (only uncategorised unless overwrite=true)
-        const where = overwrite ? {} : { categoryId: null };
+        const where = overwrite ? { branchId } : { branchId, categoryId: null };
         const ingredients = await prisma.ingredient.findMany({
             where,
             select: { id: true, name: true, categoryId: true },
@@ -213,6 +215,7 @@ export async function POST(request: Request) {
             targetId: "bulk",
             targetName: `auto-categorize (${assigned.length} assigned)`,
             newValues: { assigned: assigned.length, skipped: skipped.length, overwrite },
+            branchId,
             request,
         });
 

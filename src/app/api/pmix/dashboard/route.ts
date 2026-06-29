@@ -10,7 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 
@@ -55,8 +55,9 @@ function isFriedRiceCategory(category: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
@@ -84,8 +85,8 @@ export async function GET(req: NextRequest) {
     let uploadCount = 1;
 
     if (uploadId) {
-        const upload: UploadRow | null = await db.pmixUpload.findUnique({
-            where:  { id: uploadId },
+        const upload: UploadRow | null = await db.pmixUpload.findFirst({
+            where:  { id: uploadId, branchId },
             select: { id: true, periodLabel: true, businessDate: true, uploadedAt: true },
         });
         if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
         }
         const uploads: UploadRow[] = await db.pmixUpload.findMany({
             where: {
+                branchId,
                 OR: [
                     { businessDate: { gte: from, lte: to } },
                     { businessDate: null, uploadedAt: { gte: from, lte: to } },
@@ -141,12 +143,12 @@ export async function GET(req: NextRequest) {
 
     const pmixItems: Array<{ itemName: string; category: string; qtySold: number; netSales: unknown }> =
         await db.pmixItem.findMany({
-            where:   { uploadId: { in: uploadIds } },
+            where:   { uploadId: { in: uploadIds }, branchId },
             select:  { itemName: true, category: true, qtySold: true, netSales: true },
         });
 
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
@@ -12,14 +12,15 @@ import { NextResponse } from "next/server";
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const { id } = await params;
 
         // Load source with all ingredient rows
-        const source = await prisma.recipe.findUnique({
-            where: { id },
+        const source = await prisma.recipe.findFirst({
+            where: { id, branchId },
             include: { ingredients: true },
         });
         if (!source) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -31,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
         // Check for existing copies with the same base name and append a counter if needed
         const existing = await prisma.recipe.findMany({
-            where: { name: { startsWith: baseName } },
+            where: { name: { startsWith: baseName }, branchId },
             select: { name: true },
         });
         let copyName = baseName;
@@ -54,11 +55,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 imageUrl:           source.imageUrl,
                 isMainSauce:        source.isMainSauce,
                 instructions:       source.instructions,
+                branchId,
                 ingredients: source.ingredients.length
                     ? {
                           create: source.ingredients.map(ri => ({
                               ingredientId: ri.ingredientId,
                               quantity:     ri.quantity,
+                              branchId,
                           })),
                       }
                     : undefined,
@@ -70,6 +73,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             session, action: "CREATE", targetTable: "Recipe",
             targetId: copy.id, targetName: copy.name,
             newValues: { name: copy.name, category: copy.category, duplicatedFrom: source.name },
+            branchId,
             request,
         });
 

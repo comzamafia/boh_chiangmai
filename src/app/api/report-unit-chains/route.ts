@@ -6,24 +6,27 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const chains = await db.reportUnitChain.findMany({ where: { reportKey: { not: null } } });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
+    const chains = await db.reportUnitChain.findMany({ where: { reportKey: { not: null }, branchId } });
     return NextResponse.json(chains.map((c: { reportKey: string; base: string; relations: unknown }) => ({
         reportKey: c.reportKey, base: c.base, relations: c.relations,
     })));
 }
 
 export async function PUT(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const body = await req.json();
@@ -37,14 +40,13 @@ export async function PUT(req: NextRequest) {
 
     // Empty config → remove
     if (!base || relations.length === 0) {
-        await db.reportUnitChain.deleteMany({ where: { reportKey } });
+        await db.reportUnitChain.deleteMany({ where: { reportKey, branchId } });
         return NextResponse.json({ ok: true, deleted: true });
     }
 
-    const saved = await db.reportUnitChain.upsert({
-        where:  { reportKey },
-        update: { base, relations },
-        create: { reportKey, base, relations },
-    });
+    const existing = await db.reportUnitChain.findFirst({ where: { reportKey, branchId } });
+    const saved = existing
+        ? await db.reportUnitChain.update({ where: { id: existing.id }, data: { base, relations } })
+        : await db.reportUnitChain.create({ data: { reportKey, base, relations, branchId } });
     return NextResponse.json({ ok: true, reportKey: saved.reportKey, base: saved.base, relations: saved.relations });
 }

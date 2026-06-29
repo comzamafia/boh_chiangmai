@@ -41,14 +41,15 @@ function formatBkkLocal(d: Date, fmt: "date" | "datetime"): string {
     return new Intl.DateTimeFormat("en-CA", opts).format(d);
 }
 
-export async function runOrderReminders(opts: { windowHours?: number } = {}): Promise<OrderReminderRunSummary> {
+export async function runOrderReminders(opts: { windowHours?: number; branchId: string }): Promise<OrderReminderRunSummary> {
     const windowHours = opts.windowHours ?? 14;
+    const branchId = opts.branchId;
     const now = new Date();
     const windowEnd = new Date(now.getTime() + windowHours * 3600_000);
 
     // 1. Load all active suppliers with a delivery schedule + their inventory items
     const suppliers = await db.supplier.findMany({
-        where: { status: "Active" },
+        where: { status: "Active", branchId },
         include: {
             ingredients: {
                 include: {
@@ -143,6 +144,7 @@ export async function runOrderReminders(opts: { windowHours?: number } = {}): Pr
             type:      "order_reminder",
             dedupeKey: `order_reminder:${sup.id}:${dateKey}`,
             subject,
+            branchId,
             recipients,
             react: React.createElement(OrderReminder, {
                 supplierName:     sup.name,

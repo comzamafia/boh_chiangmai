@@ -12,7 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { branchIdentity } from "@/lib/public-api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,21 +20,23 @@ const db = prisma as any;
 const EDIT_ROLES = ["admin", "manager", "chef"];
 
 export async function GET() {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId, branchSlug, branchName } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const [rules, standards, chains, composites, links] = await Promise.all([
-        db.pmixItemRule.findMany(),
-        db.portionStandard.findMany({ include: { ingredient: { select: { name: true } } } }),
-        db.reportUnitChain.findMany({ where: { reportKey: { not: null } } }),
-        db.compositeRecipe.findMany({ include: { components: { include: { ingredient: { select: { name: true } } } } } }),
-        db.menuCompositeLink.findMany({ include: { composite: { select: { name: true } } } }),
+        db.pmixItemRule.findMany({ where: { branchId } }),
+        db.portionStandard.findMany({ where: { branchId }, include: { ingredient: { select: { name: true } } } }),
+        db.reportUnitChain.findMany({ where: { branchId, reportKey: { not: null } } }),
+        db.compositeRecipe.findMany({ where: { branchId }, include: { components: { include: { ingredient: { select: { name: true } } } } } }),
+        db.menuCompositeLink.findMany({ where: { branchId }, include: { composite: { select: { name: true } } } }),
     ]);
 
     const bundle = {
         version: 1,
         exportedAt: new Date().toISOString(),
-        branch: branchIdentity(),
+        branch: branchIdentity({ slug: branchSlug, name: branchName }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pmixItemRules: rules.map((r: any) => ({
             pattern: r.pattern, matchType: r.matchType, category: r.category,

@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -16,8 +16,10 @@ const VALID_CATEGORIES = new Set(["main_protein", "extra_protein", "dessert", "e
 const VALID_MATCH_TYPES = new Set(["exact", "contains", "starts_with"]);
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch existing (pattern, matchType, category) triples to detect duplicates
     const existing: { pattern: string; matchType: string; category: string }[] =
-        await db.pmixItemRule.findMany({ select: { pattern: true, matchType: true, category: true } });
+        await db.pmixItemRule.findMany({ where: { branchId }, select: { pattern: true, matchType: true, category: true } });
     const existingSet = new Set(existing.map(r => `${r.pattern}||${r.matchType}||${r.category}`));
 
     let created = 0;
@@ -63,6 +65,7 @@ export async function POST(req: NextRequest) {
                 priority: Number(r.priority) || 0,
                 isActive: r.isActive !== false,
                 notes:    r.notes    ? String(r.notes).trim()    : null,
+                branchId,
             },
         });
         existingSet.add(key);

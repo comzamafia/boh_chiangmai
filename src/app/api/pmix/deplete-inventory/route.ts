@@ -19,11 +19,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager", "analyst"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager", "analyst"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -41,13 +43,13 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = prisma as any;
     const pmixItems: { recipeId: string | null; qtySold: number }[] = await db.pmixItem.findMany({
-        where:  { uploadId, qtySold: { gt: 0 }, recipeId: { not: null } },
+        where:  { uploadId, qtySold: { gt: 0 }, recipeId: { not: null }, branchId },
         select: { recipeId: true, qtySold: true },
     });
 
     if (pmixItems.length === 0) {
         // Still reverse any prior deduction so toggling off works
-        await reversePrior(tag);
+        await reversePrior(tag, branchId);
         return NextResponse.json({ depleted: 0, lines: [], skippedNoRecipe: 0, message: "No recipe-linked sales to deplete" });
     }
 
@@ -117,7 +119,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Reverse any prior auto-deduction for this upload+date
-    await reversePrior(tag);
+    await reversePrior(tag, branchId);
 
     // 5. Apply new deductions (transaction + stock decrement) atomically
     const lines = [...byIngredient.values()].map(l => ({ ...l, qty: round4(l.qty) }))
@@ -135,6 +137,7 @@ export async function POST(req: NextRequest) {
                         unit:            l.unit,
                         date,
                         note:            tag,
+                        branchId,
                     },
                 }),
                 prisma.inventoryItem.update({
@@ -155,9 +158,9 @@ export async function POST(req: NextRequest) {
 }
 
 /** Reverse a prior auto-deduction run: add qty back to stock, delete the txns. */
-async function reversePrior(tag: string): Promise<void> {
+async function reversePrior(tag: string, branchId: string): Promise<void> {
     const prior = await prisma.inventoryTransaction.findMany({
-        where:  { type: "Out", note: tag },
+        where:  { type: "Out", note: tag, branchId },
         select: { id: true, inventoryItemId: true, qty: true },
     });
     if (prior.length === 0) return;

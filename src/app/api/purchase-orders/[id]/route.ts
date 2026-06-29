@@ -4,7 +4,7 @@
  * DELETE /api/purchase-orders/[id]   — delete a PO
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -12,8 +12,12 @@ const INCLUDE = { items: true, supplier: { select: { id: true, name: true } } };
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { branchId } = ctx;
+
         const { id } = await params;
-        const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: INCLUDE });
+        const po = await prisma.purchaseOrder.findFirst({ where: { id, branchId }, include: INCLUDE });
         if (!po) return NextResponse.json({ error: "Not found" }, { status: 404 });
         return NextResponse.json(po);
     } catch {
@@ -23,11 +27,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getSession();
-        if (!session || !["admin", "manager"].includes(session.role)) {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (!["admin", "manager"].includes(session.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
         const { id } = await params;
+
+        const existing = await prisma.purchaseOrder.findFirst({ where: { id, branchId }, select: { id: true } });
+        if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
         const body = await req.json();
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,10 +59,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                         ingredientName: i.ingredientName.trim(),
                         qty, unit: i.unit || "", unitPrice,
                         total: Math.round(qty * unitPrice * 100) / 100,
+                        branchId,
                     };
                 });
             data.grandTotal = lineItems.reduce((s: number, i: { total: number }) => s + i.total, 0);
-            await prisma.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
+            await prisma.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id, branchId } });
             data.items = { create: lineItems };
         }
 
@@ -65,6 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             targetId:    id,
             targetName:  `${po.poNumber} · ${po.supplierName}`,
             newValues:   { status: po.status },
+            branchId,
             request:     req,
         });
 
@@ -76,24 +88,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getSession();
-        if (!session || !["admin", "manager"].includes(session.role)) {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (!["admin", "manager"].includes(session.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
         const { id } = await params;
-        const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { poNumber: true, supplierName: true } });
+        const po = await prisma.purchaseOrder.findFirst({ where: { id, branchId }, select: { poNumber: true, supplierName: true } });
+        if (!po) return NextResponse.json({ error: "Not found" }, { status: 404 });
         await prisma.purchaseOrder.delete({ where: { id } });
 
-        if (po) {
-            logAudit({
-                session,
-                action:      "DELETE",
-                targetTable: "PurchaseOrder",
-                targetId:    id,
-                targetName:  `${po.poNumber} · ${po.supplierName}`,
-                request:     req,
-            });
-        }
+        logAudit({
+            session,
+            action:      "DELETE",
+            targetTable: "PurchaseOrder",
+            targetId:    id,
+            targetName:  `${po.poNumber} · ${po.supplierName}`,
+            branchId,
+            request:     req,
+        });
         return new NextResponse(null, { status: 204 });
     } catch {
         return NextResponse.json({ error: "Failed to delete purchase order" }, { status: 500 });

@@ -14,7 +14,7 @@
  *   - unlinkedMenus[]    : assigned menus with no linked recipe (excluded from totals)
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,15 +23,16 @@ const db = prisma as any;
 const dowIndex = (d: Date) => (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { id } = await params;
     const daysParam = Number(new URL(req.url).searchParams.get("days") ?? 7);
     const days = Math.min(Math.max(Number.isFinite(daysParam) ? daysParam : 7, 1), 90);
 
-    const station = await db.reportStation.findUnique({
-        where: { id },
+    const station = await db.reportStation.findFirst({
+        where: { id, branchId },
         include: { menus: true },
     });
     if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });

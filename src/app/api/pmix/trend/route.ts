@@ -7,11 +7,12 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const limit = Math.max(2, Math.min(20, Number(searchParams.get("limit") ?? 10)));
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
     // Load recent uploads ordered by upload date
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uploads: any[] = await (prisma as any).pmixUpload.findMany({
+        where: { branchId },
         orderBy: { uploadedAt: "desc" },
         take: limit,
         select: { id: true, periodLabel: true, uploadedAt: true, totalItems: true, totalQty: true },
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest) {
     // Load all PmixItems with recipeId for these uploads in one query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allLinkedItems: any[] = await (prisma as any).pmixItem.findMany({
-        where: { uploadId: { in: uploadIds }, recipeId: { not: null } },
+        where: { uploadId: { in: uploadIds }, recipeId: { not: null }, branchId },
         select: { uploadId: true, recipeId: true, qtySold: true },
     });
 
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
 
     // Load recipe ingredients once (use include only, not combined with select)
     const recipeIngredients = await prisma.recipeIngredient.findMany({
-        where: { recipeId: { in: recipeIds } },
+        where: { recipeId: { in: recipeIds }, branchId },
         include: {
             recipe: { select: { id: true, yieldAmount: true } },
         },

@@ -6,14 +6,16 @@
  *   Body: { fromDate, toDate, overwrite? }
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { fromDate, toDate, overwrite } = await req.json();
@@ -22,14 +24,14 @@ export async function POST(req: NextRequest) {
     }
 
     const source = await prisma.prepTask.findMany({
-        where:   { date: fromDate },
+        where:   { date: fromDate, branchId },
         orderBy: [{ station: "asc" }, { sortOrder: "asc" }],
     });
     if (source.length === 0) {
         return NextResponse.json({ error: "No tasks to copy from that date" }, { status: 400 });
     }
 
-    const existing = await prisma.prepTask.count({ where: { date: toDate } });
+    const existing = await prisma.prepTask.count({ where: { date: toDate, branchId } });
     if (existing > 0 && !overwrite) {
         return NextResponse.json(
             { error: "duplicate", duplicate: true, existingCount: existing },
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.$transaction(async (tx) => {
         if (existing > 0 && overwrite) {
-            await tx.prepTask.deleteMany({ where: { date: toDate } });
+            await tx.prepTask.deleteMany({ where: { date: toDate, branchId } });
         }
         await tx.prepTask.createMany({
             data: source.map(t => ({
@@ -50,6 +52,7 @@ export async function POST(req: NextRequest) {
                 dueTime:   t.dueTime,
                 sortOrder: t.sortOrder,
                 done:      false,
+                branchId,
             })),
         });
     });

@@ -7,11 +7,12 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
@@ -19,13 +20,13 @@ export async function GET(req: NextRequest) {
 
     // 1. Load upload header
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const upload = await (prisma as any).pmixUpload.findUnique({ where: { id: uploadId } });
+    const upload = await (prisma as any).pmixUpload.findFirst({ where: { id: uploadId, branchId } });
     if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
 
     // 2. Load all PMIX items for this upload
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: any[] = await (prisma as any).pmixItem.findMany({
-        where: { uploadId },
+        where: { uploadId, branchId },
         orderBy: { qtySold: "desc" },
     });
 
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
     // 4. Load recipe-ingredient BOMs for all linked recipes
     const recipeIds = [...new Set(linkedItems.map((i: any) => i.recipeId as string))];
     const recipeIngredients = await prisma.recipeIngredient.findMany({
-        where: { recipeId: { in: recipeIds } },
+        where: { recipeId: { in: recipeIds }, branchId },
         include: {
             ingredient: {
                 select: {
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
     // 6. Fetch current inventory stock for all consumed ingredients
     const ingredientIds = Object.keys(consumptionMap);
     const inventoryItems = await prisma.inventoryItem.findMany({
-        where: { ingredientId: { in: ingredientIds } },
+        where: { ingredientId: { in: ingredientIds }, branchId },
         select: { ingredientId: true, currentStock: true, parMin: true, parMax: true, reorderPoint: true, leadTimeDays: true, holdingDays: true },
     });
     const stockMap = new Map(inventoryItems.map(iv => [iv.ingredientId, iv]));

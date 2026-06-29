@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { sendEmail } from "@/lib/notifications/email";
 import { STORE_NAME } from "@/lib/branding";
 
@@ -15,8 +15,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { from, to } = await req.json();
     if (!from || !to) return NextResponse.json({ error: "from and to are required" }, { status: 400 });
@@ -24,8 +26,8 @@ export async function POST(req: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [complaints, discounts, admins]: [any[], any[], { email: string }[]] = await Promise.all([
-        db.lossComplaint.findMany({ where: { businessDate: { gte: fromD, lte: toD }, actionType: "Complaint" } }),
-        db.lossDiscount.findMany({ where: { businessDate: { gte: fromD, lte: toD } } }),
+        db.lossComplaint.findMany({ where: { businessDate: { gte: fromD, lte: toD }, actionType: "Complaint", branchId } }),
+        db.lossDiscount.findMany({ where: { businessDate: { gte: fromD, lte: toD }, branchId } }),
         db.user.findMany({ where: { role: "admin", isActive: true }, select: { email: true } }),
     ]);
     const recipients = admins.map(a => a.email).filter(Boolean);

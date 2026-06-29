@@ -4,7 +4,7 @@
  * (unit = null/"" clears it, falling back to recipeUnit).
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
@@ -12,12 +12,17 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const db = prisma as any;
 
 export async function PUT(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { ingredientId, unit } = await req.json();
     if (!ingredientId) return NextResponse.json({ error: "ingredientId is required" }, { status: 400 });
+
+    const owned = await db.ingredient.findFirst({ where: { id: ingredientId, branchId }, select: { id: true } });
+    if (!owned) return NextResponse.json({ error: "Ingredient not found" }, { status: 404 });
 
     await db.ingredient.update({
         where: { id: ingredientId },

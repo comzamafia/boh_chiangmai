@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { signToken, COOKIE_NAME, COOKIE_MAX_AGE } from "@/lib/auth";
+import { BRANCH_COOKIE } from "@/lib/branch";
 
 export async function POST(request: Request) {
     try {
@@ -30,6 +31,14 @@ export async function POST(request: Request) {
             permissions: user.permissions,
         });
 
+        const userBranches = await prisma.userBranch.findMany({
+            where: { userId: user.id },
+            include: { branch: true },
+            orderBy: { branch: { sortOrder: "asc" } },
+        });
+
+        const defaultUb = userBranches.find((ub) => ub.isDefault) ?? userBranches[0];
+
         const response = NextResponse.json({
             id: user.id,
             name: user.name,
@@ -45,6 +54,16 @@ export async function POST(request: Request) {
             maxAge: COOKIE_MAX_AGE,
             path: "/",
         });
+
+        if (defaultUb) {
+            response.cookies.set(BRANCH_COOKIE, defaultUb.branchId, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: "lax",
+                maxAge: 60 * 60 * 24 * 365,
+                path: "/",
+            });
+        }
 
         return response;
     } catch (err) {

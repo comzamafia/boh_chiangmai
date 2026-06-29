@@ -9,15 +9,16 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export const dynamic   = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const days = Math.max(1, Math.min(30, Number(searchParams.get("days") ?? 7)));
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
     // 1. Uploads in range
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
                 { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
@@ -71,19 +73,19 @@ export async function GET(req: NextRequest) {
 
     // 3. Items + modifiers
     const pmixItems = await db.pmixItem.findMany({
-        where:   { uploadId: { in: uploadIds } },
+        where:   { uploadId: { in: uploadIds }, branchId },
         include: { modifiers: true },
     });
 
     // 4. Item rules
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
     // 5. Portion standards — include ingredientId so we can look up inventory
     const standards = await db.portionStandard.findMany({
-        where: { type: { in: ["modifier", "base"] } },
+        where: { type: { in: ["modifier", "base"] }, branchId },
         select: {
             itemName: true, portionSize: true, portionUnit: true,
             ingredientId: true,
@@ -105,6 +107,7 @@ export async function GET(req: NextRequest) {
 
     // 6. Inventory items — for currentStock + parMin
     const inventoryItems = await prisma.inventoryItem.findMany({
+        where: { branchId },
         select: { id: true, ingredientId: true, currentStock: true, parMin: true },
     });
     const invByIngredientId = new Map(

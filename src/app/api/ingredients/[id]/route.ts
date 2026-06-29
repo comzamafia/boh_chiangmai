@@ -1,13 +1,17 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { branchId } = ctx;
+
         const { id } = await params;
-        const ingredient = await prisma.ingredient.findUnique({
-            where: { id },
+        const ingredient = await prisma.ingredient.findFirst({
+            where: { id, branchId },
             include: {
                 supplier:           { select: { id: true, name: true } },
                 category:           true,
@@ -27,17 +31,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const { id } = await params;
 
+        const old = await prisma.ingredient.findFirst({ where: { id, branchId } });
+        if (!old) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
         // Category-level edit permission check (skip for admin/manager)
         if (!["admin", "manager"].includes(session.role)) {
-            const existing = await prisma.ingredient.findUnique({ where: { id }, select: { categoryId: true } });
-            if (existing?.categoryId) {
+            if (old.categoryId) {
                 const perm = await prisma.userCategoryPermission.findUnique({
-                    where: { userId_categoryId: { userId: session.userId, categoryId: existing.categoryId } },
+                    where: { userId_categoryId: { userId: session.userId, categoryId: old.categoryId } },
                 });
                 if (!perm || !perm.canEdit) {
                     return NextResponse.json({ error: "Forbidden: no edit permission for this category" }, { status: 403 });
@@ -46,7 +53,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         }
 
         const body = await request.json();
-        const old = await prisma.ingredient.findUnique({ where: { id } });
         const ingredient = await prisma.ingredient.update({
             where: { id },
             data: {
@@ -78,6 +84,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             targetId: id, targetName: ingredient.name,
             oldValues: { name: old?.name, purchasePrice: old?.purchasePrice, categoryId: old?.categoryId, storageAreaId: old?.storageAreaId },
             newValues: { name: ingredient.name, purchasePrice: ingredient.purchasePrice, categoryId: ingredient.categoryId, storageAreaId: ingredient.storageAreaId, sku: ingredient.sku },
+            branchId,
             request,
         });
         return NextResponse.json(ingredient);
@@ -88,17 +95,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const { id } = await params;
 
+        const old = await prisma.ingredient.findFirst({ where: { id, branchId } });
+        if (!old) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
         // Category-level edit permission check (skip for admin/manager)
         if (!["admin", "manager"].includes(session.role)) {
-            const existing = await prisma.ingredient.findUnique({ where: { id }, select: { categoryId: true } });
-            if (existing?.categoryId) {
+            if (old.categoryId) {
                 const perm = await prisma.userCategoryPermission.findUnique({
-                    where: { userId_categoryId: { userId: session.userId, categoryId: existing.categoryId } },
+                    where: { userId_categoryId: { userId: session.userId, categoryId: old.categoryId } },
                 });
                 if (!perm || !perm.canEdit) {
                     return NextResponse.json({ error: "Forbidden: no edit permission for this category" }, { status: 403 });
@@ -106,12 +116,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             }
         }
 
-        const old = await prisma.ingredient.findUnique({ where: { id } });
         await prisma.ingredient.delete({ where: { id } });
         logAudit({
             session, action: "DELETE", targetTable: "Ingredient",
             targetId: id, targetName: old?.name,
             oldValues: { name: old?.name, supplierId: old?.supplierId, categoryId: old?.categoryId },
+            branchId,
             request,
         });
         return new NextResponse(null, { status: 204 });

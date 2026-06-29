@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // GET /api/ingredient-suppliers?ingredientId=X — list supplier links for an ingredient
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const ingredientId = searchParams.get("ingredientId");
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     }
 
     const links = await prisma.ingredientSupplier.findMany({
-        where: { ingredientId },
+        where: { ingredientId, branchId },
         include: { supplier: { select: { id: true, name: true } } },
         orderBy: [{ isPreferred: "desc" }, { createdAt: "asc" }],
     });
@@ -24,8 +25,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/ingredient-suppliers — create a supplier link (admin/manager)
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -47,7 +50,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx: any) => {
         if (isPreferred) {
             await tx.ingredientSupplier.updateMany({
-                where: { ingredientId, isPreferred: true },
+                where: { ingredientId, branchId, isPreferred: true },
                 data: { isPreferred: false },
             });
         }
@@ -58,6 +61,7 @@ export async function POST(req: NextRequest) {
                 conversionRate,
                 isPreferred,
                 notes: notes?.trim() || null,
+                branchId,
             },
             include: { supplier: { select: { id: true, name: true } } },
         });

@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // Station mapping by POS category
 const CATEGORY_STATION: Record<string, string> = {
@@ -37,8 +37,9 @@ const CATEGORY_STATION: Record<string, string> = {
 const REFUND_ALERT_PCT = 0.05; // 5%
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     // Load items with modifiers
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: any[] = await (prisma as any).pmixItem.findMany({
-        where: { uploadId },
+        where: { uploadId, branchId },
         include: { modifiers: true },
         orderBy: { qtySold: "desc" },
     });
@@ -188,7 +189,7 @@ export async function GET(req: NextRequest) {
     const recipeIds = [...new Set(linkedItems.map((i: any) => i.recipeId as string))];
     const recipeIngredients = recipeIds.length > 0
         ? await prisma.recipeIngredient.findMany({
-            where: { recipeId: { in: recipeIds } },
+            where: { recipeId: { in: recipeIds }, branchId },
             include: {
                 ingredient: { select: { id: true, name: true, recipeUnit: true, groupId: true, category: { select: { name: true } } } },
                 recipe: { select: { id: true, name: true, yieldAmount: true } },

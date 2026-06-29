@@ -1,12 +1,17 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
 // GET /api/ingredient-categories — any authenticated user
 export async function GET() {
     try {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { branchId } = ctx;
+
         const categories = await prisma.ingredientCategory.findMany({
+            where: { branchId },
             orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
             include: { _count: { select: { ingredients: true } } },
         });
@@ -19,8 +24,10 @@ export async function GET() {
 // POST /api/ingredient-categories — admin only
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session || session.role !== "admin") {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
+        if (session.role !== "admin") {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
         const body = await request.json();
@@ -32,9 +39,10 @@ export async function POST(request: Request) {
                 name:        body.name.trim(),
                 description: body.description?.trim() ?? null,
                 sortOrder:   Number(body.sortOrder ?? 0),
+                branchId,
             },
         });
-        logAudit({ session, action: "CREATE", targetTable: "IngredientCategory", targetId: category.id, targetName: category.name, newValues: { name: category.name }, request });
+        logAudit({ session, action: "CREATE", targetTable: "IngredientCategory", targetId: category.id, targetName: category.name, newValues: { name: category.name }, branchId, request });
         return NextResponse.json(category, { status: 201 });
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "";

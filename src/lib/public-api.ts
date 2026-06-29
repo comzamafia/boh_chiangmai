@@ -16,6 +16,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { STORE_ID, STORE_NAME, STORE_SHORT } from "@/lib/branding";
+import { prisma } from "@/lib/db";
 
 export const CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -24,13 +25,51 @@ export const CORS = {
 };
 
 /** Identifies the branch that served this response. */
-export function branchIdentity() {
+export function branchIdentity(branch?: { slug: string; name: string } | null) {
+    if (branch) {
+        return {
+            id:    branch.slug,
+            name:  branch.name,
+            short: branch.slug,
+            url:   (process.env.APP_URL ?? "").trim() || null,
+        };
+    }
     return {
         id:    STORE_ID,
         name:  STORE_NAME,
         short: STORE_SHORT,
         url:   (process.env.APP_URL ?? "").trim() || null,
     };
+}
+
+export interface PublicBranch { branchId: string; slug: string; name: string }
+
+/**
+ * Resolve which branch a public request targets. The caller selects a branch via
+ * `?branch=<slug>` or the `x-branch` header. With exactly one active branch, that
+ * branch is used as the default when none is specified (keeps single-branch
+ * deployments working). Returns the resolved branch, or a ready-to-return error.
+ */
+export async function resolvePublicBranch(req: NextRequest): Promise<PublicBranch | NextResponse> {
+    const slug = (req.headers.get("x-branch") ?? new URL(req.url).searchParams.get("branch") ?? "").trim();
+
+    if (slug) {
+        const branch = await prisma.branch.findFirst({ where: { slug, isActive: true }, select: { id: true, slug: true, name: true } });
+        if (!branch) {
+            return NextResponse.json({ error: `Unknown or inactive branch "${slug}".` }, { status: 404, headers: CORS });
+        }
+        return { branchId: branch.id, slug: branch.slug, name: branch.name };
+    }
+
+    // No branch specified — fall back only if there's exactly one active branch.
+    const active = await prisma.branch.findMany({ where: { isActive: true }, select: { id: true, slug: true, name: true }, take: 2 });
+    if (active.length === 1) {
+        return { branchId: active[0].id, slug: active[0].slug, name: active[0].name };
+    }
+    return NextResponse.json(
+        { error: "Multiple branches exist; specify one via ?branch=<slug> or the x-branch header." },
+        { status: 400, headers: CORS },
+    );
 }
 
 function presentedKey(req: NextRequest): string | null {

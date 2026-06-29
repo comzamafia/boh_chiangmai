@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 
 const INCLUDE = {
@@ -17,11 +17,13 @@ const INCLUDE = {
 };
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     try {
         const rows = await prisma.portionStandard.findMany({
+            where: { branchId },
             include: INCLUDE,
             orderBy: [
                 { ingredient: { name: "asc" } },
@@ -35,8 +37,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
                 portionSize: Number(portionSize),
                 portionUnit: portionUnit.trim(),
                 notes:       notes?.trim() || null,
+                branchId,
             },
             include: INCLUDE,
         });
@@ -64,6 +69,7 @@ export async function POST(request: Request) {
             session, action: "CREATE", targetTable: "PortionStandard",
             targetId: row.id, targetName: `${row.ingredient.name} — ${row.itemName}`,
             newValues: { portionSize: row.portionSize, portionUnit: row.portionUnit, type: row.type },
+            branchId,
             request,
         });
 

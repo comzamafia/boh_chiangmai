@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { detectFileType, parseLossManagement, parseDiscounts, normalizeWithMap } from "@/lib/loss-parser";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,8 +14,10 @@ const db = prisma as any;
 const asDate = (s: string) => new Date(s + "T00:00:00.000Z");
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { filename, content } = await req.json();
     if (!content || typeof content !== "string") return NextResponse.json({ error: "Missing file content" }, { status: 400 });
@@ -27,22 +29,28 @@ export async function POST(req: NextRequest) {
         const { rows, errors, date } = parseLossManagement(content);
         if (!date) return NextResponse.json({ error: "No valid complaint rows found." }, { status: 400 });
         // Apply the admin-editable reason map (override the code defaults) if any exist
-        const reasonMap = await db.lossReasonMap.findMany({ orderBy: { sortOrder: "asc" } });
+        const reasonMap = await db.lossReasonMap.findMany({ where: { branchId }, orderBy: { sortOrder: "asc" } });
         if (reasonMap.length > 0) for (const r of rows) r.reasonCategory = normalizeWithMap(r.reasonRaw, reasonMap);
         const dates = [...new Set(rows.map(r => r.businessDate))];
         for (const d of dates) {
-            await db.lossComplaint.deleteMany({ where: { businessDate: asDate(d) } });
+            await db.lossComplaint.deleteMany({ where: { businessDate: asDate(d), branchId } });
         }
         if (rows.length) await db.lossComplaint.createMany({
-            data: rows.map(r => ({ ...r, businessDate: asDate(r.businessDate) })),
+            data: rows.map(r => ({ ...r, businessDate: asDate(r.businessDate), branchId })),
         });
         for (const d of dates) {
             const count = rows.filter(r => r.businessDate === d).length;
-            await db.lossUpload.upsert({
-                where: { businessDate: asDate(d) },
-                update: { complaintCount: count, hasComplaints: true, uploadedAt: new Date() },
-                create: { businessDate: asDate(d), complaintCount: count, hasComplaints: true },
-            });
+            const existing = await db.lossUpload.findFirst({ where: { businessDate: asDate(d), branchId } });
+            if (existing) {
+                await db.lossUpload.update({
+                    where: { id: existing.id },
+                    data: { complaintCount: count, hasComplaints: true, uploadedAt: new Date() },
+                });
+            } else {
+                await db.lossUpload.create({
+                    data: { businessDate: asDate(d), complaintCount: count, hasComplaints: true, branchId },
+                });
+            }
         }
         return NextResponse.json({ ok: true, type, date, imported: rows.length, errors });
     }
@@ -52,18 +60,24 @@ export async function POST(req: NextRequest) {
     if (!date) return NextResponse.json({ error: "No valid discount rows found." }, { status: 400 });
     const dates = [...new Set(rows.map(r => r.businessDate))];
     for (const d of dates) {
-        await db.lossDiscount.deleteMany({ where: { businessDate: asDate(d) } });
+        await db.lossDiscount.deleteMany({ where: { businessDate: asDate(d), branchId } });
     }
     if (rows.length) await db.lossDiscount.createMany({
-        data: rows.map(r => ({ ...r, businessDate: asDate(r.businessDate), createTime: r.createTime ? new Date(r.createTime) : null })),
+        data: rows.map(r => ({ ...r, businessDate: asDate(r.businessDate), createTime: r.createTime ? new Date(r.createTime) : null, branchId })),
     });
     for (const d of dates) {
         const count = rows.filter(r => r.businessDate === d).length;
-        await db.lossUpload.upsert({
-            where: { businessDate: asDate(d) },
-            update: { discountCount: count, hasDiscounts: true, uploadedAt: new Date() },
-            create: { businessDate: asDate(d), discountCount: count, hasDiscounts: true },
-        });
+        const existing = await db.lossUpload.findFirst({ where: { businessDate: asDate(d), branchId } });
+        if (existing) {
+            await db.lossUpload.update({
+                where: { id: existing.id },
+                data: { discountCount: count, hasDiscounts: true, uploadedAt: new Date() },
+            });
+        } else {
+            await db.lossUpload.create({
+                data: { businessDate: asDate(d), discountCount: count, hasDiscounts: true, branchId },
+            });
+        }
     }
     return NextResponse.json({ ok: true, type, date, imported: rows.length, errors: [] });
 }

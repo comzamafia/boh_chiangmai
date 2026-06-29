@@ -9,7 +9,7 @@
 import * as React from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { sendAlert } from "@/lib/notifications/send";
 import { DailyDigest } from "@/lib/notifications/templates/DailyDigest";
 import { CriticalStockAlert } from "@/lib/notifications/templates/CriticalStockAlert";
@@ -29,8 +29,9 @@ function fail(stage: string, e: unknown, status = 500): NextResponse<ErrorPayloa
 export async function POST(req: NextRequest) {
     let stage = "auth";
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Unauthorized", stage }, { status: 401 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         stage = "parse-body";
         const { storageAreaId, type, overrideEmail } = await req.json();
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
         if (envIssues.length > 0) console.warn("[notif-test] env warnings:", envIssues);
 
         stage = "load-area";
-        const area = await db.storageArea.findUnique({ where: { id: storageAreaId } });
+        const area = await db.storageArea.findFirst({ where: { id: storageAreaId, branchId } });
         if (!area) return NextResponse.json({ error: "Area not found", stage }, { status: 404 });
 
         stage = "load-user";
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
                 type:    "low_stock_digest",
                 dedupeKey,
                 subject: `📦 [TEST] ${area.name} — Daily Stock (1 critical, 2 to reorder)`,
+                branchId,
                 storageAreaId,
                 recipients: [{ userId: user.id, email: recipientEmail, name: recipientName }],
                 react: React.createElement(DailyDigest, {
@@ -86,6 +88,7 @@ export async function POST(req: NextRequest) {
                 type:    "critical_stock",
                 dedupeKey,
                 subject: `🔴 [TEST] Critical: Tiger Prawn 16/20 below safety stock in ${area.name}`,
+                branchId,
                 storageAreaId,
                 recipients: [{ userId: user.id, email: recipientEmail, name: recipientName }],
                 react: React.createElement(CriticalStockAlert, {

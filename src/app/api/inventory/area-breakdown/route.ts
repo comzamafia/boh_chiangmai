@@ -11,7 +11,7 @@
  *   } } }
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextResponse } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,14 +20,16 @@ const db = prisma as any;
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const [rows, areas] = await Promise.all([
         db.storageAreaCount.findMany({
+            where: { branchId },
             select: { ingredientId: true, storageAreaId: true, recipeQty: true, countedAt: true },
         }),
-        db.storageArea.findMany({ select: { id: true, name: true } }),
+        db.storageArea.findMany({ where: { branchId }, select: { id: true, name: true } }),
     ]);
 
     const areaName = new Map<string, string>();

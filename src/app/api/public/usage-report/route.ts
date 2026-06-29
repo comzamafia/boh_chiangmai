@@ -14,7 +14,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { buildUsageReport } from "@/lib/usage-report";
-import { authPublicRequest, branchIdentity, CORS } from "@/lib/public-api";
+import { authPublicRequest, branchIdentity, resolvePublicBranch, CORS } from "@/lib/public-api";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +26,14 @@ export async function GET(req: NextRequest) {
     const denied = authPublicRequest(req, ["USAGE_REPORT_API_KEY"]);
     if (denied) return denied;
 
+    const branch = await resolvePublicBranch(req);
+    if (branch instanceof NextResponse) return branch;
+
     const days = Number(new URL(req.url).searchParams.get("days") ?? 7);
     try {
-        const data = await buildUsageReport(days);
+        const data = await buildUsageReport(branch.branchId, days);
         return NextResponse.json(
-            { ok: true, source: "sujeevan-boh", branch: branchIdentity(), generatedAt: new Date().toISOString(), ...data },
+            { ok: true, source: "sujeevan-boh", branch: branchIdentity(branch), generatedAt: new Date().toISOString(), ...data },
             { headers: { ...CORS, "Cache-Control": "no-store" } },
         );
     } catch (e) {

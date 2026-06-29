@@ -7,11 +7,12 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get("uploadId");
@@ -19,8 +20,8 @@ export async function GET(req: NextRequest) {
 
     // 1. Load upload header
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const upload = await (prisma as any).pmixUpload.findUnique({
-        where: { id: uploadId },
+    const upload = await (prisma as any).pmixUpload.findFirst({
+        where: { id: uploadId, branchId },
         select: { id: true, periodLabel: true, uploadedAt: true },
     });
     if (!upload) return NextResponse.json({ error: "Upload not found" }, { status: 404 });
@@ -28,12 +29,13 @@ export async function GET(req: NextRequest) {
     // 2. Load all PMIX items with modifiers for this upload
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pmixItems: any[] = await (prisma as any).pmixItem.findMany({
-        where: { uploadId },
+        where: { uploadId, branchId },
         include: { modifiers: true },
     });
 
     // 3. Load all portion standards with ingredient + category
     const standards = await prisma.portionStandard.findMany({
+        where: { branchId },
         include: {
             ingredient: {
                 select: {

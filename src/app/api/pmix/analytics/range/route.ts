@@ -11,14 +11,15 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const fromStr = searchParams.get("from");
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     // 1. Uploads in range
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
                 { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
@@ -72,19 +74,19 @@ export async function GET(req: NextRequest) {
 
     // 2. All items + modifiers
     const items = await db.pmixItem.findMany({
-        where:   { uploadId: { in: uploadIds } },
+        where:   { uploadId: { in: uploadIds }, branchId },
         include: { modifiers: true },
     });
 
     // 3. Item rules (sorted priority desc)
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
     // 4. Portion standards
     const standards = await db.portionStandard.findMany({
-        where:   { type: { in: ["modifier", "base"] } },
+        where:   { type: { in: ["modifier", "base"] }, branchId },
         include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } },
     });
     type StdVal = { portionSize: number; portionUnit: string; ingredientName: string; ingredientId: string };
@@ -475,7 +477,7 @@ export async function GET(req: NextRequest) {
     const bomRecipeIds = [...recipeQty.keys()];
     const recipeIngredients = bomRecipeIds.length > 0
         ? await db.recipeIngredient.findMany({
-            where:   { recipeId: { in: bomRecipeIds } },
+            where:   { recipeId: { in: bomRecipeIds }, branchId },
             include: {
                 ingredient: { select: { id: true, name: true, recipeUnit: true } },
                 recipe:     { select: { id: true, yieldAmount: true } },

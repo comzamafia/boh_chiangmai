@@ -6,6 +6,86 @@ datasource db {
   provider = "postgresql"
 }
 
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  logoUrl   String?
+  timezone  String   @default("America/Toronto")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userBranches             UserBranch[]
+  suppliers                Supplier[]
+  ingredients              Ingredient[]
+  equipment                Equipment[]
+  recipeCategories         RecipeCategory[]
+  recipes                  Recipe[]
+  recipeIngredients        RecipeIngredient[]
+  purchaseHistories        PurchaseHistory[]
+  purchaseOrders           PurchaseOrder[]
+  purchaseOrderItems       PurchaseOrderItem[]
+  productionSchedules      ProductionSchedule[]
+  prepStations             PrepStation[]
+  prepTaskTemplates        PrepTaskTemplate[]
+  prepBoardTasks           PrepBoardTask[]
+  prepActivityLogs         PrepActivityLog[]
+  prepTasks                PrepTask[]
+  batchPlans               BatchPlan[]
+  batchPlanItems           BatchPlanItem[]
+  salesEntries             SalesEntry[]
+  inventoryItems           InventoryItem[]
+  inventoryTransactions    InventoryTransaction[]
+  storageAreas             StorageArea[]
+  storageAreaWatchers      StorageAreaWatcher[]
+  notificationLogs         NotificationLog[]
+  ingredientSuppliers      IngredientSupplier[]
+  portionStandards         PortionStandard[]
+  pmixUploads              PmixUpload[]
+  pmixItems                PmixItem[]
+  pmixModifiers            PmixModifier[]
+  pmixItemRules            PmixItemRule[]
+  ingredientCategories     IngredientCategory[]
+  userCategoryPermissions  UserCategoryPermission[]
+  userRecipeCategoryPermissions UserRecipeCategoryPermission[]
+  auditLogs                AuditLog[]
+  reportStations           ReportStation[]
+  reportStationMenus       ReportStationMenu[]
+  storageAreaCounts        StorageAreaCount[]
+  reportUnitChains         ReportUnitChain[]
+  lossUploads              LossUpload[]
+  lossComplaints           LossComplaint[]
+  lossDiscounts            LossDiscount[]
+  lossReasonMaps           LossReasonMap[]
+  serverSalesUploads       ServerSalesUpload[]
+  serverSalesRows          ServerSalesRow[]
+  compositeRecipes         CompositeRecipe[]
+  compositeComponents      CompositeComponent[]
+  menuCompositeLinks       MenuCompositeLink[]
+  proteinGroups            ProteinGroup[]
+  proteinGroupMembers      ProteinGroupMember[]
+
+  @@map("branches")
+}
+
+model UserBranch {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  isDefault Boolean @default(false)
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
+  @@map("user_branches")
+}
+
 model User {
   id          String   @id @default(cuid())
   name        String
@@ -23,6 +103,7 @@ model User {
   recipeCategoryPermissions UserRecipeCategoryPermission[]
   auditLogs                 AuditLog[]
   storageAreaWatchers       StorageAreaWatcher[]
+  userBranches              UserBranch[]
 
   @@map("users")
 }
@@ -45,6 +126,9 @@ model Supplier {
   minOrderValue        Decimal? @db.Decimal(10, 2)       // optional minimum order value
   deliveryNotes        String?                           // free text (e.g. "Order via LINE")
 
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -53,13 +137,14 @@ model Supplier {
   ingredientSuppliers IngredientSupplier[]
   purchaseOrders      PurchaseOrder[]
 
+  @@index([branchId])
   @@map("suppliers")
 }
 
 model Ingredient {
   id                     String              @id @default(cuid())
   name                   String
-  sku                    String?             @unique // e.g. "SEA-WGT-TGRSHR"
+  sku                    String?
   supplierId             String
   supplier               Supplier            @relation(fields: [supplierId], references: [id])
   purchaseUnit           String
@@ -67,14 +152,18 @@ model Ingredient {
   recipeUnit             String
   yieldPercent           Decimal             @db.Decimal(5, 2)
   conversionRate         Decimal             @db.Decimal(10, 4)
-  groupId                String              // "Weight" | "Volume" | "Count" (unit measurement type)
-  categoryId             String?             // FK to IngredientCategory (food category)
+  groupId                String
+  categoryId             String?
   category               IngredientCategory? @relation(fields: [categoryId], references: [id])
-  storageAreaId          String?             // V3: physical storage location
+  storageAreaId          String?
   storageArea            StorageArea?        @relation(fields: [storageAreaId], references: [id])
-  averageCostPerBaseUnit Decimal?            @db.Decimal(10, 6) // V3: MAC — THB per recipe unit
-  reportUnit             String?             // preferred display unit for the Station Prep Report
+  averageCostPerBaseUnit Decimal?            @db.Decimal(10, 6)
+  reportUnit             String?
   imageUrl               String?
+
+  branchId               String?
+  branch                 Branch?             @relation(fields: [branchId], references: [id])
+
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
 
@@ -86,6 +175,8 @@ model Ingredient {
   compositeComponents CompositeComponent[]
   proteinGroupMembers ProteinGroupMember[]
 
+  @@unique([sku, branchId])
+  @@index([branchId])
   @@map("ingredients")
 }
 
@@ -94,21 +185,32 @@ model Equipment {
   name      String
   type      String
   status    String   // "Available" | "Maintenance" | "Retired"
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([branchId])
   @@map("equipment")
 }
 
 model RecipeCategory {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
   sortOrder Int      @default(0)
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   userPermissions UserRecipeCategoryPermission[]
 
+  @@unique([name, branchId])
+  @@index([branchId])
   @@map("recipe_categories")
 }
 
@@ -120,7 +222,11 @@ model UserRecipeCategoryPermission {
   category   RecipeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   assignedAt DateTime       @default(now())
 
+  branchId   String?
+  branch     Branch?        @relation(fields: [branchId], references: [id])
+
   @@unique([userId, categoryId])
+  @@index([branchId])
   @@map("user_recipe_category_permissions")
 }
 
@@ -139,14 +245,19 @@ model Recipe {
   imageUrl           String?
   isMainSauce        Boolean   @default(false)
   isSubRecipe        Boolean   @default(false)
-  linkedIngredientId String?   // ID of the auto-created Ingredient (set when isSubRecipe = true)
+  linkedIngredientId String?
   instructions       String?
+
+  branchId           String?
+  branch             Branch?   @relation(fields: [branchId], references: [id])
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   ingredients  RecipeIngredient[]
   salesEntries SalesEntry[]
 
+  @@index([branchId])
   @@map("recipes")
 }
 
@@ -158,7 +269,11 @@ model RecipeIngredient {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   quantity     Decimal    @db.Decimal(10, 4)
 
+  branchId     String?
+  branch       Branch?    @relation(fields: [branchId], references: [id])
+
   @@unique([recipeId, ingredientId])
+  @@index([branchId])
   @@map("recipe_ingredients")
 }
 
@@ -172,16 +287,21 @@ model PurchaseHistory {
   unit       String
   unitPrice  Decimal  @db.Decimal(10, 2)
   total      Decimal  @db.Decimal(10, 2)
+
+  branchId   String?
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@index([branchId])
   @@map("purchase_history")
 }
 
 // ─── Purchase Orders (DB-backed; replaces the old localStorage version) ──────
 model PurchaseOrder {
   id           String              @id @default(cuid())
-  poNumber     String              @unique          // "PO-2026-0001"
+  poNumber     String                               // "PO-2026-0001"
   supplierId   String
   supplier     Supplier            @relation(fields: [supplierId], references: [id])
   supplierName String                               // snapshot at creation
@@ -194,10 +314,15 @@ model PurchaseOrder {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
+  branchId     String?
+  branch       Branch?             @relation(fields: [branchId], references: [id])
+
   items PurchaseOrderItem[]
 
+  @@unique([poNumber, branchId])
   @@index([status])
   @@index([supplierId])
+  @@index([branchId])
   @@map("purchase_orders")
 }
 
@@ -213,7 +338,11 @@ model PurchaseOrderItem {
   total           Decimal       @db.Decimal(12, 2)
   receivedQty     Decimal?      @db.Decimal(10, 4)    // actual qty received (null = not yet received)
 
+  branchId        String?
+  branch          Branch?       @relation(fields: [branchId], references: [id])
+
   @@index([purchaseOrderId])
+  @@index([branchId])
   @@map("purchase_order_items")
 }
 
@@ -222,25 +351,35 @@ model ProductionSchedule {
   date      String   // YYYY-MM-DD
   items     String[] // task descriptions
   status    String   @default("pending") // "pending" | "completed"
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([branchId])
   @@map("production_schedules")
 }
 
 // ─── Master Prep List (persistent daily prep tasks per station) ──────────────
 model PrepStation {
   id        String   @id @default(cuid())
-  name      String                          // display name, e.g. "Prep Station"
-  icon      String   @default("utensils")   // icon key (see UI map)
+  name      String
+  icon      String   @default("utensils")
   color     String   @default("bg-slate-500")
   sortOrder Int      @default(0)
-  memberIds String[] @default([])           // user ids who can see this board (empty = everyone)
+  memberIds String[] @default([])
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   templates PrepTaskTemplate[]
 
+  @@index([branchId])
   @@map("prep_stations")
 }
 
@@ -257,9 +396,13 @@ model PrepTaskTemplate {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  branchId  String?
+  branch    Branch?      @relation(fields: [branchId], references: [id])
+
   boardTasks PrepBoardTask[]
 
   @@index([stationId])
+  @@index([branchId])
   @@map("prep_task_templates")
 }
 
@@ -277,8 +420,12 @@ model PrepBoardTask {
   completedBy String?
   sortOrder   Int              @default(0)
 
+  branchId    String?
+  branch      Branch?          @relation(fields: [branchId], references: [id])
+
   @@unique([date, templateId])
   @@index([date, stationId])
+  @@index([branchId])
   @@map("prep_board_tasks")
 }
 
@@ -286,49 +433,64 @@ model PrepBoardTask {
 // Survives the daily board reset.
 model PrepActivityLog {
   id          String   @id @default(cuid())
-  date        String                  // board date (YYYY-MM-DD)
+  date        String
   stationId   String
   stationName String
   templateId  String?
   taskName    String
-  action      String                  // "todo" | "complete"
+  action      String
   userId      String?
   userName    String?
+
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
   at          DateTime @default(now())
 
   @@index([date])
   @@index([action])
   @@index([userId])
+  @@index([branchId])
   @@map("prep_activity_logs")
 }
 
 model PrepTask {
   id        String    @id @default(cuid())
-  date      String                       // YYYY-MM-DD
-  station   String                       // "Prep" | "Sauce" | "Hot" | "Cold"
+  date      String
+  station   String
   name      String
-  qty       String?                      // free text, e.g. "8 kg"
-  dueTime   String?                      // free text, e.g. "08:00 AM"
+  qty       String?
+  dueTime   String?
   done      Boolean   @default(false)
-  doneBy    String?                      // user name who ticked it
+  doneBy    String?
   doneAt    DateTime?
   sortOrder Int       @default(0)
+
+  branchId  String?
+  branch    Branch?   @relation(fields: [branchId], references: [id])
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@index([date])
+  @@index([branchId])
   @@map("prep_tasks")
 }
 
 model BatchPlan {
   id        String          @id @default(cuid())
-  date      String          // YYYY-MM-DD
-  status    String          @default("Pending") // "Pending" | "In Progress" | "Completed"
-  progress  Int             @default(0) // 0–100
+  date      String
+  status    String          @default("Pending")
+  progress  Int             @default(0)
+
+  branchId  String?
+  branch    Branch?         @relation(fields: [branchId], references: [id])
+
   items     BatchPlanItem[]
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
+  @@index([branchId])
   @@map("batch_plans")
 }
 
@@ -341,12 +503,16 @@ model BatchPlanItem {
   qty         String
   unit        String
 
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
   @@map("batch_plan_items")
 }
 
 model SalesEntry {
   id         String   @id @default(cuid())
-  date       String   // YYYY-MM-DD
+  date       String
   recipeId   String?
   recipe     Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
   recipeName String
@@ -355,10 +521,15 @@ model SalesEntry {
   revenue    Decimal  @db.Decimal(10, 2)
   unitCost   Decimal? @db.Decimal(10, 2)
   notes      String?
+
+  branchId   String?
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([date])
+  @@index([branchId])
   @@map("sales_entries")
 }
 
@@ -366,22 +537,25 @@ model InventoryItem {
   id            String    @id @default(cuid())
   ingredientId  String    @unique
   ingredient    Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  currentStock  Decimal   @db.Decimal(10, 4)  // in recipe units (g, ml, piece)
-  parMin        Decimal   @db.Decimal(10, 4)  // safety stock level
-  parMax        Decimal   @db.Decimal(10, 4)  // max stock level
+  currentStock  Decimal   @db.Decimal(10, 4)
+  parMin        Decimal   @db.Decimal(10, 4)
+  parMax        Decimal   @db.Decimal(10, 4)
   reorderPoint  Decimal   @db.Decimal(10, 4)
   leadTimeDays  Int       @default(1)
-  holdingDays   Int       @default(7)          // CR: days of stock to hold (used for PAR Max calculation)
-  // ── Pack / case counting layer (Physical Stock Count) ──
-  // 1 pack = packSize purchaseUnits = packSize × ingredient.conversionRate recipeUnits.
-  packUnit      String?                        // label e.g. "Case", "ลัง", "Bag", "Box"
-  packSize      Decimal?  @db.Decimal(10, 4)   // how many purchaseUnits in one pack (e.g. 50 = 1 case of 50 lb)
+  holdingDays   Int       @default(7)
+  packUnit      String?
+  packSize      Decimal?  @db.Decimal(10, 4)
   lastCountDate DateTime?
+
+  branchId      String?
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   transactions InventoryTransaction[]
 
+  @@index([branchId])
   @@map("inventory_items")
 }
 
@@ -399,14 +573,17 @@ model InventoryTransaction {
   note            String?
   date            String        // YYYY-MM-DD
   recipeId        String?       // for Out: sale that triggered this
-  // For Stocktake only: counted − expected stock at count time. Negative = shrinkage.
-  // Drives the Food Cost Variance report.
   varianceQty     Decimal?      @db.Decimal(10, 4)
+
+  branchId        String?
+  branch          Branch?       @relation(fields: [branchId], references: [id])
+
   createdAt       DateTime      @default(now())
 
   @@index([inventoryItemId])
   @@index([type])
   @@index([date])
+  @@index([branchId])
   @@map("inventory_transactions")
 }
 
@@ -414,17 +591,19 @@ model InventoryTransaction {
 
 model StorageArea {
   id          String       @id @default(cuid())
-  name        String       @unique // "Dry Store", "Walk-in Fridge", "Bar Cabinet"
-  temperature String?      // "Ambient" | "Chilled (2-5°C)" | "Frozen (-18°C)"
+  name        String
+  temperature String?
   isActive    Boolean      @default(true)
   sortOrder   Int          @default(0)
 
-  // ── Notification routing ──
   notifyEnabled   Boolean  @default(true)
-  alertThreshold  String   @default("reorder") // "critical" | "reorder" | "any"
-  digestSchedule  String   @default("daily")   // "off" | "realtime" | "daily" | "weekly"
-  digestHourLocal Int      @default(8)         // 0-23 in Asia/Bangkok
-  digestDayOfWeek Int?     // 0-6 (Mon=1) for weekly digests
+  alertThreshold  String   @default("reorder")
+  digestSchedule  String   @default("daily")
+  digestHourLocal Int      @default(8)
+  digestDayOfWeek Int?
+
+  branchId    String?
+  branch      Branch?      @relation(fields: [branchId], references: [id])
 
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -432,6 +611,8 @@ model StorageArea {
   ingredients Ingredient[]
   watchers    StorageAreaWatcher[]
 
+  @@unique([name, branchId])
+  @@index([branchId])
   @@map("storage_areas")
 }
 
@@ -441,34 +622,45 @@ model StorageAreaWatcher {
   storageArea    StorageArea @relation(fields: [storageAreaId], references: [id], onDelete: Cascade)
   userId         String
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role           String      @default("watcher") // "owner" | "watcher"
-  alertThreshold String?     // null = inherit area
-  digestSchedule String?     // null = inherit area
+  role           String      @default("watcher")
+  alertThreshold String?
+  digestSchedule String?
   ccOnly         Boolean     @default(false)
+
+  branchId       String?
+  branch         Branch?     @relation(fields: [branchId], references: [id])
+
   createdAt      DateTime    @default(now())
 
   @@unique([storageAreaId, userId])
   @@index([userId])
+  @@index([branchId])
   @@map("storage_area_watchers")
 }
 
 model NotificationLog {
   id            String   @id @default(cuid())
-  type          String   // "low_stock_digest" | "critical_stock" | "stocktake_due" | "waste_spike" | "price_alert"
+  type          String
   storageAreaId String?
   ingredientId  String?
   userId        String?
   email         String
   subject       String
-  status        String   // "queued" | "sent" | "failed" | "skipped"
+  status        String
   errorMsg      String?
-  dedupeKey     String   @unique
+  dedupeKey     String
+
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+
   sentAt        DateTime?
   createdAt     DateTime @default(now())
 
+  @@unique([dedupeKey, branchId])
   @@index([type, createdAt])
   @@index([storageAreaId])
   @@index([userId])
+  @@index([branchId])
   @@map("notification_logs")
 }
 
@@ -478,15 +670,20 @@ model IngredientSupplier {
   ingredient     Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
   supplierId     String
   supplier       Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  purchasePrice  Decimal    @db.Decimal(10, 2) // price per purchaseUnit
-  purchaseUnit   String     // "kg", "L", "pack"
-  conversionRate Decimal    @db.Decimal(10, 4) // 1 purchaseUnit = N recipeUnits
+  purchasePrice  Decimal    @db.Decimal(10, 2)
+  purchaseUnit   String
+  conversionRate Decimal    @db.Decimal(10, 4)
   isPreferred    Boolean    @default(false)
   notes          String?
+
+  branchId       String?
+  branch         Branch?    @relation(fields: [branchId], references: [id])
+
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
   @@unique([ingredientId, supplierId])
+  @@index([branchId])
   @@map("ingredient_suppliers")
 }
 
@@ -496,16 +693,21 @@ model PortionStandard {
   id           String     @id @default(cuid())
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  itemName     String     // POS menu item name (type=base) or modifier name (type=modifier)
-  type         String     @default("base") // "base" | "modifier"
-  portionSize  Decimal    @db.Decimal(10, 4) // amount of ingredient per serving/modifier
-  portionUnit  String     // "oz", "g", "kg", "ml", "L", "piece", "portion"
+  itemName     String
+  type         String     @default("base")
+  portionSize  Decimal    @db.Decimal(10, 4)
+  portionUnit  String
   notes        String?
+
+  branchId     String?
+  branch       Branch?    @relation(fields: [branchId], references: [id])
+
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([ingredientId])
   @@index([itemName])
+  @@index([branchId])
   @@map("portion_standards")
 }
 
@@ -514,16 +716,21 @@ model PortionStandard {
 model PmixUpload {
   id           String    @id @default(cuid())
   fileName     String
-  periodLabel  String?   // e.g. "2024-01-15" or "Week of Jan 13"
-  businessDate DateTime? @db.Date  // actual date of sales (may differ from uploadedAt)
+  periodLabel  String?
+  businessDate DateTime? @db.Date
   totalItems   Int       @default(0)
   totalQty     Int       @default(0)
   totalSales   Decimal   @db.Decimal(12, 2) @default(0)
+
+  branchId     String?
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+
   uploadedAt   DateTime  @default(now())
 
   items PmixItem[]
 
   @@index([businessDate])
+  @@index([branchId])
   @@map("pmix_uploads")
 }
 
@@ -545,9 +752,13 @@ model PmixItem {
   pctNetSales    Decimal?     @db.Decimal(8, 4)
   recipeId       String?      // optional BOH recipe link
 
+  branchId       String?
+  branch         Branch?      @relation(fields: [branchId], references: [id])
+
   modifiers PmixModifier[]
 
   @@index([uploadId])
+  @@index([branchId])
   @@map("pmix_items")
 }
 
@@ -564,7 +775,11 @@ model PmixModifier {
   discountAmount Decimal  @db.Decimal(12, 2) @default(0)
   netSales       Decimal  @db.Decimal(12, 2) @default(0)
 
+  branchId       String?
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+
   @@index([itemId])
+  @@index([branchId])
   @@map("pmix_modifiers")
 }
 
@@ -572,22 +787,22 @@ model PmixModifier {
 
 model PmixItemRule {
   id        String   @id @default(cuid())
-  /// Text to match against itemName (case-insensitive)
   pattern   String
-  /// "exact" | "contains" | "starts_with"
   matchType String   @default("contains")
-  /// "main_protein" | "extra_protein" | "dessert" | "excluded"
   category  String
-  /// Human label shown in totals (e.g. "Beef", "Soft Shell Crab"). Falls back to pattern.
   label     String?
-  /// Higher = checked first. Exclusion rules default 100, dessert 50, proteins 0.
   priority  Int      @default(0)
   isActive  Boolean  @default(true)
   notes     String?
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([category, isActive])
+  @@index([branchId])
   @@map("pmix_item_rules")
 }
 
@@ -595,15 +810,21 @@ model PmixItemRule {
 
 model IngredientCategory {
   id          String   @id @default(cuid())
-  name        String   @unique
+  name        String
   description String?
   sortOrder   Int      @default(0)
+
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   ingredients         Ingredient[]
   categoryPermissions UserCategoryPermission[]
 
+  @@unique([name, branchId])
+  @@index([branchId])
   @@map("ingredient_categories")
 }
 
@@ -616,7 +837,11 @@ model UserCategoryPermission {
   canEdit    Boolean            @default(true)
   assignedAt DateTime           @default(now())
 
+  branchId   String?
+  branch     Branch?            @relation(fields: [branchId], references: [id])
+
   @@unique([userId, categoryId])
+  @@index([branchId])
   @@map("user_category_permissions")
 }
 
@@ -624,21 +849,26 @@ model AuditLog {
   id          String   @id @default(cuid())
   userId      String?
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userName    String?  // denormalized — kept even if user is deleted
+  userName    String?
   userEmail   String?
   userRole    String?
-  action      String   // "CREATE" | "UPDATE" | "DELETE" | "WASTE_LOG" | "RECEIVE" | "LOGIN"
-  targetTable String   // "Ingredient" | "Recipe" | "InventoryItem" | "WasteLog" etc.
+  action      String
+  targetTable String
   targetId    String
-  targetName  String?  // human-readable name of the affected record
-  oldValues   Json?    // snapshot before change
-  newValues   Json?    // snapshot after change
+  targetName  String?
+  oldValues   Json?
+  newValues   Json?
   ipAddress   String?
+
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt   DateTime @default(now())
 
   @@index([userId])
   @@index([targetTable])
   @@index([createdAt])
+  @@index([branchId])
   @@map("audit_logs")
 }
 
@@ -651,11 +881,16 @@ model ReportStation {
   icon      String   @default("utensils")
   color     String   @default("bg-slate-500")
   sortOrder Int      @default(0)
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   menus ReportStationMenu[]
 
+  @@index([branchId])
   @@map("report_stations")
 }
 
@@ -663,11 +898,15 @@ model ReportStationMenu {
   id        String        @id @default(cuid())
   stationId String
   station   ReportStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
-  itemName  String        // PMIX PmixItem.itemName assigned to this station
+  itemName  String
   createdAt DateTime      @default(now())
+
+  branchId  String?
+  branch    Branch?       @relation(fields: [branchId], references: [id])
 
   @@unique([stationId, itemName])
   @@index([stationId])
+  @@index([branchId])
   @@map("report_station_menus")
 }
 
@@ -678,11 +917,15 @@ model StorageAreaCount {
   id            String   @id @default(cuid())
   ingredientId  String
   storageAreaId String
-  recipeQty     Decimal  @db.Decimal(12, 4)   // counted amount in recipe units
+  recipeQty     Decimal  @db.Decimal(12, 4)
   countedAt     DateTime @default(now())
+
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
 
   @@unique([ingredientId, storageAreaId])
   @@index([storageAreaId])
+  @@index([branchId])
   @@map("storage_area_counts")
 }
 
@@ -691,25 +934,38 @@ model StorageAreaCount {
 // reduces every unit to `base` so the report can show Order/oz/piece/box/case.
 model ReportUnitChain {
   id           String   @id @default(cuid())
-  reportKey    String?  @unique          // per report item: "<category>::<label>" (independent per row)
-  ingredientId String?                   // resolved ingredient (informational only; no longer the key)
-  base         String                    // smallest/base unit name
-  relations    Json                      // [{ from: string, qty: number, to: string }]
+  reportKey    String?
+  ingredientId String?
+  base         String
+  relations    Json
+
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@unique([reportKey, branchId])
+  @@index([branchId])
   @@map("report_unit_chains")
 }
 
 // ─── Loss Management (Admin-only) ────────────────────────────────────────────
 model LossUpload {
   id            String   @id @default(cuid())
-  businessDate  DateTime @unique
+  businessDate  DateTime
   complaintCount Int     @default(0)
   discountCount  Int     @default(0)
   hasComplaints Boolean  @default(false)
   hasDiscounts  Boolean  @default(false)
+
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+
   uploadedAt    DateTime @default(now())
+
+  @@unique([businessDate, branchId])
+  @@index([branchId])
   @@map("loss_uploads")
 }
 
@@ -730,8 +986,13 @@ model LossComplaint {
   reasonRaw        String
   reasonCategory   String
   device           String
+
+  branchId         String?
+  branch           Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt        DateTime @default(now())
   @@index([businessDate])
+  @@index([branchId])
   @@map("loss_complaints")
 }
 
@@ -748,26 +1009,44 @@ model LossDiscount {
   isAnonymousAuth  Boolean  @default(false)
   riskLevel        String                       // "LOW" | "MEDIUM" | "HIGH"
   isBulkDiscount   Boolean  @default(false)
+
+  branchId         String?
+  branch           Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt        DateTime @default(now())
   @@index([businessDate])
+  @@index([branchId])
   @@map("loss_discounts")
 }
 
 model LossReasonMap {
   id        String   @id @default(cuid())
-  keyword   String                       // lowercased substring to match in raw reason
-  category  String                       // normalised category
+  keyword   String
+  category  String
   sortOrder Int      @default(0)
+
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+
   createdAt DateTime @default(now())
+
+  @@index([branchId])
   @@map("loss_reason_map")
 }
 
 // ─── Server Performance (Admin-only) ─────────────────────────────────────────
 model ServerSalesUpload {
   id           String   @id @default(cuid())
-  businessDate DateTime @unique
+  businessDate DateTime
   serverCount  Int      @default(0)
+
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id])
+
   uploadedAt   DateTime @default(now())
+
+  @@unique([businessDate, branchId])
+  @@index([branchId])
   @@map("server_sales_uploads")
 }
 
@@ -797,8 +1076,13 @@ model ServerSalesRow {
   dessertSales  Decimal   @db.Decimal(10, 2) @default(0)
   dessertCount  Int       @default(0)
   otherSales    Decimal   @db.Decimal(10, 2) @default(0)
+
+  branchId      String?
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+
   createdAt     DateTime  @default(now())
   @@index([businessDate])
+  @@index([branchId])
   @@map("server_sales_rows")
 }
 
@@ -811,16 +1095,22 @@ model ServerSalesRow {
 //   Islamic Noodles uses 14 oz Curry Sauce → 1 batch → Panang 7 + Massaman 7
 model CompositeRecipe {
   id         String               @id @default(cuid())
-  name       String               @unique
+  name       String
   yieldQty   Decimal              @db.Decimal(10, 4)
   yieldUnit  String
   notes      String?
+
+  branchId   String?
+  branch     Branch?              @relation(fields: [branchId], references: [id])
+
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
   components CompositeComponent[]
   menuLinks  MenuCompositeLink[]
 
+  @@unique([name, branchId])
+  @@index([branchId])
   @@map("composite_recipes")
 }
 
@@ -833,8 +1123,12 @@ model CompositeComponent {
   qty          Decimal         @db.Decimal(10, 4) // amount of this ingredient per 1 batch (yieldQty)
   unit         String
 
+  branchId     String?
+  branch       Branch?         @relation(fields: [branchId], references: [id])
+
   @@index([compositeId])
   @@index([ingredientId])
+  @@index([branchId])
   @@map("composite_components")
 }
 
@@ -850,11 +1144,16 @@ model MenuCompositeLink {
   qty         Decimal         @db.Decimal(10, 4) // amount of composite used per 1 order
   unit        String          // should match the composite's yieldUnit
   notes       String?
+
+  branchId    String?
+  branch      Branch?         @relation(fields: [branchId], references: [id])
+
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
   @@index([itemName])
   @@index([compositeId])
+  @@index([branchId])
   @@map("menu_composite_links")
 }
 
@@ -864,13 +1163,19 @@ model MenuCompositeLink {
 // Ingredients tab, just consolidated under one display name and order).
 model ProteinGroup {
   id        String               @id @default(cuid())
-  name      String               @unique
+  name      String
   sortOrder Int                  @default(0)
+
+  branchId  String?
+  branch    Branch?              @relation(fields: [branchId], references: [id])
+
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
   members   ProteinGroupMember[]
 
+  @@unique([name, branchId])
+  @@index([branchId])
   @@map("protein_groups")
 }
 
@@ -881,8 +1186,12 @@ model ProteinGroupMember {
   ingredientId String
   ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
+  branchId     String?
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+
   @@unique([groupId, ingredientId])
   @@index([groupId])
   @@index([ingredientId])
+  @@index([branchId])
   @@map("protein_group_members")
 }

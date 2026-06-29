@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 
 const INCLUDE = {
@@ -17,13 +17,19 @@ const INCLUDE = {
 };
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     try {
         const { id } = await params;
+
+        const owned = await prisma.portionStandard.findFirst({ where: { id, branchId }, select: { id: true } });
+        if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
         const body = await request.json();
         const data: Record<string, unknown> = {};
 
@@ -40,6 +46,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             session, action: "UPDATE", targetTable: "PortionStandard",
             targetId: row.id, targetName: `${row.ingredient.name} — ${row.itemName}`,
             newValues: data,
+            branchId,
             request,
         });
 
@@ -50,18 +57,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     try {
         const { id } = await params;
-        const row = await prisma.portionStandard.delete({ where: { id }, include: INCLUDE });
+
+        const row = await prisma.portionStandard.findFirst({ where: { id, branchId }, include: INCLUDE });
+        if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+        await prisma.portionStandard.delete({ where: { id } });
 
         logAudit({
             session, action: "DELETE", targetTable: "PortionStandard",
             targetId: id, targetName: `${row.ingredient.name} — ${row.itemName}`,
+            branchId,
             request,
         });
 

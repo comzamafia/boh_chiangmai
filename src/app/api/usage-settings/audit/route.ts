@@ -16,7 +16,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -24,22 +24,24 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const norm = (s: string) => String(s ?? "").toLowerCase().trim();
 
 export async function GET() {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
     const uploads = await db.pmixUpload.findMany({
-        where: { OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] },
+        where: { branchId, OR: [{ businessDate: { gte: from } }, { businessDate: null, uploadedAt: { gte: from } }] },
         select: { id: true },
     });
     const uploadIds = uploads.map((u: { id: string }) => u.id);
 
     const [items, standards, links] = await Promise.all([
         uploadIds.length
-            ? db.pmixItem.findMany({ where: { uploadId: { in: uploadIds } }, select: { itemName: true, modifiers: { select: { modifier: true } } } })
+            ? db.pmixItem.findMany({ where: { uploadId: { in: uploadIds }, branchId }, select: { itemName: true, modifiers: { select: { modifier: true } } } })
             : Promise.resolve([]),
-        db.portionStandard.findMany({ include: { ingredient: { select: { name: true } } } }),
-        db.menuCompositeLink.findMany({ include: { composite: { select: { name: true } } } }),
+        db.portionStandard.findMany({ where: { branchId }, include: { ingredient: { select: { name: true } } } }),
+        db.menuCompositeLink.findMany({ where: { branchId }, include: { composite: { select: { name: true } } } }),
     ]);
 
     // Known PMIX names

@@ -4,14 +4,16 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session || (session.role !== "admin" && session.role !== "manager")) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin" && session.role !== "manager") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(500, Number(sp.get("limit") ?? 100)));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = {};
+    const where: any = { branchId };
     const type          = sp.get("type");
     const storageAreaId = sp.get("storageAreaId");
     const status        = sp.get("status");

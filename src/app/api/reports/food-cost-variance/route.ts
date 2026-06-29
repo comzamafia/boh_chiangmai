@@ -18,13 +18,14 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const to   = searchParams.get("to")   ?? new Date().toISOString().slice(0, 10);
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     // All transactions in range, with ingredient cost basis
     const txns = await prisma.inventoryTransaction.findMany({
-        where: { date: { gte: from, lte: to } },
+        where: { branchId, date: { gte: from, lte: to } },
         select: {
             ingredientId: true,
             type:         true,

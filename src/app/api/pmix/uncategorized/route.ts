@@ -13,13 +13,14 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const daysParam = Number(searchParams.get("days") ?? 365);
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
     // 1. Uploads in the look-back window
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
                 { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
@@ -57,13 +59,13 @@ export async function GET(req: NextRequest) {
 
     // 2. Active rules
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
     // 3. Items + modifiers
     const items = await db.pmixItem.findMany({
-        where:   { uploadId: { in: uploadIds } },
+        where:   { uploadId: { in: uploadIds }, branchId },
         include: { modifiers: true },
     });
 

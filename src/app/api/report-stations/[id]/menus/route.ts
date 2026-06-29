@@ -3,7 +3,7 @@
  *   body: { itemNames: string[] }   (replaces the whole assignment set)
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT_ROLES = ["admin", "manager", "chef"];
@@ -11,8 +11,10 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const db = prisma as any;
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const { id } = await params;
@@ -21,13 +23,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ? Array.from(new Set((body.itemNames as unknown[]).map(s => String(s).trim()).filter((s): s is string => s.length > 0)))
         : [];
 
-    const station = await db.reportStation.findUnique({ where: { id }, select: { id: true } });
+    const station = await db.reportStation.findFirst({ where: { id, branchId }, select: { id: true } });
     if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
 
     await db.$transaction([
-        db.reportStationMenu.deleteMany({ where: { stationId: id } }),
+        db.reportStationMenu.deleteMany({ where: { stationId: id, branchId } }),
         db.reportStationMenu.createMany({
-            data: itemNames.map(itemName => ({ stationId: id, itemName })),
+            data: itemNames.map(itemName => ({ stationId: id, itemName, branchId })),
             skipDuplicates: true,
         }),
     ]);

@@ -5,18 +5,20 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET() {
-    const session = await getSession();
-    if (!session || session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows: any[] = await db.lossComplaint.findMany({
-        where: { reasonCategory: "Uncategorized", actionType: "Complaint" },
+        where: { reasonCategory: "Uncategorized", actionType: "Complaint", branchId },
         select: { reasonRaw: true, netAmount: true },
     });
     const m = new Map<string, { count: number; net: number }>();

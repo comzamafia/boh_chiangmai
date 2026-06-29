@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -16,13 +16,14 @@ function canManage(role: string): boolean {
     return role === "admin" || role === "manager";
 }
 
-export async function GET(_: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { id } = await ctx.params;
+export async function GET(_: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
+    const { id } = await ctx2.params;
 
     const rows = await db.storageAreaWatcher.findMany({
-        where: { storageAreaId: id },
+        where: { storageAreaId: id, branchId },
         include: {
             user: { select: { id: true, name: true, email: true, role: true, department: true, isActive: true } },
         },
@@ -31,22 +32,28 @@ export async function GET(_: NextRequest, ctx: { params: Promise<{ id: string }>
     return NextResponse.json(rows);
 }
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !canManage(session.role)) {
+export async function POST(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!canManage(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const { id: storageAreaId } = await ctx.params;
+    const { id: storageAreaId } = await ctx2.params;
     const body = await req.json();
 
     if (!body.userId) {
         return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
 
+    const area = await db.storageArea.findFirst({ where: { id: storageAreaId, branchId } });
+    if (!area) return NextResponse.json({ error: "Storage area not found" }, { status: 404 });
+
     try {
         const created = await db.storageAreaWatcher.create({
             data: {
                 storageAreaId,
+                branchId,
                 userId:         body.userId,
                 role:           body.role ?? "watcher",
                 ccOnly:         body.ccOnly ?? false,
@@ -67,17 +74,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !canManage(session.role)) {
+export async function DELETE(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!canManage(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const { id: storageAreaId } = await ctx.params;
+    const { id: storageAreaId } = await ctx2.params;
     const userId = req.nextUrl.searchParams.get("userId");
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
     await db.storageAreaWatcher.deleteMany({
-        where: { storageAreaId, userId },
+        where: { storageAreaId, userId, branchId },
     });
     return NextResponse.json({ ok: true });
 }

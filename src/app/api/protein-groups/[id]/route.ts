@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -14,10 +14,15 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const INCLUDE = { members: { include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } } } };
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { id } = await params;
     const b = await req.json();
+
+    const existing = await db.proteinGroup.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const data: { name?: string; sortOrder?: number } = {};
     if (typeof b.name === "string" && b.name.trim()) data.name = b.name.trim();
@@ -28,11 +33,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             if (Object.keys(data).length) await tx.proteinGroup.update({ where: { id }, data });
             if (Array.isArray(b.ingredientIds)) {
                 const ids = [...new Set(b.ingredientIds.map((x: unknown) => String(x ?? "").trim()).filter(Boolean))] as string[];
-                await tx.proteinGroupMember.deleteMany({ where: { groupId: id } });
-                if (ids.length) await tx.proteinGroupMember.createMany({ data: ids.map(ingredientId => ({ groupId: id, ingredientId })) });
+                await tx.proteinGroupMember.deleteMany({ where: { groupId: id, branchId } });
+                if (ids.length) await tx.proteinGroupMember.createMany({ data: ids.map(ingredientId => ({ groupId: id, ingredientId, branchId })) });
             }
         });
-        const row = await db.proteinGroup.findUnique({ where: { id }, include: INCLUDE });
+        const row = await db.proteinGroup.findFirst({ where: { id, branchId }, include: INCLUDE });
         return NextResponse.json(row);
     } catch (e) {
         const msg = e instanceof Error && e.message.includes("Unique") ? "A protein group with that name already exists." : "Failed to update group";
@@ -41,9 +46,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { id } = await params;
+    const existing = await db.proteinGroup.findFirst({ where: { id, branchId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     try {
         await db.proteinGroup.delete({ where: { id } });
         return new NextResponse(null, { status: 204 });

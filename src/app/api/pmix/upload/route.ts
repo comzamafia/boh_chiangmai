@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import * as XLSX from "xlsx";
 
 // Station mapping by category
@@ -77,8 +77,10 @@ function parseRows(data: unknown[][]): RawRow[] {
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager", "analyst"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager", "analyst"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (businessDate) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const existing: { id: string }[] = await (prisma as any).pmixUpload.findMany({
-            where:  { businessDate },
+            where:  { businessDate, branchId },
             select: { id: true },
         });
         dupIds = existing.map(e => e.id);
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
     const rows = parseRows(raw);
 
     // Try to auto-link items to BOH recipes by fuzzy name match
-    const recipes = await prisma.recipe.findMany({ select: { id: true, name: true } });
+    const recipes = await prisma.recipe.findMany({ where: { branchId }, select: { id: true, name: true } });
     function findRecipeId(itemName: string): string | null {
         const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
         const target = norm(itemName);
@@ -190,7 +192,7 @@ export async function POST(req: NextRequest) {
         // (cascade removes their items + modifiers).
         if (dupIds.length > 0 && replaceExisting) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (tx as any).pmixUpload.deleteMany({ where: { id: { in: dupIds } } });
+            await (tx as any).pmixUpload.deleteMany({ where: { id: { in: dupIds }, branchId } });
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const up = await (tx as any).pmixUpload.create({
@@ -201,6 +203,7 @@ export async function POST(req: NextRequest) {
                 totalItems:   items.length,
                 totalQty,
                 totalSales,
+                branchId,
             },
         });
 
@@ -217,12 +220,13 @@ export async function POST(req: NextRequest) {
                     discountAmount: item.discountAmount, netSales: item.netSales,
                     pctNetCount: item.pctNetCount, pctNetSales: item.pctNetSales,
                     recipeId: item.recipeId,
+                    branchId,
                 },
             });
             if (item.modifiers.length > 0) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 await (tx as any).pmixModifier.createMany({
-                    data: item.modifiers.map(m => ({ ...m, itemId: pi.id })),
+                    data: item.modifiers.map(m => ({ ...m, itemId: pi.id, branchId })),
                 });
             }
         }

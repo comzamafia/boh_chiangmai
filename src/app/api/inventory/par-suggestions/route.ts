@@ -13,7 +13,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { calculateLeadTime } from "@/lib/supplier-lead-time";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
@@ -24,8 +24,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const days = Math.max(1, Math.min(90, Number(searchParams.get("days") ?? 7)));
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
 
     // Load all inventory items with ingredient details + supplier schedule
     const inventoryItems = await prisma.inventoryItem.findMany({
+        where: { branchId },
         include: {
             ingredient: {
                 select: {
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
     const ingredientIds = inventoryItems.map(iv => iv.ingredientId);
     const outTxns = await prisma.inventoryTransaction.findMany({
         where: {
+            branchId,
             ingredientId: { in: ingredientIds },
             type:         "Out",
             date:         { gte: cutoffStr },
@@ -93,6 +96,7 @@ export async function GET(req: NextRequest) {
 
     const pmixUploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: cutoff } },
                 { businessDate: null, uploadedAt: { gte: cutoff } },
@@ -109,15 +113,15 @@ export async function GET(req: NextRequest) {
 
     if (pmixUploadIds.length > 0) {
         const pmixItems = await db.pmixItem.findMany({
-            where:   { uploadId: { in: pmixUploadIds } },
+            where:   { branchId, uploadId: { in: pmixUploadIds } },
             include: { modifiers: true },
         });
         const rules: RuleRow[] = await db.pmixItemRule.findMany({
-            where:   { isActive: true },
+            where:   { branchId, isActive: true },
             orderBy: [{ priority: "desc" }, { pattern: "asc" }],
         });
         const standards = await db.portionStandard.findMany({
-            where:   { type: { in: ["modifier", "base"] } },
+            where:   { branchId, type: { in: ["modifier", "base"] } },
             select:  { itemName: true, portionSize: true, ingredientId: true },
         });
         const stdByName = new Map<string, { ingredientId: string; portionSize: number }>();
@@ -314,8 +318,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -333,8 +339,8 @@ export async function POST(req: NextRequest) {
         const { inventoryItemId, parMin, parMax, reorderPoint } = it;
         if (!inventoryItemId) continue;
 
-        await prisma.inventoryItem.update({
-            where: { id: inventoryItemId },
+        await prisma.inventoryItem.updateMany({
+            where: { id: inventoryItemId, branchId },
             data: {
                 parMin:       Number(parMin),
                 parMax:       Number(parMax),
@@ -351,6 +357,7 @@ export async function POST(req: NextRequest) {
         targetId:    "bulk",
         targetName:  `PAR suggestions applied (${updated.length} items)`,
         newValues:   { appliedCount: updated.length },
+        branchId,
         request:     req,
     });
 

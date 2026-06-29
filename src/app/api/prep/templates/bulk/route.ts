@@ -5,14 +5,16 @@
  *   Skips blanks and names already present (case-insensitive).
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 const EDIT = ["admin", "manager", "chef"];
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { stationId, names } = await req.json();
     if (!stationId || !Array.isArray(names)) {
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (cleaned.length === 0) return NextResponse.json({ added: 0, skipped: 0 });
 
     // Skip names already on this station
-    const existing = await prisma.prepTaskTemplate.findMany({ where: { stationId }, select: { name: true, sortOrder: true } });
+    const existing = await prisma.prepTaskTemplate.findMany({ where: { stationId, branchId }, select: { name: true, sortOrder: true } });
     const have = new Set(existing.map(t => t.name.toLowerCase().trim()));
     let sort = existing.reduce((m, t) => Math.max(m, t.sortOrder), 0);
 
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     if (toCreate.length > 0) {
         await prisma.prepTaskTemplate.createMany({
-            data: toCreate.map(name => ({ stationId, name, sortOrder: ++sort, active: true })),
+            data: toCreate.map(name => ({ stationId, name, sortOrder: ++sort, active: true, branchId })),
         });
     }
     return NextResponse.json({ added: toCreate.length, skipped });

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { getPermittedSlugs } from "@/lib/permissions";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
     const slugs = getPermittedSlugs(session.role, session.permissions);
     if (!slugs.includes("recipes-manage-categories"))
         return NextResponse.json({ error: "Forbidden — you don't have permission to manage recipe categories." }, { status: 403 });
@@ -15,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const { name } = await req.json();
         if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
 
-        const existing = await prisma.recipeCategory.findUnique({ where: { id } });
+        const existing = await prisma.recipeCategory.findFirst({ where: { id, branchId } });
         if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
         const oldName = existing.name;
@@ -28,7 +29,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         // Cascade rename to all recipes that used the old category name
         if (oldName !== newName) {
             await prisma.recipe.updateMany({
-                where: { category: oldName },
+                where: { category: oldName, branchId },
                 data: { category: newName },
             });
         }
@@ -43,18 +44,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
     const slugs = getPermittedSlugs(session.role, session.permissions);
     if (!slugs.includes("recipes-manage-categories"))
         return NextResponse.json({ error: "Forbidden — you don't have permission to manage recipe categories." }, { status: 403 });
 
     const { id } = await params;
     try {
-        const cat = await prisma.recipeCategory.findUnique({ where: { id } });
+        const cat = await prisma.recipeCategory.findFirst({ where: { id, branchId } });
         if (!cat) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-        const usedBy = await prisma.recipe.count({ where: { category: cat.name } });
+        const usedBy = await prisma.recipe.count({ where: { category: cat.name, branchId } });
         if (usedBy > 0) {
             return NextResponse.json(
                 { error: `Cannot delete — ${usedBy} recipe${usedBy > 1 ? "s" : ""} use this category.` },

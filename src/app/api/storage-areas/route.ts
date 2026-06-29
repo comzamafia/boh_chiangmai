@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // GET /api/storage-areas — list all storage areas (authenticated)
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const areas = await prisma.storageArea.findMany({
+        where: { branchId },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         include: { _count: { select: { ingredients: true } } },
     });
@@ -17,8 +19,10 @@ export async function GET() {
 
 // POST /api/storage-areas — create (admin only)
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || session.role !== "admin") {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -34,6 +38,7 @@ export async function POST(req: NextRequest) {
                 temperature: temperature?.trim() || null,
                 isActive: isActive !== false,
                 sortOrder: sortOrder ?? 0,
+                branchId,
             },
             include: { _count: { select: { ingredients: true } } },
         });

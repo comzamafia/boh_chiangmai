@@ -18,13 +18,15 @@
  * (status gate). Skips untracked / zero-qty lines gracefully.
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -42,8 +44,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: "lines are required" }, { status: 400 });
     }
 
-    const po = await prisma.purchaseOrder.findUnique({
-        where: { id },
+    const po = await prisma.purchaseOrder.findFirst({
+        where: { id, branchId },
         include: { items: true },
     });
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
@@ -80,8 +82,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         // Inventory effect only for tracked ingredients with a positive qty
         if (item.ingredientId && receivedQty > 0) {
-            const ingredient = await prisma.ingredient.findUnique({
-                where:   { id: item.ingredientId },
+            const ingredient = await prisma.ingredient.findFirst({
+                where:   { id: item.ingredientId, branchId },
                 include: { inventoryItem: true },
             });
             if (ingredient?.inventoryItem) {
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                             costPerUnit:     added > 0 ? totalPaid / added : 0,
                             note:            `PO ${po.poNumber}`,
                             date,
+                            branchId,
                         },
                     }),
                     prisma.inventoryItem.update({
@@ -151,6 +154,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         targetId:    id,
         targetName:  `${po.poNumber} · ${po.supplierName}`,
         newValues:   { received: results.length, lines: results },
+        branchId,
         request:     req,
     });
 

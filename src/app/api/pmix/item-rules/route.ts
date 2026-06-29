@@ -4,24 +4,28 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const rules = await db.pmixItemRule.findMany({
+        where: { branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
     return NextResponse.json(rules);
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || (session.role !== "admin" && session.role !== "manager")) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (session.role !== "admin" && session.role !== "manager") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -45,6 +49,7 @@ export async function POST(req: NextRequest) {
             priority:  Number(priority) || 0,
             isActive:  Boolean(isActive),
             notes:     notes?.trim() || null,
+            branchId,
         },
     });
     return NextResponse.json(rule, { status: 201 });

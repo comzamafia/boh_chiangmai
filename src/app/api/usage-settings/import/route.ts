@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -16,14 +16,16 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const RULE_CATS = new Set(["main_protein", "extra_protein", "dessert", "excluded"]);
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     let bundle: Record<string, unknown>;
     try { bundle = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-    // Resolve ingredient names → ids (case-insensitive)
-    const ingredients: { id: string; name: string }[] = await db.ingredient.findMany({ select: { id: true, name: true } });
+    // Resolve ingredient names → ids (case-insensitive) — within the active branch
+    const ingredients: { id: string; name: string }[] = await db.ingredient.findMany({ where: { branchId }, select: { id: true, name: true } });
     const ingByName = new Map(ingredients.map(i => [i.name.toLowerCase().trim(), i.id]));
     const missingIngredients = new Set<string>();
     const resolveIng = (name: unknown): string | null => {
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     // ── PMIX classification rules (dedupe by pattern+matchType+category) ──
     const existRules: { pattern: string; matchType: string; category: string }[] =
-        await db.pmixItemRule.findMany({ select: { pattern: true, matchType: true, category: true } });
+        await db.pmixItemRule.findMany({ where: { branchId }, select: { pattern: true, matchType: true, category: true } });
     const ruleSet = new Set(existRules.map(r => `${r.pattern}||${r.matchType}||${r.category}`));
     for (const r of arr("pmixItemRules")) {
         const pattern = String(r.pattern ?? "").trim();
@@ -56,13 +58,14 @@ export async function POST(req: NextRequest) {
         await db.pmixItemRule.create({ data: {
             pattern, matchType, category, label: r.label ? String(r.label).trim() : null,
             priority: Number(r.priority) || 0, isActive: r.isActive !== false, notes: r.notes ? String(r.notes).trim() : null,
+            branchId,
         } });
         ruleSet.add(key); summary.pmixItemRules.created++;
     }
 
     // ── Portion standards (dedupe by itemName+type+ingredientId) ──
     const existPs: { itemName: string; type: string; ingredientId: string }[] =
-        await db.portionStandard.findMany({ select: { itemName: true, type: true, ingredientId: true } });
+        await db.portionStandard.findMany({ where: { branchId }, select: { itemName: true, type: true, ingredientId: true } });
     const psSet = new Set(existPs.map(p => `${p.itemName.toLowerCase()}||${p.type}||${p.ingredientId}`));
     for (const p of arr("portionStandards")) {
         const ingId = resolveIng(p.ingredientName);
@@ -75,6 +78,7 @@ export async function POST(req: NextRequest) {
         if (psSet.has(key)) { summary.portionStandards.skipped++; continue; }
         await db.portionStandard.create({ data: {
             ingredientId: ingId, itemName, type, portionSize, portionUnit, notes: p.notes ? String(p.notes).trim() : null,
+            branchId,
         } });
         psSet.add(key); summary.portionStandards.created++;
     }
@@ -85,9 +89,12 @@ export async function POST(req: NextRequest) {
         const base = String(c.base ?? "").trim();
         const relations = Array.isArray(c.relations) ? c.relations : [];
         if (!reportKey || !base) { summary.unitChains.skipped++; continue; }
-        await db.reportUnitChain.upsert({
-            where: { reportKey }, update: { base, relations }, create: { reportKey, base, relations },
-        });
+        const existChain = await db.reportUnitChain.findFirst({ where: { reportKey, branchId } });
+        if (existChain) {
+            await db.reportUnitChain.update({ where: { id: existChain.id }, data: { base, relations } });
+        } else {
+            await db.reportUnitChain.create({ data: { reportKey, base, relations, branchId } });
+        }
         summary.unitChains.created++;
     }
 
@@ -100,25 +107,26 @@ export async function POST(req: NextRequest) {
         const comps = (Array.isArray(c.components) ? c.components : [])
             .map((x: Record<string, unknown>) => ({ ingredientId: resolveIng(x.ingredientName), qty: Number(x.qty), unit: String(x.unit ?? "").trim() }))
             .filter((x: { ingredientId: string | null; qty: number; unit: string }) => x.ingredientId && x.qty > 0 && x.unit) as { ingredientId: string; qty: number; unit: string }[];
-        const existing = await db.compositeRecipe.findUnique({ where: { name } });
+        const compsWithBranch = comps.map(x => ({ ...x, branchId }));
+        const existing = await db.compositeRecipe.findFirst({ where: { name, branchId } });
         if (existing) {
-            await db.compositeComponent.deleteMany({ where: { compositeId: existing.id } });
+            await db.compositeComponent.deleteMany({ where: { compositeId: existing.id, branchId } });
             await db.compositeRecipe.update({ where: { id: existing.id }, data: {
-                yieldQty, yieldUnit, notes: c.notes ? String(c.notes).trim() : null, components: { create: comps },
+                yieldQty, yieldUnit, notes: c.notes ? String(c.notes).trim() : null, components: { create: compsWithBranch },
             } });
         } else {
             await db.compositeRecipe.create({ data: {
-                name, yieldQty, yieldUnit, notes: c.notes ? String(c.notes).trim() : null, components: { create: comps },
+                name, yieldQty, yieldUnit, notes: c.notes ? String(c.notes).trim() : null, branchId, components: { create: compsWithBranch },
             } });
         }
         summary.composites.created++;
     }
 
     // ── Menu → composite links (dedupe by itemName+compositeId) ──
-    const allComposites: { id: string; name: string }[] = await db.compositeRecipe.findMany({ select: { id: true, name: true } });
+    const allComposites: { id: string; name: string }[] = await db.compositeRecipe.findMany({ where: { branchId }, select: { id: true, name: true } });
     const compByName = new Map(allComposites.map(c => [c.name.toLowerCase().trim(), c.id]));
     const existLinks: { itemName: string; compositeId: string }[] =
-        await db.menuCompositeLink.findMany({ select: { itemName: true, compositeId: true } });
+        await db.menuCompositeLink.findMany({ where: { branchId }, select: { itemName: true, compositeId: true } });
     const linkSet = new Set(existLinks.map(l => `${l.itemName.toLowerCase()}||${l.compositeId}`));
     const missingComposites = new Set<string>();
     for (const l of arr("menuCompositeLinks")) {
@@ -130,7 +138,7 @@ export async function POST(req: NextRequest) {
         if (!itemName || !(qty > 0) || !unit) { summary.menuCompositeLinks.skipped++; continue; }
         const key = `${itemName.toLowerCase()}||${compId}`;
         if (linkSet.has(key)) { summary.menuCompositeLinks.skipped++; continue; }
-        await db.menuCompositeLink.create({ data: { itemName, compositeId: compId, qty, unit, notes: l.notes ? String(l.notes).trim() : null } });
+        await db.menuCompositeLink.create({ data: { itemName, compositeId: compId, qty, unit, notes: l.notes ? String(l.notes).trim() : null, branchId } });
         linkSet.add(key); summary.menuCompositeLinks.created++;
     }
 

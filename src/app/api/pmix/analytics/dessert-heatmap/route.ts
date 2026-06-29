@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { loadInventoryByName, fuzzyMatchInventory, toDisplayQty } from "@/lib/inventory-match";
 
@@ -15,8 +15,9 @@ export const dynamic   = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const days = Math.max(1, Math.min(30, Number(searchParams.get("days") ?? 7)));
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
 
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
                 { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
@@ -57,14 +59,14 @@ export async function GET(req: NextRequest) {
     const uploadIds = uploads.map((u: { id: string }) => u.id);
 
     const pmixItems = await db.pmixItem.findMany({
-        where:   { uploadId: { in: uploadIds } },
+        where:   { uploadId: { in: uploadIds }, branchId },
         include: { modifiers: true },
     });
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
-    const invByName = await loadInventoryByName();
+    const invByName = await loadInventoryByName(branchId);
 
     // itemName → date → qty
     const dessertDay = new Map<string, Map<string, number>>();

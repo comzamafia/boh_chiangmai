@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 
@@ -17,8 +17,9 @@ import { NextResponse } from "next/server";
  */
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const body = await request.json();
         const {
@@ -39,8 +40,8 @@ export async function POST(request: Request) {
         }
 
         // Load ingredient + inventory item + current MAC
-        const ingredient = await prisma.ingredient.findUnique({
-            where: { id: ingredientId },
+        const ingredient = await prisma.ingredient.findFirst({
+            where: { id: ingredientId, branchId },
             include: { inventoryItem: true },
         });
         if (!ingredient) {
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 
         // If an ingredientSupplierId is given, validate it belongs to this ingredient
         if (ingredientSupplierId) {
-            const link = await prisma.ingredientSupplier.findUnique({ where: { id: ingredientSupplierId } });
+            const link = await prisma.ingredientSupplier.findFirst({ where: { id: ingredientSupplierId, branchId } });
             if (!link || link.ingredientId !== ingredientId) {
                 return NextResponse.json({ error: "Invalid ingredientSupplierId for this ingredient" }, { status: 400 });
             }
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
                     costPerUnit: stockAdded > 0 ? totalPaid / stockAdded : 0,
                     note:        note ?? null,
                     date,
+                    branchId,
                 },
             }),
             // 2. Update currentStock
@@ -132,6 +134,7 @@ export async function POST(request: Request) {
                 oldPurchasePrice: oldPrice, newUnitPrice,
                 oldAvgCost: currentAvgCost, newAvgCost,
             },
+            branchId,
             request,
         });
 

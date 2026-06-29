@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 import { fireCriticalStockCheck } from "@/lib/notifications/triggers/critical-stock";
 import { NextResponse } from "next/server";
@@ -15,6 +15,10 @@ const SIGN: Record<string, number> = {
 // GET /api/inventory/transactions — list with optional filters
 export async function GET(request: Request) {
     try {
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { branchId } = ctx;
+
         const { searchParams } = new URL(request.url);
         const type         = searchParams.get("type");        // "In"|"Out"|"Waste"|"Adjust"|"Stocktake"
         const ingredientId = searchParams.get("ingredientId");
@@ -25,6 +29,7 @@ export async function GET(request: Request) {
 
         const txns = await prisma.inventoryTransaction.findMany({
             where: {
+                branchId,
                 ...(type         ? { type }         : {}),
                 ...(ingredientId ? { ingredientId } : {}),
                 ...(from || to   ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
@@ -44,8 +49,9 @@ export async function GET(request: Request) {
 // POST /api/inventory/transactions — create a new transaction and update stock
 export async function POST(request: Request) {
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const ctx = await requireBranch();
+        if (!isBranchContext(ctx)) return ctx;
+        const { session, branchId } = ctx;
 
         const body = await request.json();
         const { inventoryItemId, ingredientId, type, qty, unit, costPerUnit, reason, note, date, recipeId } = body;
@@ -61,11 +67,12 @@ export async function POST(request: Request) {
         const sign   = SIGN[type] ?? 0;
 
         // Capture prev stock to detect critical-threshold crossing for notifications
-        const prevItem = await prisma.inventoryItem.findUnique({
-            where:  { id: inventoryItemId },
+        const prevItem = await prisma.inventoryItem.findFirst({
+            where:  { id: inventoryItemId, branchId },
             select: { currentStock: true },
         });
-        const prevStock = prevItem ? Number(prevItem.currentStock) : undefined;
+        if (!prevItem) return NextResponse.json({ error: "Inventory item not found" }, { status: 404 });
+        const prevStock = Number(prevItem.currentStock);
 
         const [txn] = await prisma.$transaction([
             prisma.inventoryTransaction.create({
@@ -80,6 +87,7 @@ export async function POST(request: Request) {
                     note:        note ?? null,
                     date,
                     recipeId:    recipeId ?? null,
+                    branchId,
                     // Stocktake variance = counted − expected (negative = shrinkage)
                     varianceQty: (type === "Stocktake" && prevStock != null)
                         ? Math.round((qtyNum - prevStock) * 10000) / 10000
@@ -108,6 +116,7 @@ export async function POST(request: Request) {
                 session, action: "WASTE_LOG", targetTable: "InventoryTransaction",
                 targetId: txn.id, targetName: ingName,
                 newValues: { ingredientId, qty: qtyNum, unit, reason, costPerUnit, date },
+                branchId,
                 request,
             });
         }

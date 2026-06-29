@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -14,15 +14,18 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const INCLUDE = { components: { include: { ingredient: { select: { id: true, name: true, recipeUnit: true } } } } };
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const rows = await db.compositeRecipe.findMany({ include: INCLUDE, orderBy: { name: "asc" } });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
+    const rows = await db.compositeRecipe.findMany({ where: { branchId }, include: INCLUDE, orderBy: { name: "asc" } });
     return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const b = await req.json();
     const name = String(b.name ?? "").trim();
@@ -39,7 +42,10 @@ export async function POST(req: NextRequest) {
 
     try {
         const row = await db.compositeRecipe.create({
-            data: { name, yieldQty, yieldUnit, notes: b.notes?.trim() || null, components: { create: components } },
+            data: {
+                name, yieldQty, yieldUnit, notes: b.notes?.trim() || null, branchId,
+                components: { create: components.map((c: { ingredientId: string; qty: number; unit: string }) => ({ ...c, branchId })) },
+            },
             include: INCLUDE,
         });
         return NextResponse.json(row, { status: 201 });

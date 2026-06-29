@@ -8,11 +8,12 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month"); // "YYYY-MM"
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     // Build date filter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = {};
+    const where: any = { branchId };
     if (month) {
         const [y, m] = month.split("-").map(Number);
         const from = new Date(Date.UTC(y, m - 1, 1));

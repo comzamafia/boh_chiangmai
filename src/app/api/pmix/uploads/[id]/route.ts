@@ -7,12 +7,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const branchCtx = await requireBranch();
+    if (!isBranchContext(branchCtx)) return branchCtx;
+    const { session, branchId } = branchCtx;
     if (!["admin", "manager", "analyst"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -23,7 +24,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = prisma as any;
 
-    const existing = await db.pmixUpload.findUnique({ where: { id } });
+    const existing = await db.pmixUpload.findFirst({ where: { id, branchId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,6 +56,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         targetName:  updated.periodLabel ?? updated.fileName,
         oldValues:   { businessDate: existing.businessDate, periodLabel: existing.periodLabel },
         newValues:   data,
+        branchId,
     });
 
     return NextResponse.json(updated);

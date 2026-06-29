@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -12,15 +12,18 @@ const EDIT_ROLES = ["admin", "manager", "chef"];
 const INCLUDE = { composite: { select: { id: true, name: true, yieldQty: true, yieldUnit: true } } };
 
 export async function GET() {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const rows = await db.menuCompositeLink.findMany({ include: INCLUDE, orderBy: [{ itemName: "asc" }] });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
+    const rows = await db.menuCompositeLink.findMany({ where: { branchId }, include: INCLUDE, orderBy: [{ itemName: "asc" }] });
     return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const b = await req.json();
     const itemName = String(b.itemName ?? "").trim();
     const compositeId = String(b.compositeId ?? "").trim();
@@ -29,8 +32,11 @@ export async function POST(req: NextRequest) {
     if (!itemName || !compositeId || !(qty > 0) || !unit) {
         return NextResponse.json({ error: "itemName, compositeId, qty (>0) and unit are required" }, { status: 400 });
     }
+    // Ensure the referenced composite belongs to this branch
+    const composite = await db.compositeRecipe.findFirst({ where: { id: compositeId, branchId } });
+    if (!composite) return NextResponse.json({ error: "Composite not found" }, { status: 404 });
     const row = await db.menuCompositeLink.create({
-        data: { itemName, compositeId, qty, unit, notes: b.notes?.trim() || null },
+        data: { itemName, compositeId, qty, unit, notes: b.notes?.trim() || null, branchId },
         include: INCLUDE,
     });
     return NextResponse.json(row, { status: 201 });

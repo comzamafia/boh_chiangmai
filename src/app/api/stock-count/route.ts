@@ -10,20 +10,21 @@
  *   Stocktake transaction (keeps variance history).
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const areaId = new URL(req.url).searchParams.get("areaId");
     if (!areaId) return NextResponse.json({ error: "areaId is required" }, { status: 400 });
 
-    const rows = await db.storageAreaCount.findMany({ where: { storageAreaId: areaId } });
+    const rows = await db.storageAreaCount.findMany({ where: { storageAreaId: areaId, branchId } });
     const counts: Record<string, number> = {};
     let lastCountedAt: string | null = null;
     for (const r of rows as { ingredientId: string; recipeQty: unknown; countedAt: Date }[]) {
@@ -35,8 +36,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const body = await req.json();
     const areaId: string = body.areaId;
@@ -56,15 +58,15 @@ export async function POST(req: NextRequest) {
         await db.storageAreaCount.upsert({
             where:  { ingredientId_storageAreaId: { ingredientId: c.ingredientId, storageAreaId: areaId } },
             update: { recipeQty: qty, countedAt: now },
-            create: { ingredientId: c.ingredientId, storageAreaId: areaId, recipeQty: qty, countedAt: now },
+            create: { ingredientId: c.ingredientId, storageAreaId: areaId, recipeQty: qty, countedAt: now, branchId },
         });
 
         // 2. Roll up the total across all areas → currentStock (Stocktake txn)
-        const all = await db.storageAreaCount.findMany({ where: { ingredientId: c.ingredientId }, select: { recipeQty: true } });
+        const all = await db.storageAreaCount.findMany({ where: { ingredientId: c.ingredientId, branchId }, select: { recipeQty: true } });
         const total = all.reduce((s: number, r: { recipeQty: unknown }) => s + Number(r.recipeQty), 0);
 
-        const invItem = await db.inventoryItem.findUnique({
-            where:  { ingredientId: c.ingredientId },
+        const invItem = await db.inventoryItem.findFirst({
+            where:  { ingredientId: c.ingredientId, branchId },
             select: { id: true, currentStock: true, ingredient: { select: { recipeUnit: true } } },
         });
         if (!invItem) continue;
@@ -81,6 +83,7 @@ export async function POST(req: NextRequest) {
                     varianceQty:     total - prevStock,
                     note:            `Area count rolled up across storage areas → ${total} ${invItem.ingredient.recipeUnit}`,
                     date:            dateStr,
+                    branchId,
                 },
             }),
             db.inventoryItem.update({ where: { id: invItem.id }, data: { currentStock: total, lastCountDate: now } }),

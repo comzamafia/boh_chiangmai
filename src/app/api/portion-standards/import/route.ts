@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { logAudit } from "@/lib/audit";
 
 interface ImportRow {
@@ -21,8 +21,10 @@ interface ImportRow {
 }
 
 export async function POST(request: Request) {
-    const session = await getSession();
-    if (!session || !["admin", "manager"].includes(session.role)) {
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!["admin", "manager"].includes(session.role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
     if (rows.length === 0) return NextResponse.json({ error: "No rows to import" }, { status: 400 });
 
     // Ingredient lookup (by lowercased name and by SKU)
-    const ingredients = await prisma.ingredient.findMany({ select: { id: true, name: true, sku: true } });
+    const ingredients = await prisma.ingredient.findMany({ where: { branchId }, select: { id: true, name: true, sku: true } });
     const byName = new Map<string, string>();
     const bySku  = new Map<string, string>();
     for (const i of ingredients) {
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
         if (!ingredientId)                   { errors.push({ row: line, reason: `Ingredient "${r.ingredient}" not found` }); continue; }
 
         const existing = await prisma.portionStandard.findFirst({
-            where: { ingredientId, itemName: { equals: itemName, mode: "insensitive" }, type },
+            where: { ingredientId, itemName: { equals: itemName, mode: "insensitive" }, type, branchId },
             select: { id: true },
         });
 
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
             updated++;
         } else {
             await prisma.portionStandard.create({
-                data: { ingredientId, itemName, type, portionSize, portionUnit, notes: String(r.notes ?? "").trim() || null },
+                data: { ingredientId, itemName, type, portionSize, portionUnit, notes: String(r.notes ?? "").trim() || null, branchId },
             });
             created++;
         }
@@ -82,6 +84,7 @@ export async function POST(request: Request) {
         session, action: "CREATE", targetTable: "PortionStandard",
         targetId: "import", targetName: `Portion standards import (${created} new, ${updated} updated)`,
         newValues: { created, updated, errors: errors.length },
+        branchId,
         request,
     });
 

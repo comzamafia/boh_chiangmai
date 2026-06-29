@@ -13,20 +13,21 @@
  * memberIds is empty (open) or includes their userId.
  */
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
 
     const date = new URL(req.url).searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
     const isManager = ["admin", "manager", "chef"].includes(session.role);
 
     // Stations visible to this user
-    const allStations = await prisma.prepStation.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+    const allStations = await prisma.prepStation.findMany({ where: { branchId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
     const stations = allStations.filter(s =>
         isManager || s.memberIds.length === 0 || s.memberIds.includes(session.userId)
     );
@@ -34,13 +35,13 @@ export async function GET(req: NextRequest) {
 
     // Templates (backlog) for those stations
     const templates = await prisma.prepTaskTemplate.findMany({
-        where:   { stationId: { in: stationIds }, active: true },
+        where:   { stationId: { in: stationIds }, active: true, branchId },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
 
     // Today's board tasks
     const board = await prisma.prepBoardTask.findMany({
-        where:   { date, stationId: { in: stationIds } },
+        where:   { date, stationId: { in: stationIds }, branchId },
         include: { template: { select: { name: true, qty: true, dueTime: true } } },
         orderBy: { sortOrder: "asc" },
     });

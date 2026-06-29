@@ -14,7 +14,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -56,8 +56,10 @@ function matchGroup(rawName: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getSession();
-    if (!session || !EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { session, branchId } = ctx;
+    if (!EDIT_ROLES.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const autoMap = await req.json().then(b => b?.autoMap !== false).catch(() => true);
 
@@ -65,9 +67,9 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < DEFAULT_PROTEIN_GROUPS.length; i++) {
         const name = DEFAULT_PROTEIN_GROUPS[i];
         await db.proteinGroup.upsert({
-            where: { name },
+            where: { name_branchId: { name, branchId } },
             update: { sortOrder: i },
-            create: { name, sortOrder: i },
+            create: { name, sortOrder: i, branchId },
         });
     }
 
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
     const unmatched: string[] = [];
 
     if (autoMap) {
-        const groups = await db.proteinGroup.findMany({ include: { members: true } });
+        const groups = await db.proteinGroup.findMany({ where: { branchId }, include: { members: true } });
         const groupByName = new Map<string, { id: string }>();
         const alreadyMember = new Set<string>();
         for (const g of groups as { id: string; name: string; members: { ingredientId: string }[] }[]) {
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
             for (const m of g.members) alreadyMember.add(m.ingredientId);
         }
 
-        const ingredients = await db.ingredient.findMany({ select: { id: true, name: true, category: { select: { name: true } } } });
+        const ingredients = await db.ingredient.findMany({ where: { branchId }, select: { id: true, name: true, category: { select: { name: true } } } });
         for (const ig of ingredients as { id: string; name: string; category: { name: string } | null }[]) {
             if (alreadyMember.has(ig.id)) continue;
             const target = matchGroup(ig.name);
@@ -95,12 +97,12 @@ export async function POST(req: NextRequest) {
             const g = groupByName.get(target);
             if (!g) continue;
             try {
-                await db.proteinGroupMember.create({ data: { groupId: g.id, ingredientId: ig.id } });
+                await db.proteinGroupMember.create({ data: { groupId: g.id, ingredientId: ig.id, branchId } });
                 assigned.push({ ingredient: ig.name, group: target });
             } catch { /* unique clash — already a member, ignore */ }
         }
     }
 
-    const result = await db.proteinGroup.findMany({ include: INCLUDE, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+    const result = await db.proteinGroup.findMany({ where: { branchId }, include: INCLUDE, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
     return NextResponse.json({ groups: result, assigned, unmatched });
 }

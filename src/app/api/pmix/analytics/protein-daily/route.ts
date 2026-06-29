@@ -13,12 +13,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 
 export async function GET(req: NextRequest) {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctx = await requireBranch();
+    if (!isBranchContext(ctx)) return ctx;
+    const { branchId } = ctx;
 
     const { searchParams } = new URL(req.url);
     const protein = searchParams.get("protein");
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
     // 1. Uploads in range
     const uploads = await db.pmixUpload.findMany({
         where: {
+            branchId,
             OR: [
                 { businessDate: { gte: fromDate, lte: toDate } },
                 { businessDate: null, uploadedAt: { gte: fromDate, lte: toDate } },
@@ -65,13 +67,13 @@ export async function GET(req: NextRequest) {
 
     // 3. Items + modifiers
     const items = await db.pmixItem.findMany({
-        where:   { uploadId: { in: uploadIds } },
+        where:   { uploadId: { in: uploadIds }, branchId },
         include: { modifiers: true },
     });
 
     // 4. Item rules
     const rules: RuleRow[] = await db.pmixItemRule.findMany({
-        where:   { isActive: true },
+        where:   { isActive: true, branchId },
         orderBy: [{ priority: "desc" }, { pattern: "asc" }],
     });
 
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest) {
         where: {
             itemName: { equals: protein, mode: "insensitive" },
             type:     { in: ["modifier", "base"] },
+            branchId,
         },
         include: { ingredient: { select: { id: true, name: true } } },
     });

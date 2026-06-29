@@ -54,6 +54,7 @@ export async function checkCriticalStock(p: CriticalCheckParams): Promise<void> 
         type:          "critical_stock",
         dedupeKey:     `critical_stock:${item.id}:${dateKey}`,
         subject,
+        branchId:      item.branchId,
         storageAreaId: area.id,
         ingredientId:  item.ingredient.id,
         recipients,

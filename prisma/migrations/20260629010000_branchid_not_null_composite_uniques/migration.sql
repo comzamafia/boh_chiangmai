@@ -1,11 +1,8 @@
--- Phase 3: Set branchId NOT NULL + add composite unique constraints
--- ONLY run this AFTER scripts/migrate-multi-branch.ts has backfilled all rows.
+-- Phase 3: Set branchId NOT NULL + add composite unique constraints.
 --
--- Pre-check (run manually first):
---   SELECT 'suppliers' as t, count(*) FROM suppliers WHERE "branchId" IS NULL
---   UNION ALL SELECT 'ingredients', count(*) FROM ingredients WHERE "branchId" IS NULL
---   ... (repeat for all tables)
--- ALL counts must be 0 before applying this migration.
+-- Safe to run via `prisma migrate deploy`: the preceding backfill migration
+-- (20260629005000_backfill_branches) has already assigned every row to the
+-- Mississauga branch, so these SET NOT NULL statements find zero NULLs.
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Set NOT NULL on all tables

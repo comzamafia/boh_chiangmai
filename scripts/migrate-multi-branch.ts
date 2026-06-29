@@ -1,16 +1,19 @@
 /**
  * Multi-branch data migration script.
  *
- * Run AFTER the 20260629000000_add_branch_multi_tenant migration has been applied.
+ * NOTE: The primary-branch backfill is now performed automatically by the SQL
+ * migration `20260629005000_backfill_branches` (runs via `prisma migrate
+ * deploy`). This script is therefore OPTIONAL and idempotent — keep it only as
+ * a manual re-run safety net, or as the starting point for importing data from
+ * the other 2 branches' old databases (connect to their DATABASE_URLs and
+ * INSERT with the correct branchId).
+ *
  * This script:
  *   1. Creates the 3 Branch records (Mississauga, York Mills, Parklawn)
  *   2. Backfills branchId on ALL existing rows (assigns to Mississauga)
  *   3. Creates UserBranch records for all existing users
  *
  * Usage:  npx ts-node --compiler-options '{"module":"commonjs"}' scripts/migrate-multi-branch.ts
- *
- * NOTE: Importing data from the other 2 databases is a separate step
- *       (connect to their DATABASE_URLs and INSERT with the correct branchId).
  */
 
 import { PrismaClient } from "@prisma/client";

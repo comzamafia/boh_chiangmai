@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 // GET /api/recipes/[id]/ingredients
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,16 +24,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         const body: { ingredientId: string; quantity: number }[] = await request.json();
         if (!Array.isArray(body)) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-        // Deduplicate by ingredientId (last one wins) to avoid unique constraint violation
+        // Deduplicate by ingredientId (last one wins) to avoid unique constraint violation.
+        // Skip rows missing an ingredientId or a valid positive quantity.
         const seen = new Map<string, number>();
-        for (const ri of body) seen.set(ri.ingredientId, ri.quantity);
-        // Delete all existing, then re-insert one-by-one
-        // createMany has bugs with Prisma 7 + PrismaPg driver adapter (null constraint on defaults),
-        // so we use individual create() calls which handle @default(cuid()) correctly.
+        for (const ri of body) {
+            const ingId = String(ri.ingredientId ?? "").trim();
+            const qty = Number(ri.quantity);
+            if (!ingId || !Number.isFinite(qty) || qty <= 0) continue;
+            seen.set(ingId, qty);
+        }
+
+        // Delete all existing, then re-insert one-by-one.
+        // The PrismaPg driver adapter fails to serialise a JS number into a Decimal
+        // column (it ends up NULL → null-constraint violation), so quantity is passed
+        // as a string and the id is generated explicitly.
         await (prisma as any).recipeIngredient.deleteMany({ where: { recipeId: id } });
         for (const [ingredientId, quantity] of seen.entries()) {
             await (prisma as any).recipeIngredient.create({
-                data: { recipeId: id, ingredientId, quantity },
+                data: { id: randomUUID(), recipeId: id, ingredientId, quantity: String(quantity) },
             });
         }
 

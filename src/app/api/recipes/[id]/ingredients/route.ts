@@ -28,28 +28,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         for (const ri of body) seen.set(ri.ingredientId, ri.quantity);
         const deduped = [...seen.entries()].map(([ingredientId, quantity]) => ({ recipeId: id, ingredientId, quantity }));
 
-        // Delete all existing, then re-insert (interactive tx — more reliable with driver adapters)
-        await (prisma as any).$transaction(async (tx: any) => {
-            await tx.recipeIngredient.deleteMany({ where: { recipeId: id } });
-            if (deduped.length > 0) {
-                await tx.recipeIngredient.createMany({ data: deduped });
-            }
-        });
+        // Delete all existing, then re-insert sequentially
+        await (prisma as any).recipeIngredient.deleteMany({ where: { recipeId: id } });
+        if (deduped.length > 0) {
+            await (prisma as any).recipeIngredient.createMany({ data: deduped });
+        }
 
-        const updated = await prisma.recipeIngredient.findMany({
+        const updated = await (prisma as any).recipeIngredient.findMany({
             where: { recipeId: id },
             include: { ingredient: true },
         });
 
         // Re-sync sub-recipe ingredient cost now that ingredient list changed
-        const recipe = await prisma.recipe.findUnique({
+        const recipe = await (prisma as any).recipe.findUnique({
             where: { id },
             select: { isSubRecipe: true },
         });
         if (recipe?.isSubRecipe) syncSubRecipe(id);
 
         return NextResponse.json(updated);
-    } catch {
-        return NextResponse.json({ error: "Failed to update recipe ingredients" }, { status: 500 });
+    } catch (err) {
+        console.error("[recipe ingredients PUT]", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

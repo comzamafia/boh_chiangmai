@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { syncSubRecipe } from "@/lib/sync-sub-recipe";
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 
 // GET /api/recipes/[id]/ingredients
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,13 +26,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         // Deduplicate by ingredientId (last one wins) to avoid unique constraint violation
         const seen = new Map<string, number>();
         for (const ri of body) seen.set(ri.ingredientId, ri.quantity);
-        // Provide id explicitly — Prisma 7 + PrismaPg driver adapter does not auto-apply @default(cuid()) in createMany
-        const deduped = [...seen.entries()].map(([ingredientId, quantity]) => ({ id: randomUUID(), recipeId: id, ingredientId, quantity }));
-
-        // Delete all existing, then re-insert sequentially
+        // Delete all existing, then re-insert one-by-one
+        // createMany has bugs with Prisma 7 + PrismaPg driver adapter (null constraint on defaults),
+        // so we use individual create() calls which handle @default(cuid()) correctly.
         await (prisma as any).recipeIngredient.deleteMany({ where: { recipeId: id } });
-        if (deduped.length > 0) {
-            await (prisma as any).recipeIngredient.createMany({ data: deduped });
+        for (const [ingredientId, quantity] of seen.entries()) {
+            await (prisma as any).recipeIngredient.create({
+                data: { recipeId: id, ingredientId, quantity },
+            });
         }
 
         const updated = await (prisma as any).recipeIngredient.findMany({

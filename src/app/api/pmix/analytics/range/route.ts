@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { BEVERAGE_CATEGORIES, classifyPosCategory } from "@/lib/beverage-categories";
 import { CURRY_GROUPS, matchCurryGroup } from "@/lib/curry-categories";
 
 export async function GET(req: NextRequest) {
@@ -209,7 +209,7 @@ export async function GET(req: NextRequest) {
 
     const mainGroupNames  = new Set<string>();
     const extraGroupNames = new Set<string>();
-    const beverageCatSet  = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
+    const beverageCatSet  = { has: (c: string) => classifyPosCategory(c) !== null };
 
     for (const item of items) {
         const dishName = item.itemName as string;

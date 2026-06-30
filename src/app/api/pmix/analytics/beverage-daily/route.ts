@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireBranch, isBranchContext } from "@/lib/branch";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { classifyPosCategory } from "@/lib/beverage-categories";
 
 export async function GET(req: NextRequest) {
     const ctx = await requireBranch();
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "group, from, and to are required" }, { status: 400 });
     }
 
-    if (!BEVERAGE_CATEGORIES.some(bc => bc.toLowerCase() === group.toLowerCase())) {
+    if (classifyPosCategory(group) === null) {
         return NextResponse.json({ error: "Unknown beverage group" }, { status: 400 });
     }
 

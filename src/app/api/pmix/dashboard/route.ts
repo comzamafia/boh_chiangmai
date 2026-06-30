@@ -12,38 +12,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, type RuleRow } from "@/lib/pmix-classifier";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { classifyPosCategory } from "@/lib/beverage-categories";
 
 export const dynamic   = "force-dynamic";
 export const revalidate = 0;
-
-// ─── Macro bucket helpers ────────────────────────────────────────────────────
-// Exact POS-category names that are alcoholic spirits / wine.
-const LIQUOR_CATS = new Set([
-    "cocktails", "classic cocktails", "shots & spirits",
-    "red wine", "white wine",
-]);
-// Substring patterns that mark an item as non-alcoholic beverage.
-// Broad on purpose so "Beverages", "Iced Tea", "Soft Drinks", "Juices",
-// "Bottled Water", etc. all land in the BEVERAGE bucket.
-const BEVERAGE_PATTERNS = [
-    "beverage", "soft drink", "soda", "juice", "tea", "coffee",
-    "water", "non-alcoholic", "non alcoholic",
-];
 
 type Bucket = "FOOD" | "LIQUOR" | "BEVERAGE" | "DESSERT";
 
 function macroBucket(category: string, isDessert: boolean): Bucket {
     if (isDessert) return "DESSERT";
-    const lower = category.toLowerCase().trim();
-    if (LIQUOR_CATS.has(lower)) return "LIQUOR";
-    // Beer + Mocktails are explicit
-    if (lower === "beer" || lower === "mocktails" || lower === "mocktail") return "BEVERAGE";
-    // Anything else matching a beverage pattern
-    if (BEVERAGE_PATTERNS.some(p => lower.includes(p))) return "BEVERAGE";
-    // Categories in the shared BEVERAGE_CATEGORIES list that aren't liquor
-    const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
-    if (bevSet.has(lower) && !LIQUOR_CATS.has(lower)) return "BEVERAGE";
+    const bucket = classifyPosCategory(category);
+    if (bucket === "alcohol") return "LIQUOR";
+    if (bucket === "beverage") return "BEVERAGE";
     return "FOOD";
 }
 

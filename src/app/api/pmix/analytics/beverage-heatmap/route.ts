@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireBranch, isBranchContext } from "@/lib/branch";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { classifyPosCategory } from "@/lib/beverage-categories";
 import { loadInventoryByName, fuzzyMatchInventory, toDisplayQty } from "@/lib/inventory-match";
 
 export const dynamic   = "force-dynamic";
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         if (!latestDataDate || date > latestDataDate) latestDataDate = date;
     }
     const uploadIds = uploads.map((u: { id: string }) => u.id);
-    const bevCatSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
+    const bevCatSet = { has: (c: string) => classifyPosCategory(c) !== null };
 
     // Fetch only items whose POS category is a beverage — selected to keep payload tight
     const pmixItems = await db.pmixItem.findMany({

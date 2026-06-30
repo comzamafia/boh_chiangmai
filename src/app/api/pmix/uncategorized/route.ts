@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireBranch, isBranchContext } from "@/lib/branch";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { classifyPosCategory } from "@/lib/beverage-categories";
 
 export async function GET(req: NextRequest) {
     const ctx = await requireBranch();
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         include: { modifiers: true },
     });
 
-    const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
+    const bevSet = { has: (c: string) => classifyPosCategory(c) !== null };
 
     // 4. Aggregate uncategorized dish names
     const map = new Map<string, { itemName: string; category: string; qty: number; dates: Set<string> }>();

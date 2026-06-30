@@ -7,7 +7,7 @@
 import { prisma } from "@/lib/db";
 import { classifyItem, hasMainProteinModifier, type RuleRow } from "@/lib/pmix-classifier";
 import { matchCurryGroup } from "@/lib/curry-categories";
-import { BEVERAGE_CATEGORIES } from "@/lib/beverage-categories";
+import { classifyPosCategory } from "@/lib/beverage-categories";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -105,7 +105,6 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
         const a = m.get(label) ?? zero7(); a[d] += qty; m.set(label, a);
     };
     const protein = mk(), curry = mk(), beverage = mk();
-    const bevSet = new Set(BEVERAGE_CATEGORIES.map(c => c.toLowerCase()));
 
     // ── Dessert detail tracking (per item, with modifier flavours) ──
     type DessertRaw = { byDow: number[]; flavours: Map<string, number[]> };
@@ -135,7 +134,7 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
         const catLower = category.toLowerCase();
         const mods = it.modifiers as Array<{ modifierGroup: string; modifier: string; qtySold: number }>;
 
-        if (bevSet.has(catLower)) { if (qty > 0) add(beverage, category, d, qty); continue; }
+        if (classifyPosCategory(catLower) !== null) { if (qty > 0) add(beverage, category, d, qty); continue; }
 
         // ── Dessert category (POS "Desserts" / "Dessert") ──
         if (/dessert/i.test(catLower)) {

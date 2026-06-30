@@ -110,6 +110,8 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
     type DessertRaw = { byDow: number[]; flavours: Map<string, number[]> };
     const dessertItems = new Map<string, DessertRaw>();
     const kidsMealItems = new Map<string, DessertRaw>();
+    // Key used for the synthetic "combined ice cream flavors" row in Kids Meal section
+    const KIDS_ICE_CREAM_KEY = "Ice Cream Flavors";
     const addDessert = (map: Map<string, DessertRaw>, name: string, d: number, qty: number) => {
         let entry = map.get(name);
         if (!entry) { entry = { byDow: zero7(), flavours: new Map() }; map.set(name, entry); }
@@ -120,6 +122,11 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
         if (!entry) return;
         const a = entry.flavours.get(flavour) ?? zero7(); a[d] += qty; entry.flavours.set(flavour, a);
     };
+    // Strip trailing " -" or "-" from POS names (deduplicates POS variants like "Cheesecake-")
+    const normDessert = (name: string) => name.replace(/\s*-+\s*$/, "").trim();
+    // Build canonical Ice Cream flavor item name
+    const iceCreamFlavourItem = (flavour: string) =>
+        /ice\s*cream/i.test(flavour) ? flavour : `${flavour} Ice Cream`;
 
     // Track which items have already been claimed by dessert/kids-meal categories
     // so they don't also get classified as proteins
@@ -139,15 +146,31 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
         // ── Dessert category (POS "Desserts" / "Dessert") ──
         if (/dessert/i.test(catLower)) {
             if (qty > 0) {
-                addDessert(dessertItems, dishName, d, qty);
+                const normalized = normDessert(dishName);
                 dessertClaimed.add(it.id as string);
-                // Ice Cream / Ube Tiramisu → capture modifier flavours
-                if (/ice\s*cream|ube\s*tiramisu/i.test(dishName)) {
+                if (/^ice\s*cream$/i.test(normalized)) {
+                    // Ice Cream: each flavour becomes a top-level item (not a sub-item under "Ice Cream")
+                    let hasFlavours = false;
+                    for (const m of mods) {
+                        const flavour = (m.modifier ?? "").trim();
+                        const mq = Number(m.qtySold ?? 0);
+                        if (flavour && mq > 0) {
+                            addDessert(dessertItems, iceCreamFlavourItem(flavour), d, mq);
+                            hasFlavours = true;
+                        }
+                    }
+                    // Fallback: no modifiers — keep as generic "Ice Cream"
+                    if (!hasFlavours) addDessert(dessertItems, "Ice Cream", d, qty);
+                } else if (/ube\s*tiramisu/i.test(normalized)) {
+                    // Ube Tiramisu: keep sub-flavour structure
+                    addDessert(dessertItems, normalized, d, qty);
                     for (const m of mods) {
                         const name = (m.modifier ?? "").trim();
                         const mq = Number(m.qtySold ?? 0);
-                        if (name && mq > 0) addFlavour(dessertItems, dishName, name, d, mq);
+                        if (name && mq > 0) addFlavour(dessertItems, normalized, name, d, mq);
                     }
+                } else {
+                    addDessert(dessertItems, normalized, d, qty);
                 }
             }
             continue;
@@ -158,12 +181,12 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
             if (qty > 0) {
                 addDessert(kidsMealItems, dishName, d, qty);
                 dessertClaimed.add(it.id as string);
-                // Capture "Choice of Dessert" modifiers
+                // Capture ice cream / dessert choice modifiers (aggregated later into one combined row)
                 for (const m of mods) {
                     const grp = (m.modifierGroup ?? "").toLowerCase();
                     const name = (m.modifier ?? "").trim();
                     const mq = Number(m.qtySold ?? 0);
-                    if (grp.includes("dessert") && name && mq > 0) {
+                    if ((grp.includes("dessert") || grp.includes("ice cream") || grp.includes("flavour") || grp.includes("flavor")) && name && mq > 0) {
                         addFlavour(kidsMealItems, dishName, name, d, mq);
                     }
                 }
@@ -195,6 +218,36 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
                 addDessert(dessertItems, res.label, d, qty);
             }
         }
+    }
+
+    // ── Post-process desserts ──
+
+    // Molten Lava Cake is served with 1 scoop Vanilla Ice Cream → add to Vanilla Ice Cream count
+    for (const [name, raw] of dessertItems.entries()) {
+        if (/molten.*lava|lava.*cake/i.test(name)) {
+            const vanillaKey = "Vanilla Ice Cream";
+            let v = dessertItems.get(vanillaKey);
+            if (!v) { v = { byDow: zero7(), flavours: new Map() }; dessertItems.set(vanillaKey, v); }
+            for (let i = 0; i < 7; i++) v.byDow[i] += raw.byDow[i];
+        }
+    }
+
+    // Kids Meal: aggregate all ice cream / dessert flavour choices across every dish into one row
+    // (excluding "None" or blank) and clear individual item flavour breakdowns
+    const kidsCombined = new Map<string, number[]>();
+    for (const raw of kidsMealItems.values()) {
+        for (const [flavour, byDow] of raw.flavours.entries()) {
+            if (!flavour.trim() || flavour.toLowerCase().trim() === "none") continue;
+            const agg = kidsCombined.get(flavour) ?? zero7();
+            for (let i = 0; i < 7; i++) agg[i] += byDow[i];
+            kidsCombined.set(flavour, agg);
+        }
+        raw.flavours.clear();  // remove per-dish breakdown — shown combined instead
+    }
+    if (kidsCombined.size > 0) {
+        const combinedByDow = zero7();
+        for (const byDow of kidsCombined.values()) for (let i = 0; i < 7; i++) combinedByDow[i] += byDow[i];
+        kidsMealItems.set(KIDS_ICE_CREAM_KEY, { byDow: combinedByDow, flavours: kidsCombined });
     }
 
     // ── Build protein with custom sort order ──
@@ -238,7 +291,12 @@ export async function buildUsageReport(branchId: string, daysParam: number, rang
                     chain: chainByKey.get(reportKey) ?? null,
                 };
             })
-            .sort((a, b) => b.total - a.total);
+            .sort((a, b) => {
+                // Synthetic "Ice Cream Flavors" combined row always appears last
+                if (a.itemName === KIDS_ICE_CREAM_KEY) return 1;
+                if (b.itemName === KIDS_ICE_CREAM_KEY) return -1;
+                return b.total - a.total;
+            });
         return { category: catName, items: sectionItems };
     };
 

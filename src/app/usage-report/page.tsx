@@ -598,10 +598,13 @@ function DessertSectionsView({ sections, dowCounts, canManage, onEditChain }: { 
                                 <tbody>
                                     {sec.items.map(item => {
                                         const ch = item.chain;
+                                        // "Ice Cream Flavors" is the synthetic combined-flavors row for Kids Meal
+                                        const isIceCreamSummary = item.itemName === "Ice Cream Flavors";
                                         return (
                                         <Fragment key={item.itemName}>
-                                            <tr className="border-t border-border/40 hover:bg-muted/20 align-top">
-                                                <td className="py-1.5 pl-2 sticky left-0 bg-card font-medium max-w-[200px]">
+                                            <tr className={`border-t align-top ${isIceCreamSummary ? "border-pink-200 dark:border-pink-800/50 bg-pink-50/40 dark:bg-pink-950/20 hover:bg-pink-50/60" : "border-border/40 hover:bg-muted/20"}`}>
+                                                <td className={`py-1.5 pl-2 sticky left-0 font-medium max-w-[200px] ${isIceCreamSummary ? "bg-pink-50/40 dark:bg-pink-950/20 text-pink-700 dark:text-pink-300 flex items-center gap-1" : "bg-card"}`}>
+                                                    {isIceCreamSummary && <IceCream className="w-3.5 h-3.5 inline-block mr-0.5 flex-shrink-0" />}
                                                     <span className="truncate block">{item.itemName}</span>
                                                 </td>
                                                 {item.byDow.map((q, i) => (
@@ -616,7 +619,7 @@ function DessertSectionsView({ sections, dowCounts, canManage, onEditChain }: { 
                                                     {ch ? <MultiCell lines={applyChain([{ unit: "Order", v: item.total }], ch)} /> : item.total}
                                                 </td>
                                                 <td className="py-1.5 text-right pr-1">
-                                                    {canManage && (
+                                                    {canManage && !isIceCreamSummary && (
                                                         <button onClick={() => onEditChain(chainItem(item.reportKey, item.itemName, "Order", item.chain))}
                                                             title="Configure units for this item" className="text-muted-foreground hover:text-primary">
                                                             <Settings2 className="w-3.5 h-3.5" />
@@ -625,8 +628,8 @@ function DessertSectionsView({ sections, dowCounts, canManage, onEditChain }: { 
                                                 </td>
                                             </tr>
                                             {item.flavours.length > 0 && item.flavours.map(f => (
-                                                <tr key={f.name} className="bg-muted/10 hover:bg-muted/20">
-                                                    <td className="py-1 pl-6 sticky left-0 bg-muted/10 text-muted-foreground text-[11px]">
+                                                <tr key={f.name} className={`${isIceCreamSummary ? "bg-pink-50/20 dark:bg-pink-950/10 hover:bg-pink-50/40" : "bg-muted/10 hover:bg-muted/20"}`}>
+                                                    <td className={`py-1 pl-6 sticky left-0 text-[11px] ${isIceCreamSummary ? "bg-pink-50/20 dark:bg-pink-950/10 text-pink-600 dark:text-pink-400 font-medium" : "bg-muted/10 text-muted-foreground"}`}>
                                                         ↳ {f.name}
                                                     </td>
                                                     {f.byDow.map((q, i) => (

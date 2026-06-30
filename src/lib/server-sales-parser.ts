@@ -34,6 +34,35 @@ function parseDT(s: string): Date | null {
     return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], h, +m[5], +m[6]));
 }
 
+/**
+ * Map a POS "Breakdown:" category Name to a canonical bucket.
+ *
+ * POS exports vary in how they label categories (singular vs plural,
+ * "Alcoholic Beverage(s)" vs "Liquor" / "Alcohol" / "Spirits", etc.), so we
+ * match on robust, case-insensitive keywords rather than an exact string.
+ *
+ * ORDER MATTERS:
+ *  - alcohol is tested BEFORE beverage because "Alcoholic Beverage" contains
+ *    the word "beverage";
+ *  - the non-alcoholic guard stops "Non-Alcoholic Beverage" (which contains the
+ *    substring "alcohol") from being miscounted as liquor.
+ *
+ * Unknown labels fall through to "other" (kept out of the food/drink KPIs),
+ * preserving the previous behaviour for genuinely unrecognised categories.
+ */
+export type BreakdownBucket = "food" | "beverage" | "alcohol" | "dessert" | "fees" | "other";
+export function classifyBreakdownCategory(rawName: string): BreakdownBucket {
+    const n = rawName.toLowerCase().trim();
+    if (!n) return "other";
+    if (/\bfees?\b|service charge|gratuit/.test(n)) return "fees";
+    const nonAlcoholic = /non[-\s]?alcohol/.test(n);
+    if (!nonAlcoholic && /alcohol|liquor|spirit|cocktail|\bwine\b|\bbeer\b|\bshots?\b|\bbar\b|sake|soju|whisky|whiskey|vodka|\brum\b|\bgin\b|tequila/.test(n)) return "alcohol";
+    if (/dessert/.test(n)) return "dessert";
+    if (/beverage|drink|\bsoda\b|juice|\btea\b|coffee|smoothie|mocktail/.test(n)) return "beverage";
+    if (/food/.test(n)) return "food";
+    return "other";
+}
+
 export interface ParsedServerRow {
     businessDate: string; staffName: string;
     shiftStart: string | null; shiftEnd: string | null; shiftHours: number;
@@ -100,15 +129,16 @@ export function parseServerSales(content: string): { rows: ParsedServerRow[]; da
 
         // Breakdown category row: Name, Count, Discount, Total
         if (mode === "breakdown" && cur && c.length >= 4) {
-            const name = first.toLowerCase();
             const count = parseInt(c[1]) || 0;
             const total = money(c[3]);
-            if (name === "food") { cur.foodSales += total; cur.foodCount += count; }
-            else if (name === "beverage") { cur.beverageSales += total; cur.beverageCount += count; }
-            else if (name === "alcoholic beverage") { cur.alcoholSales += total; cur.alcoholCount += count; }
-            else if (name === "desserts" || name === "dessert") { cur.dessertSales += total; cur.dessertCount += count; }
-            else if (name === "fees") { /* service fees, not product sales — skip */ }
-            else { cur.otherSales += total; }
+            switch (classifyBreakdownCategory(first)) {
+                case "food":     cur.foodSales += total;     cur.foodCount += count;     break;
+                case "beverage": cur.beverageSales += total; cur.beverageCount += count; break;
+                case "alcohol":  cur.alcoholSales += total;  cur.alcoholCount += count;  break;
+                case "dessert":  cur.dessertSales += total;  cur.dessertCount += count;  break;
+                case "fees":     /* service fees, not product sales — skip */            break;
+                default:         cur.otherSales += total;                                 break;
+            }
         }
         // payment rows ignored
     }

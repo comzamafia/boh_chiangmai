@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth-provider";
 import {
-    Trophy, Upload, Loader2, ShieldX, DollarSign, Users, Wine, FileDown, Medal, Crown, Award, CalendarDays, ChevronDown,
+    Trophy, Upload, Loader2, ShieldX, DollarSign, Users, Wine, FileDown, Medal, Crown, Award, CalendarDays, ChevronDown, FlaskConical, X,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList,
@@ -35,6 +35,20 @@ export default function ServerPerformancePage() {
     const [uploading, setUploading] = useState(false);
     const [msg, setMsg]   = useState<string | null>(null);
     const [view, setView] = useState<"score" | "upsell">("score");
+    const [diagResult, setDiagResult] = useState<{ date: string | null; totals: Record<string, number>; categoryDebug: { raw: string; bucket: string }[] } | null>(null);
+    const [diagLoading, setDiagLoading] = useState(false);
+
+    async function handleDiagnose(files: FileList | null) {
+        if (!files || files.length === 0) return;
+        setDiagLoading(true); setDiagResult(null);
+        try {
+            const content = await files[0].text();
+            const r = await fetch("/api/server-perf/parse-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
+            const j = await r.json();
+            if (!r.ok) { setMsg(j.error ?? "Parse failed"); } else { setDiagResult(j); }
+        } catch { setMsg("Diagnose failed"); }
+        finally { setDiagLoading(false); }
+    }
 
     const load = useCallback(async () => {
         if (!isAdmin) { setLoading(false); return; }
@@ -181,6 +195,10 @@ export default function ServerPerformancePage() {
                         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Upload CSV
                     </Button>
                     <input id="sp-file" type="file" accept=".csv" multiple className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ""; }} />
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" disabled={diagLoading} onClick={() => document.getElementById("sp-diag")?.click()} title="Check how categories are classified without saving">
+                        {diagLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />} Diagnose
+                    </Button>
+                    <input id="sp-diag" type="file" accept=".csv" className="hidden" onChange={e => { handleDiagnose(e.target.files); e.target.value = ""; }} />
                     <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={exportPdf} disabled={!data}><FileDown className="w-4 h-4" /> PDF</Button>
                 </div>
             </div>
@@ -190,6 +208,43 @@ export default function ServerPerformancePage() {
                 ))}
             </div>
             {msg && <p className="text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg px-3 py-2">{msg}</p>}
+
+            {diagResult && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 space-y-3 text-sm">
+                    <div className="flex items-center justify-between">
+                        <div className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5"><FlaskConical className="w-4 h-4" /> Parse Diagnose — {diagResult.date ?? "unknown date"} (not saved)</div>
+                        <button onClick={() => setDiagResult(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2 text-xs">
+                        {(["foodSales", "beverageSales", "alcoholSales", "dessertSales", "otherSales"] as const).map(k => (
+                            <div key={k} className={`rounded-lg px-3 py-2 text-center ${k === "alcoholSales" && diagResult.totals[k] === 0 ? "bg-red-100 dark:bg-red-950/40 border border-red-300 text-red-700" : "bg-white dark:bg-zinc-800 border border-border"}`}>
+                                <div className="text-muted-foreground capitalize">{k.replace("Sales", "")}</div>
+                                <div className="font-semibold">${diagResult.totals[k].toFixed(0)}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Breakdown categories detected:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {diagResult.categoryDebug.map((c, i) => {
+                                const color = c.bucket === "alcohol" ? "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950/40 dark:text-violet-300"
+                                    : c.bucket === "beverage" ? "bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300"
+                                    : c.bucket === "food" ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40"
+                                    : c.bucket === "dessert" ? "bg-pink-100 text-pink-700 border-pink-300"
+                                    : "bg-zinc-100 text-zinc-500 border-zinc-300 dark:bg-zinc-800";
+                                return (
+                                    <span key={i} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${color}`}>
+                                        {c.raw} <span className="opacity-60">→ {c.bucket}</span>
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    {diagResult.totals.alcoholSales === 0 && (
+                        <p className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ alcoholSales = $0 — tell the developer which category above should be ALCOHOL so the regex can be updated, then re-upload.</p>
+                    )}
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>

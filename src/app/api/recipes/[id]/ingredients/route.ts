@@ -21,18 +21,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     try {
         const { id } = await params;
         const body: { ingredientId: string; quantity: number }[] = await request.json();
+        if (!Array.isArray(body)) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-        // Delete all existing, then re-insert (atomic)
-        await prisma.$transaction([
-            prisma.recipeIngredient.deleteMany({ where: { recipeId: id } }),
-            prisma.recipeIngredient.createMany({
-                data: body.map((ri) => ({
-                    recipeId: id,
-                    ingredientId: ri.ingredientId,
-                    quantity: ri.quantity,
-                })),
-            }),
-        ]);
+        // Deduplicate by ingredientId (last one wins) to avoid unique constraint violation
+        const seen = new Map<string, number>();
+        for (const ri of body) seen.set(ri.ingredientId, ri.quantity);
+        const deduped = [...seen.entries()].map(([ingredientId, quantity]) => ({ recipeId: id, ingredientId, quantity }));
+
+        // Delete all existing, then re-insert (interactive tx — more reliable with driver adapters)
+        await (prisma as any).$transaction(async (tx: any) => {
+            await tx.recipeIngredient.deleteMany({ where: { recipeId: id } });
+            if (deduped.length > 0) {
+                await tx.recipeIngredient.createMany({ data: deduped });
+            }
+        });
 
         const updated = await prisma.recipeIngredient.findMany({
             where: { recipeId: id },

@@ -83,6 +83,7 @@ export async function POST(request: Request) {
                           create: body.ingredients.map((ri: { ingredientId: string; quantity: number }) => ({
                               ingredientId: ri.ingredientId,
                               quantity:     ri.quantity,
+                              branchId,
                           })),
                       }
                     : undefined,
